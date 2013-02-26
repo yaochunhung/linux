@@ -3722,6 +3722,8 @@ static irqreturn_t wm1811_jackdet_irq(int irq, void *data)
 	int reg, delay;
 	bool present;
 
+	cancel_delayed_work_sync(&wm8994->mic_work);
+
 	pm_runtime_get_sync(codec->dev);
 
 	cancel_delayed_work_sync(&wm8994->mic_complete_work);
@@ -3758,8 +3760,6 @@ static irqreturn_t wm1811_jackdet_irq(int irq, void *data)
 				   msecs_to_jiffies(delay));
 	} else {
 		dev_dbg(codec->dev, "Jack not detected\n");
-
-		cancel_delayed_work_sync(&wm8994->mic_work);
 
 		snd_soc_update_bits(codec, WM8958_MICBIAS2,
 				    WM8958_MICB2_DISCH, WM8958_MICB2_DISCH);
