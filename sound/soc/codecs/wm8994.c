@@ -1506,6 +1506,10 @@ static SOC_ENUM_SINGLE_DECL(aif1_loopback_enum,
 			    WM8994_AIF1_LOOPBACK_SHIFT,
 			    loopback_text);
 
+static const struct soc_enum aif1_loopback_enum =
+       SOC_ENUM_SINGLE(WM8994_AIF1_CONTROL_2, WM8994_AIF1_LOOPBACK_SHIFT, 2,
+                       loopback_text);
+
 static const struct snd_kcontrol_new aif1_loopback =
 	SOC_DAPM_ENUM("AIF1 Loopback", aif1_loopback_enum);
 
@@ -1513,6 +1517,11 @@ static SOC_ENUM_SINGLE_DECL(aif2_loopback_enum,
 			    WM8994_AIF2_CONTROL_2,
 			    WM8994_AIF2_LOOPBACK_SHIFT,
 			    loopback_text);
+
+static const struct soc_enum aif2_loopback_enum =
+       SOC_ENUM_SINGLE(WM8994_AIF2_CONTROL_2, WM8994_AIF2_LOOPBACK_SHIFT, 2,
+                       loopback_text);
+
 
 static const struct snd_kcontrol_new aif2_loopback =
 	SOC_DAPM_ENUM("AIF2 Loopback", aif2_loopback_enum);
