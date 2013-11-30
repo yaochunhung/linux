@@ -339,14 +339,6 @@ static int soc_compr_trigger_fe(struct snd_compr_stream *cstream, int cmd)
 	struct snd_soc_platform *platform = fe->platform;
 	int ret = 0, stream;
 
-	if (cmd == SND_COMPR_TRIGGER_PARTIAL_DRAIN ||
-		cmd == SND_COMPR_TRIGGER_DRAIN) {
-
-		if (platform->driver->compr_ops &&
-			platform->driver->compr_ops->trigger)
-		return platform->driver->compr_ops->trigger(cstream, cmd);
-	}
-
 	if (cstream->direction == SND_COMPRESS_PLAYBACK)
 		stream = SNDRV_PCM_STREAM_PLAYBACK;
 	else
@@ -436,6 +428,7 @@ static int soc_compr_set_params_fe(struct snd_compr_stream *cstream,
 	struct snd_soc_pcm_runtime *fe = cstream->private_data;
 	struct snd_pcm_substream *fe_substream = fe->pcm->streams[0].substream;
 	struct snd_soc_platform *platform = fe->platform;
+	struct snd_pcm_hw_params *hw_params;
 	int ret = 0, stream;
 
 	if (cstream->direction == SND_COMPRESS_PLAYBACK)
@@ -443,8 +436,18 @@ static int soc_compr_set_params_fe(struct snd_compr_stream *cstream,
 	else
 		stream = SNDRV_PCM_STREAM_CAPTURE;
 
+	hw_params = kzalloc(sizeof(*hw_params), GFP_KERNEL);
+	if (hw_params == NULL)
+		return -ENOMEM;
+
 	mutex_lock_nested(&fe->card->mutex, SND_SOC_CARD_CLASS_RUNTIME);
 
+	/* first we call set_params for the platform driver
+	 * this should configure the soc side
+	 * if the machine has compressed ops then we call that as well
+	 * expectation is that platform and machine will configure everything
+	 * for this compress path, like configuring pcm port for codec
+	 */
 	if (platform->driver->compr_ops && platform->driver->compr_ops->set_params) {
 		ret = platform->driver->compr_ops->set_params(cstream, params);
 		if (ret < 0)
@@ -457,13 +460,8 @@ static int soc_compr_set_params_fe(struct snd_compr_stream *cstream,
 			goto out;
 	}
 
-	/*
-	 * Create an empty hw_params for the BE as the machine driver must
-	 * fix this up to match DSP decoder and ASRC configuration.
-	 * I.e. machine driver fixup for compressed BE is mandatory.
-	 */
-	memset(&fe->dpcm[fe_substream->stream].hw_params, 0,
-		sizeof(struct snd_pcm_hw_params));
+	memcpy(&fe->dpcm[fe_substream->stream].hw_params, params,
+			sizeof(struct snd_pcm_hw_params));
 
 	fe->dpcm[stream].runtime_update = SND_SOC_DPCM_UPDATE_FE;
 
@@ -626,8 +624,8 @@ static struct snd_compr_ops soc_compr_dyn_ops = {
 	.free		= soc_compr_free_fe,
 	.set_params	= soc_compr_set_params_fe,
 	.get_params	= soc_compr_get_params,
-	.set_metadata   = soc_compr_set_metadata,
-	.get_metadata	= soc_compr_get_metadata,
+	.set_metadata   = sst_compr_set_metadata,
+	.get_metadata	= sst_compr_get_metadata,
 	.trigger	= soc_compr_trigger_fe,
 	.pointer	= soc_compr_pointer,
 	.ack		= soc_compr_ack,

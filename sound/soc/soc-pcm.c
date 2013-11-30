@@ -1288,7 +1288,6 @@ static int dpcm_fe_dai_startup(struct snd_pcm_substream *fe_substream)
 	}
 
 	fe->dpcm[stream].state = SND_SOC_DPCM_STATE_OPEN;
-
 	dpcm_set_fe_runtime(fe_substream);
 	snd_pcm_limit_hw_rates(runtime);
 
@@ -1534,7 +1533,7 @@ static int dpcm_fe_dai_hw_params(struct snd_pcm_substream *substream,
 	if (ret < 0) {
 		dev_err(fe->dev,"ASoC: hw_params FE failed %d\n", ret);
 		dpcm_be_dai_hw_free(fe, stream);
-	 } else
+	} else
 		fe->dpcm[stream].state = SND_SOC_DPCM_STATE_HW_PARAMS;
 
 out:
@@ -1650,7 +1649,6 @@ int dpcm_be_dai_trigger(struct snd_soc_pcm_runtime *fe, int stream,
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(dpcm_be_dai_trigger);
 
 static int dpcm_fe_dai_trigger(struct snd_pcm_substream *substream, int cmd)
 {
