@@ -488,7 +488,7 @@ struct snd_soc_codec {
 	/* dynamic mixer and enum controls */
 	struct list_head dmixers;
 	struct list_head denums;
-
+	struct list_head dbytes;
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *debugfs_codec_root;
 	struct dentry *debugfs_reg;
@@ -613,7 +613,7 @@ struct snd_soc_platform {
 	/* dynamic mixer and enum controls */
 	struct list_head dmixers;
 	struct list_head denums;
-
+	struct list_head dbytes;
 	struct snd_soc_dapm_context dapm;
 
 #ifdef CONFIG_DEBUG_FS
@@ -805,7 +805,7 @@ struct snd_soc_card {
 	/* dynamic mixer and enum controls */
 	struct list_head dmixers;
 	struct list_head denums;
-
+	struct list_head dbytes;
 	/* Generic DAPM context for the card */
 	struct snd_soc_dapm_context dapm;
 	struct snd_soc_dapm_stats dapm_stats;
@@ -889,6 +889,14 @@ struct soc_mreg_control {
 
 struct soc_bytes_ext {
 	int max;
+
+	/* dynamic controls */
+	struct list_head list;
+	struct snd_kcontrol *dcontrol;
+	int index;
+
+	unsigned int pvt_data_len;
+	char *pvt_data;
 };
 
 /* enumerated kcontrol */
