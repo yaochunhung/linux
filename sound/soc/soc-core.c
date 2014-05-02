@@ -3373,6 +3373,19 @@ int snd_soc_info_bytes_ext(struct snd_kcontrol *kcontrol,
 }
 EXPORT_SYMBOL_GPL(snd_soc_info_bytes_ext);
 
+int snd_soc_bytes_info_ext(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_info *ucontrol)
+{
+	struct soc_bytes_ext *params = (void *)kcontrol->private_value;
+
+	ucontrol->type = SNDRV_CTL_ELEM_TYPE_BYTES;
+	ucontrol->count = params->max;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(snd_soc_bytes_info_ext);
+
+
 /**
  * snd_soc_info_xr_sx - signed multi register info callback
  * @kcontrol: mreg control
