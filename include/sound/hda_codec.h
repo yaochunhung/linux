@@ -144,11 +144,11 @@ struct hda_bus {
 	DECLARE_BITMAP(pcm_dev_bits, SNDRV_PCM_DEVICES);
 
 	/* misc op flags */
-	unsigned int needs_damn_long_delay :1;
+	unsigned int needs_damn_long_delay:1;
 	unsigned int allow_bus_reset:1;	/* allow bus reset at fatal error */
 	unsigned int sync_write:1;	/* sync after verb write */
 	/* status for codec/controller */
-	unsigned int shutdown :1;	/* being unloaded */
+	unsigned int shutdown:1;	/* being unloaded */
 	unsigned int rirb_error:1;	/* error in codec communication */
 	unsigned int response_reset:1;	/* controller was reset */
 	unsigned int in_reset:1;	/* during reset operation */
@@ -174,7 +174,7 @@ struct hda_codec_preset {
 	const char *name;
 	int (*patch)(struct hda_codec *codec);
 };
-	
+
 struct hda_codec_preset_list {
 	const struct hda_codec_preset *preset;
 	struct module *owner;
@@ -345,7 +345,7 @@ struct hda_codec {
 #endif
 
 	/* misc flags */
-	unsigned int spdif_status_reset :1; /* needs to toggle SPDIF for each
+	unsigned int spdif_status_reset:1; /* needs to toggle SPDIF for each
 					     * status change
 					     * (e.g. Realtek codecs)
 					     */
@@ -367,7 +367,7 @@ struct hda_codec {
 	unsigned int dp_mst:1; /* support DP1.2 Multi-stream transport */
 	unsigned int dump_coef:1; /* dump processing coefs in codec proc file */
 #ifdef CONFIG_PM
-	unsigned int power_on :1;	/* current (global) power-state */
+	unsigned int power_on:1;	/* current (global) power-state */
 	unsigned int d3_stop_clk:1;	/* support D3 operation without BCLK */
 	unsigned int pm_up_notified:1;	/* PM notified to controller */
 	unsigned int in_pm:1;		/* suspend/resume being performed */
@@ -685,7 +685,5 @@ static inline void
 snd_hda_codec_load_dsp_cleanup(struct hda_codec *codec,
 				struct snd_dma_buffer *dmab) {}
 #endif
-
-#define EXPORT_SYMBOL_HDA(sym) EXPORT_SYMBOL_GPL(sym)
 
 #endif /* __SOUND_HDA_CODEC_H */

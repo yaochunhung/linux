@@ -26,7 +26,7 @@
 /* We abuse kcontrol_new.subdev field to pass the NID corresponding to
  * the given new control.  If id.subdev has a bit flag HDA_SUBDEV_NID_FLAG,
  * snd_hda_ctl_add() takes the lower-bit subdev value as a valid NID.
- * 
+ *
  * Note that the subdevice field is cleared again before the real registration
  * in snd_hda_ctl_add(), so that this value won't appear in the outside.
  */
@@ -36,18 +36,18 @@
 /*
  * for mixer controls
  */
-#define HDA_COMPOSE_AMP_VAL_OFS(nid,chs,idx,dir,ofs)		\
+#define HDA_COMPOSE_AMP_VAL_OFS(nid, chs, idx, dir, ofs)		\
 	((nid) | ((chs)<<16) | ((dir)<<18) | ((idx)<<19) | ((ofs)<<23))
 #define HDA_AMP_VAL_MIN_MUTE (1<<29)
-#define HDA_COMPOSE_AMP_VAL(nid,chs,idx,dir) \
+#define HDA_COMPOSE_AMP_VAL(nid, chs, idx, dir) \
 	HDA_COMPOSE_AMP_VAL_OFS(nid, chs, idx, dir, 0)
 /* mono volume with index (index=0,1,...) (channel=1,2) */
 #define HDA_CODEC_VOLUME_MONO_IDX(xname, xcidx, nid, channel, xindex, dir, flags) \
 	{ .iface = SNDRV_CTL_ELEM_IFACE_MIXER, .name = xname, .index = xcidx,  \
 	  .subdevice = HDA_SUBDEV_AMP_FLAG, \
 	  .access = SNDRV_CTL_ELEM_ACCESS_READWRITE | \
-	  	    SNDRV_CTL_ELEM_ACCESS_TLV_READ | \
-	  	    SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK, \
+			SNDRV_CTL_ELEM_ACCESS_TLV_READ | \
+			SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK, \
 	  .info = snd_hda_mixer_amp_volume_info, \
 	  .get = snd_hda_mixer_amp_volume_get, \
 	  .put = snd_hda_mixer_amp_volume_put, \
@@ -187,8 +187,8 @@ void snd_hda_sync_vmaster_hook(struct hda_vmaster_mute_hook *hook);
 	  .private_value = HDA_COMPOSE_AMP_VAL(nid, channel, indices, direction) }
 
 /* stereo switch binding multiple inputs */
-#define HDA_BIND_MUTE(xname,nid,indices,dir) \
-	HDA_BIND_MUTE_MONO(xname,nid,3,indices,dir)
+#define HDA_BIND_MUTE(xname, nid, indices, dir) \
+	HDA_BIND_MUTE_MONO(xname, nid, 3, indices, dir)
 
 int snd_hda_mixer_bind_switch_get(struct snd_kcontrol *kcontrol,
 				  struct snd_ctl_elem_value *ucontrol);
@@ -374,8 +374,8 @@ int snd_hda_check_board_config(struct hda_codec *codec, int num_configs,
 			       const char * const *modelnames,
 			       const struct snd_pci_quirk *pci_list);
 int snd_hda_check_board_codec_sid_config(struct hda_codec *codec,
-                               int num_configs, const char * const *models,
-                               const struct snd_pci_quirk *tbl);
+				int num_configs, const char * const *models,
+				const struct snd_pci_quirk *tbl);
 int snd_hda_add_new_ctls(struct hda_codec *codec,
 			 const struct snd_kcontrol_new *knew);
 

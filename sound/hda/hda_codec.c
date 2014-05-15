@@ -2731,7 +2731,7 @@ typedef int (*map_slave_func_t)(void *, struct snd_kcontrol *);
 
 /* apply the function to all matching slave ctls in the mixer list */
 static int map_slaves(struct hda_codec *codec, const char * const *slaves,
-		      const char *suffix, map_slave_func_t func, void *data) 
+			const char *suffix, map_slave_func_t func, void *data)
 {
 	struct hda_nid_item *items;
 	const char * const *s;
@@ -2789,7 +2789,7 @@ static int get_kctl_0dB_offset(struct snd_kcontrol *kctl, int *step_to_check)
 			return -1;
 		if (*step_to_check && *step_to_check != step) {
 			snd_printk(KERN_ERR "hda_codec: Mismatching dB step for vmaster slave (%d!=%d)\n",
--				   *step_to_check, step);
+				  -*step_to_check, step);
 			return -1;
 		}
 		*step_to_check = step;

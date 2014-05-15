@@ -1,6 +1,6 @@
 /*
  * Universal Interface for Intel High Definition Audio Codec
- * 
+ *
  * Generic proc interface
  *
  * Copyright (c) 2004 Takashi Iwai <tiwai@suse.de>
@@ -215,7 +215,7 @@ static const char *get_jack_connection(u32 cfg)
 {
 	static char *names[16] = {
 		"Unknown", "1/8", "1/4", "ATAPI",
-		"RCA", "Optical","Digital", "Analog",
+		"RCA", "Optical", "Digital", "Analog",
 		"DIN", "XLR", "RJ11", "Comb",
 		NULL, NULL, NULL, "Other"
 	};
@@ -671,7 +671,7 @@ static void print_codec_info(struct snd_info_entry *entry,
 	else
 		snd_iprintf(buffer, "No Modem Function Group found\n");
 
-	if (! codec->afg)
+	if (!codec->afg)
 		return;
 	snd_hda_power_up(codec);
 	snd_iprintf(buffer, "Default PCM:\n");
@@ -684,7 +684,7 @@ static void print_codec_info(struct snd_info_entry *entry,
 	print_power_state(buffer, codec, codec->afg);
 
 	nodes = snd_hda_get_sub_nodes(codec, codec->afg, &nid);
-	if (! nid || nodes < 0) {
+	if (!nid || nodes < 0) {
 		snd_iprintf(buffer, "Invalid AFG subtree\n");
 		snd_hda_power_down(codec);
 		return;
