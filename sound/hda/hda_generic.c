@@ -31,11 +31,12 @@
 #include <linux/module.h>
 #include <sound/core.h>
 #include <sound/jack.h>
+#include <sound/control.h>
 #include <sound/hda_codec.h>
-#include <sound/hda_local.h>
+#include <sound/hda_auto_parser.h>
+#include <sound/hda_controls.h>
 #include <sound/hda_beep.h>
 #include <sound/hda_jack.h>
-#include <sound/hda_auto_parser.h>
 #include <sound/hda_generic.h>
 
 
@@ -45,7 +46,6 @@ int snd_hda_gen_spec_init(struct hda_gen_spec *spec)
 	snd_array_init(&spec->kctls, sizeof(struct snd_kcontrol_new), 32);
 	snd_array_init(&spec->paths, sizeof(struct nid_path), 8);
 	snd_array_init(&spec->loopback_list, sizeof(struct hda_amp_list), 8);
-	mutex_init(&spec->pcm_mutex);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(snd_hda_gen_spec_init);
@@ -2051,11 +2051,7 @@ static int indep_hp_put(struct snd_kcontrol *kcontrol,
 	unsigned int select = ucontrol->value.enumerated.item[0];
 	int ret = 0;
 
-	mutex_lock(&spec->pcm_mutex);
-	if (spec->active_streams) {
-		ret = -EBUSY;
-		goto unlock;
-	}
+	mutex_lock(&codec->control_mutex);
 
 	if (spec->indep_hp_enabled != select) {
 		hda_nid_t *dacp;
@@ -2088,7 +2084,7 @@ static int indep_hp_put(struct snd_kcontrol *kcontrol,
 		ret = 1;
 	}
  unlock:
-	mutex_unlock(&spec->pcm_mutex);
+	mutex_unlock(&codec->control_mutex);
 	return ret;
 }
 
@@ -3933,9 +3929,11 @@ static void call_update_outputs(struct hda_codec *codec)
 	else
 		snd_hda_gen_update_outputs(codec);
 
+#if 0 /*FIXME: not supported in 3.10, enable in 3.14*/
 	/* sync the whole vmaster slaves to reflect the new auto-mute status */
-	if (spec->auto_mute_via_amp && !codec->bus->shutdown)
+	if (spec->auto_mute_via_amp)
 		snd_ctl_sync_vmaster(spec->vmaster_mute.sw_kctl, false);
+#endif
 }
 
 /* standard HP-automute helper */
@@ -4548,7 +4546,7 @@ int snd_hda_gen_build_controls(struct hda_codec *codec)
 		err = snd_hda_create_dig_out_ctls(codec,
 						  spec->multiout.dig_out_nid,
 						  spec->multiout.dig_out_nid,
-						  spec->pcm_rec[1].pcm_type);
+						  HDA_PCM_TYPE_SPDIF);
 		if (err < 0)
 			return err;
 		if (!spec->no_analog) {
@@ -4601,341 +4599,6 @@ EXPORT_SYMBOL_GPL(snd_hda_gen_build_controls);
 
 
 /*
- * PCM definitions
- */
-
-static void call_pcm_playback_hook(struct hda_pcm_stream *hinfo,
-				   struct hda_codec *codec,
-				   struct snd_pcm_substream *substream,
-				   int action)
-{
-	struct hda_gen_spec *spec = codec->spec;
-	if (spec->pcm_playback_hook)
-		spec->pcm_playback_hook(hinfo, codec, substream, action);
-}
-
-static void call_pcm_capture_hook(struct hda_pcm_stream *hinfo,
-				  struct hda_codec *codec,
-				  struct snd_pcm_substream *substream,
-				  int action)
-{
-	struct hda_gen_spec *spec = codec->spec;
-	if (spec->pcm_capture_hook)
-		spec->pcm_capture_hook(hinfo, codec, substream, action);
-}
-
-/*
- * Analog playback callbacks
- */
-static int playback_pcm_open(struct hda_pcm_stream *hinfo,
-			     struct hda_codec *codec,
-			     struct snd_pcm_substream *substream)
-{
-	struct hda_gen_spec *spec = codec->spec;
-	int err;
-
-	mutex_lock(&spec->pcm_mutex);
-	err = snd_hda_multi_out_analog_open(codec,
-					    &spec->multiout, substream,
-					     hinfo);
-	if (!err) {
-		spec->active_streams |= 1 << STREAM_MULTI_OUT;
-		call_pcm_playback_hook(hinfo, codec, substream,
-				       HDA_GEN_PCM_ACT_OPEN);
-	}
-	mutex_unlock(&spec->pcm_mutex);
-	return err;
-}
-
-static int playback_pcm_prepare(struct hda_pcm_stream *hinfo,
-				struct hda_codec *codec,
-				unsigned int stream_tag,
-				unsigned int format,
-				struct snd_pcm_substream *substream)
-{
-	struct hda_gen_spec *spec = codec->spec;
-	int err;
-
-	err = snd_hda_multi_out_analog_prepare(codec, &spec->multiout,
-					       stream_tag, format, substream);
-	if (!err)
-		call_pcm_playback_hook(hinfo, codec, substream,
-				       HDA_GEN_PCM_ACT_PREPARE);
-	return err;
-}
-
-static int playback_pcm_cleanup(struct hda_pcm_stream *hinfo,
-				struct hda_codec *codec,
-				struct snd_pcm_substream *substream)
-{
-	struct hda_gen_spec *spec = codec->spec;
-	int err;
-
-	err = snd_hda_multi_out_analog_cleanup(codec, &spec->multiout);
-	if (!err)
-		call_pcm_playback_hook(hinfo, codec, substream,
-				       HDA_GEN_PCM_ACT_CLEANUP);
-	return err;
-}
-
-static int playback_pcm_close(struct hda_pcm_stream *hinfo,
-			      struct hda_codec *codec,
-			      struct snd_pcm_substream *substream)
-{
-	struct hda_gen_spec *spec = codec->spec;
-	mutex_lock(&spec->pcm_mutex);
-	spec->active_streams &= ~(1 << STREAM_MULTI_OUT);
-	call_pcm_playback_hook(hinfo, codec, substream,
-			       HDA_GEN_PCM_ACT_CLOSE);
-	mutex_unlock(&spec->pcm_mutex);
-	return 0;
-}
-
-static int capture_pcm_open(struct hda_pcm_stream *hinfo,
-			    struct hda_codec *codec,
-			    struct snd_pcm_substream *substream)
-{
-	call_pcm_capture_hook(hinfo, codec, substream, HDA_GEN_PCM_ACT_OPEN);
-	return 0;
-}
-
-static int capture_pcm_prepare(struct hda_pcm_stream *hinfo,
-			       struct hda_codec *codec,
-			       unsigned int stream_tag,
-			       unsigned int format,
-			       struct snd_pcm_substream *substream)
-{
-	snd_hda_codec_setup_stream(codec, hinfo->nid, stream_tag, 0, format);
-	call_pcm_capture_hook(hinfo, codec, substream,
-			      HDA_GEN_PCM_ACT_PREPARE);
-	return 0;
-}
-
-static int capture_pcm_cleanup(struct hda_pcm_stream *hinfo,
-			       struct hda_codec *codec,
-			       struct snd_pcm_substream *substream)
-{
-	snd_hda_codec_cleanup_stream(codec, hinfo->nid);
-	call_pcm_capture_hook(hinfo, codec, substream,
-			      HDA_GEN_PCM_ACT_CLEANUP);
-	return 0;
-}
-
-static int capture_pcm_close(struct hda_pcm_stream *hinfo,
-			     struct hda_codec *codec,
-			     struct snd_pcm_substream *substream)
-{
-	call_pcm_capture_hook(hinfo, codec, substream, HDA_GEN_PCM_ACT_CLOSE);
-	return 0;
-}
-
-static int alt_playback_pcm_open(struct hda_pcm_stream *hinfo,
-				 struct hda_codec *codec,
-				 struct snd_pcm_substream *substream)
-{
-	struct hda_gen_spec *spec = codec->spec;
-	int err = 0;
-
-	mutex_lock(&spec->pcm_mutex);
-	if (!spec->indep_hp_enabled)
-		err = -EBUSY;
-	else
-		spec->active_streams |= 1 << STREAM_INDEP_HP;
-	call_pcm_playback_hook(hinfo, codec, substream,
-			       HDA_GEN_PCM_ACT_OPEN);
-	mutex_unlock(&spec->pcm_mutex);
-	return err;
-}
-
-static int alt_playback_pcm_close(struct hda_pcm_stream *hinfo,
-				  struct hda_codec *codec,
-				  struct snd_pcm_substream *substream)
-{
-	struct hda_gen_spec *spec = codec->spec;
-	mutex_lock(&spec->pcm_mutex);
-	spec->active_streams &= ~(1 << STREAM_INDEP_HP);
-	call_pcm_playback_hook(hinfo, codec, substream,
-			       HDA_GEN_PCM_ACT_CLOSE);
-	mutex_unlock(&spec->pcm_mutex);
-	return 0;
-}
-
-static int alt_playback_pcm_prepare(struct hda_pcm_stream *hinfo,
-				    struct hda_codec *codec,
-				    unsigned int stream_tag,
-				    unsigned int format,
-				    struct snd_pcm_substream *substream)
-{
-	snd_hda_codec_setup_stream(codec, hinfo->nid, stream_tag, 0, format);
-	call_pcm_playback_hook(hinfo, codec, substream,
-			       HDA_GEN_PCM_ACT_PREPARE);
-	return 0;
-}
-
-static int alt_playback_pcm_cleanup(struct hda_pcm_stream *hinfo,
-				    struct hda_codec *codec,
-				    struct snd_pcm_substream *substream)
-{
-	snd_hda_codec_cleanup_stream(codec, hinfo->nid);
-	call_pcm_playback_hook(hinfo, codec, substream,
-			       HDA_GEN_PCM_ACT_CLEANUP);
-	return 0;
-}
-
-/*
- * Digital out
- */
-static int dig_playback_pcm_open(struct hda_pcm_stream *hinfo,
-				 struct hda_codec *codec,
-				 struct snd_pcm_substream *substream)
-{
-	struct hda_gen_spec *spec = codec->spec;
-	return snd_hda_multi_out_dig_open(codec, &spec->multiout);
-}
-
-static int dig_playback_pcm_prepare(struct hda_pcm_stream *hinfo,
-				    struct hda_codec *codec,
-				    unsigned int stream_tag,
-				    unsigned int format,
-				    struct snd_pcm_substream *substream)
-{
-	struct hda_gen_spec *spec = codec->spec;
-	return snd_hda_multi_out_dig_prepare(codec, &spec->multiout,
-					     stream_tag, format, substream);
-}
-
-static int dig_playback_pcm_cleanup(struct hda_pcm_stream *hinfo,
-				    struct hda_codec *codec,
-				    struct snd_pcm_substream *substream)
-{
-	struct hda_gen_spec *spec = codec->spec;
-	return snd_hda_multi_out_dig_cleanup(codec, &spec->multiout);
-}
-
-static int dig_playback_pcm_close(struct hda_pcm_stream *hinfo,
-				  struct hda_codec *codec,
-				  struct snd_pcm_substream *substream)
-{
-	struct hda_gen_spec *spec = codec->spec;
-	return snd_hda_multi_out_dig_close(codec, &spec->multiout);
-}
-
-/*
- * Analog capture
- */
-#define alt_capture_pcm_open	capture_pcm_open
-#define alt_capture_pcm_close	capture_pcm_close
-
-static int alt_capture_pcm_prepare(struct hda_pcm_stream *hinfo,
-				   struct hda_codec *codec,
-				   unsigned int stream_tag,
-				   unsigned int format,
-				   struct snd_pcm_substream *substream)
-{
-	struct hda_gen_spec *spec = codec->spec;
-
-	snd_hda_codec_setup_stream(codec, spec->adc_nids[substream->number + 1],
-				   stream_tag, 0, format);
-	call_pcm_capture_hook(hinfo, codec, substream,
-			      HDA_GEN_PCM_ACT_PREPARE);
-	return 0;
-}
-
-static int alt_capture_pcm_cleanup(struct hda_pcm_stream *hinfo,
-				   struct hda_codec *codec,
-				   struct snd_pcm_substream *substream)
-{
-	struct hda_gen_spec *spec = codec->spec;
-
-	snd_hda_codec_cleanup_stream(codec,
-				     spec->adc_nids[substream->number + 1]);
-	call_pcm_capture_hook(hinfo, codec, substream,
-			      HDA_GEN_PCM_ACT_CLEANUP);
-	return 0;
-}
-
-/*
- */
-static const struct hda_pcm_stream pcm_analog_playback = {
-	.substreams = 1,
-	.channels_min = 2,
-	.channels_max = 8,
-	/* NID is set in build_pcms */
-	.ops = {
-		.open = playback_pcm_open,
-		.close = playback_pcm_close,
-		.prepare = playback_pcm_prepare,
-		.cleanup = playback_pcm_cleanup
-	},
-};
-
-static const struct hda_pcm_stream pcm_analog_capture = {
-	.substreams = 1,
-	.channels_min = 2,
-	.channels_max = 2,
-	/* NID is set in build_pcms */
-	.ops = {
-		.open = capture_pcm_open,
-		.close = capture_pcm_close,
-		.prepare = capture_pcm_prepare,
-		.cleanup = capture_pcm_cleanup
-	},
-};
-
-static const struct hda_pcm_stream pcm_analog_alt_playback = {
-	.substreams = 1,
-	.channels_min = 2,
-	.channels_max = 2,
-	/* NID is set in build_pcms */
-	.ops = {
-		.open = alt_playback_pcm_open,
-		.close = alt_playback_pcm_close,
-		.prepare = alt_playback_pcm_prepare,
-		.cleanup = alt_playback_pcm_cleanup
-	},
-};
-
-static const struct hda_pcm_stream pcm_analog_alt_capture = {
-	.substreams = 2, /* can be overridden */
-	.channels_min = 2,
-	.channels_max = 2,
-	/* NID is set in build_pcms */
-	.ops = {
-		.open = alt_capture_pcm_open,
-		.close = alt_capture_pcm_close,
-		.prepare = alt_capture_pcm_prepare,
-		.cleanup = alt_capture_pcm_cleanup
-	},
-};
-
-static const struct hda_pcm_stream pcm_digital_playback = {
-	.substreams = 1,
-	.channels_min = 2,
-	.channels_max = 2,
-	/* NID is set in build_pcms */
-	.ops = {
-		.open = dig_playback_pcm_open,
-		.close = dig_playback_pcm_close,
-		.prepare = dig_playback_pcm_prepare,
-		.cleanup = dig_playback_pcm_cleanup
-	},
-};
-
-static const struct hda_pcm_stream pcm_digital_capture = {
-	.substreams = 1,
-	.channels_min = 2,
-	.channels_max = 2,
-	/* NID is set in build_pcms */
-};
-
-/* Used by build_pcms to flag that a PCM has no playback stream */
-static const struct hda_pcm_stream pcm_null_stream = {
-	.substreams = 0,
-	.channels_min = 0,
-	.channels_max = 0,
-};
-
-/*
  * dynamic changing ADC PCM streams
  */
 static bool dyn_adc_pcm_resetup(struct hda_codec *codec, int cur)
@@ -4954,184 +4617,6 @@ static bool dyn_adc_pcm_resetup(struct hda_codec *codec, int cur)
 	}
 	return false;
 }
-
-/* analog capture with dynamic dual-adc changes */
-static int dyn_adc_capture_pcm_prepare(struct hda_pcm_stream *hinfo,
-				       struct hda_codec *codec,
-				       unsigned int stream_tag,
-				       unsigned int format,
-				       struct snd_pcm_substream *substream)
-{
-	struct hda_gen_spec *spec = codec->spec;
-	spec->cur_adc = spec->adc_nids[spec->dyn_adc_idx[spec->cur_mux[0]]];
-	spec->cur_adc_stream_tag = stream_tag;
-	spec->cur_adc_format = format;
-	snd_hda_codec_setup_stream(codec, spec->cur_adc, stream_tag, 0, format);
-	return 0;
-}
-
-static int dyn_adc_capture_pcm_cleanup(struct hda_pcm_stream *hinfo,
-				       struct hda_codec *codec,
-				       struct snd_pcm_substream *substream)
-{
-	struct hda_gen_spec *spec = codec->spec;
-	snd_hda_codec_cleanup_stream(codec, spec->cur_adc);
-	spec->cur_adc = 0;
-	return 0;
-}
-
-static const struct hda_pcm_stream dyn_adc_pcm_analog_capture = {
-	.substreams = 1,
-	.channels_min = 2,
-	.channels_max = 2,
-	.nid = 0, /* fill later */
-	.ops = {
-		.prepare = dyn_adc_capture_pcm_prepare,
-		.cleanup = dyn_adc_capture_pcm_cleanup
-	},
-};
-
-static void fill_pcm_stream_name(char *str, size_t len, const char *sfx,
-				 const char *chip_name)
-{
-	char *p;
-
-	if (*str)
-		return;
-	strlcpy(str, chip_name, len);
-
-	/* drop non-alnum chars after a space */
-	for (p = strchr(str, ' '); p; p = strchr(p + 1, ' ')) {
-		if (!isalnum(p[1])) {
-			*p = 0;
-			break;
-		}
-	}
-	strlcat(str, sfx, len);
-}
-
-/* build PCM streams based on the parsed results */
-int snd_hda_gen_build_pcms(struct hda_codec *codec)
-{
-	struct hda_gen_spec *spec = codec->spec;
-	struct hda_pcm *info = spec->pcm_rec;
-	const struct hda_pcm_stream *p;
-	bool have_multi_adcs;
-
-	codec->num_pcms = 1;
-	codec->pcm_info = info;
-
-	if (spec->no_analog)
-		goto skip_analog;
-
-	fill_pcm_stream_name(spec->stream_name_analog,
-			     sizeof(spec->stream_name_analog),
-			     " Analog", codec->chip_name);
-	info->name = spec->stream_name_analog;
-
-	if (spec->multiout.num_dacs > 0) {
-		p = spec->stream_analog_playback;
-		if (!p)
-			p = &pcm_analog_playback;
-		info->stream[SNDRV_PCM_STREAM_PLAYBACK] = *p;
-		info->stream[SNDRV_PCM_STREAM_PLAYBACK].nid = spec->multiout.dac_nids[0];
-		info->stream[SNDRV_PCM_STREAM_PLAYBACK].channels_max =
-			spec->multiout.max_channels;
-		if (spec->autocfg.line_out_type == AUTO_PIN_SPEAKER_OUT &&
-		    spec->autocfg.line_outs == 2)
-			info->stream[SNDRV_PCM_STREAM_PLAYBACK].chmap =
-				snd_pcm_2_1_chmaps;
-	}
-	if (spec->num_adc_nids) {
-		p = spec->stream_analog_capture;
-		if (!p) {
-			if (spec->dyn_adc_switch)
-				p = &dyn_adc_pcm_analog_capture;
-			else
-				p = &pcm_analog_capture;
-		}
-		info->stream[SNDRV_PCM_STREAM_CAPTURE] = *p;
-		info->stream[SNDRV_PCM_STREAM_CAPTURE].nid = spec->adc_nids[0];
-	}
-
- skip_analog:
-	/* SPDIF for stream index #1 */
-	if (spec->multiout.dig_out_nid || spec->dig_in_nid) {
-		fill_pcm_stream_name(spec->stream_name_digital,
-				     sizeof(spec->stream_name_digital),
-				     " Digital", codec->chip_name);
-		codec->num_pcms = 2;
-		codec->slave_dig_outs = spec->multiout.slave_dig_outs;
-		info = spec->pcm_rec + 1;
-		info->name = spec->stream_name_digital;
-		if (spec->dig_out_type)
-			info->pcm_type = spec->dig_out_type;
-		else
-			info->pcm_type = HDA_PCM_TYPE_SPDIF;
-		if (spec->multiout.dig_out_nid) {
-			p = spec->stream_digital_playback;
-			if (!p)
-				p = &pcm_digital_playback;
-			info->stream[SNDRV_PCM_STREAM_PLAYBACK] = *p;
-			info->stream[SNDRV_PCM_STREAM_PLAYBACK].nid = spec->multiout.dig_out_nid;
-		}
-		if (spec->dig_in_nid) {
-			p = spec->stream_digital_capture;
-			if (!p)
-				p = &pcm_digital_capture;
-			info->stream[SNDRV_PCM_STREAM_CAPTURE] = *p;
-			info->stream[SNDRV_PCM_STREAM_CAPTURE].nid = spec->dig_in_nid;
-		}
-	}
-
-	if (spec->no_analog)
-		return 0;
-
-	/* If the use of more than one ADC is requested for the current
-	 * model, configure a second analog capture-only PCM.
-	 */
-	have_multi_adcs = (spec->num_adc_nids > 1) &&
-		!spec->dyn_adc_switch && !spec->auto_mic;
-	/* Additional Analaog capture for index #2 */
-	if (spec->alt_dac_nid || have_multi_adcs) {
-		fill_pcm_stream_name(spec->stream_name_alt_analog,
-				     sizeof(spec->stream_name_alt_analog),
-			     " Alt Analog", codec->chip_name);
-		codec->num_pcms = 3;
-		info = spec->pcm_rec + 2;
-		info->name = spec->stream_name_alt_analog;
-		if (spec->alt_dac_nid) {
-			p = spec->stream_analog_alt_playback;
-			if (!p)
-				p = &pcm_analog_alt_playback;
-			info->stream[SNDRV_PCM_STREAM_PLAYBACK] = *p;
-			info->stream[SNDRV_PCM_STREAM_PLAYBACK].nid =
-				spec->alt_dac_nid;
-		} else {
-			info->stream[SNDRV_PCM_STREAM_PLAYBACK] =
-				pcm_null_stream;
-			info->stream[SNDRV_PCM_STREAM_PLAYBACK].nid = 0;
-		}
-		if (have_multi_adcs) {
-			p = spec->stream_analog_alt_capture;
-			if (!p)
-				p = &pcm_analog_alt_capture;
-			info->stream[SNDRV_PCM_STREAM_CAPTURE] = *p;
-			info->stream[SNDRV_PCM_STREAM_CAPTURE].nid =
-				spec->adc_nids[1];
-			info->stream[SNDRV_PCM_STREAM_CAPTURE].substreams =
-				spec->num_adc_nids - 1;
-		} else {
-			info->stream[SNDRV_PCM_STREAM_CAPTURE] =
-				pcm_null_stream;
-			info->stream[SNDRV_PCM_STREAM_CAPTURE].nid = 0;
-		}
-	}
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(snd_hda_gen_build_pcms);
-
 
 /*
  * Standard auto-parser initializations
@@ -5338,7 +4823,6 @@ int snd_hda_gen_init(struct hda_codec *codec)
 	if (spec->vmaster_mute.sw_kctl && spec->vmaster_mute.hook)
 		snd_hda_sync_vmaster_hook(&spec->vmaster_mute);
 
-	hda_call_check_power_status(codec, 0x01);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(snd_hda_gen_init);
@@ -5370,21 +4854,6 @@ EXPORT_SYMBOL_GPL(snd_hda_gen_check_power_status);
 #endif
 
 
-/*
- * the generic codec support
- */
-
-static const struct hda_codec_ops generic_patch_ops = {
-	.build_controls = snd_hda_gen_build_controls,
-	.build_pcms = snd_hda_gen_build_pcms,
-	.init = snd_hda_gen_init,
-	.free = snd_hda_gen_free,
-	.unsol_event = snd_hda_jack_unsol_event,
-#ifdef CONFIG_PM
-	.check_power_status = snd_hda_gen_check_power_status,
-#endif
-};
-
 int snd_hda_parse_generic_codec(struct hda_codec *codec)
 {
 	struct hda_gen_spec *spec;
@@ -5404,7 +4873,6 @@ int snd_hda_parse_generic_codec(struct hda_codec *codec)
 	if (err < 0)
 		goto error;
 
-	codec->patch_ops = generic_patch_ops;
 	return 0;
 
 error:

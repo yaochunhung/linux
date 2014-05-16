@@ -94,6 +94,18 @@ enum {
 	HDA_PCM_NTYPES
 };
 
+/*
+ * audio-converter setup caches
+ */
+struct hda_cvt_setup {
+	hda_nid_t nid;
+	u8 stream_tag;
+	u8 channel_id;
+	u16 format_id;
+	unsigned char active;	/* cvt is currently used */
+	unsigned char dirty;	/* setups should be cleared */
+};
+
 /**
  * struct hda_codec - Updated generic hda codec structure
  *			retaining common info
@@ -107,7 +119,7 @@ enum {
 struct hda_codec {
 	struct snd_card *card;
 	int (*exec_cmd)(struct hda_codec *codec,
-			unsigned int cmd, unsigned int *res);
+			unsigned int cmd, int flags, unsigned int *res);
 	const struct snd_pci_quirk * (*quirk_lookup)(struct hda_codec *codec,
 			const struct snd_pci_quirk *list);
 	struct device *dev;
@@ -241,6 +253,7 @@ int snd_hda_codec_alloc(struct hda_codec **codecp);
 void snd_hda_codec_free(struct hda_codec *codec);
 int snd_hda_codec_init(unsigned int codec_addr, struct hda_codec *codec);
 int snd_hda_codec_reset(struct hda_codec *codec);
+int snd_hda_codec_configure(struct hda_codec *codec);
 
 /*
  * Codec Access functions
@@ -347,10 +360,18 @@ struct hda_cvt_setup *
 snd_hda_get_cvt_setup(struct hda_codec *codec, hda_nid_t nid);
 void snd_hda_restore_shutup_pins(struct hda_codec *codec);
 
+/*
+ * Misc
+ */
+
+int snd_hda_lock_devices(struct hda_codec *codec);
+void snd_hda_unlock_devices(struct hda_codec *codec);
 
 /*
  * codec power helpers
  */
+unsigned int snd_hda_set_power_state(struct hda_codec *codec, hda_nid_t nid,
+					unsigned int power_state);
 /* check whether the actual power state matches with the target state */
 bool snd_hda_check_power_state(struct hda_codec *codec, hda_nid_t nid,
 			  unsigned int target_state);
@@ -358,8 +379,9 @@ bool snd_hda_check_power_state(struct hda_codec *codec, hda_nid_t nid,
 unsigned int snd_hda_codec_eapd_power_filter(struct hda_codec *codec,
 					     hda_nid_t nid,
 					     unsigned int power_state);
-void snd_hda_codec_set_power_to_all(struct hda_codec *codec, hda_nid_t fg,
+void snd_hda_codec_set_power_to_all(struct hda_codec *codec,  hda_nid_t fg,
 				    unsigned int power_state);
+void snd_hda_sync_power_up_states(struct hda_codec *codec);
 void snd_hda_schedule_power_save(struct hda_codec *codec);
 
 struct hda_amp_list {
@@ -388,13 +410,7 @@ const char *snd_hda_get_jack_location(u32 cfg);
 /*
  * power saving
  */
-#ifdef CONFIG_PM
 void snd_hda_power_save(struct hda_codec *codec, int delta, bool d3wait);
-void snd_hda_update_power_acct(struct hda_codec *codec);
-#else
-static inline void snd_hda_power_save(struct hda_codec *codec, int delta,
-				      bool d3wait) {}
-#endif
 
 /**
  * snd_hda_power_up - Power-up the codec

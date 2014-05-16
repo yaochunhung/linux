@@ -14,7 +14,6 @@
 #include <linux/sort.h>
 #include <sound/core.h>
 #include <sound/hda_codec.h>
-#include <sound/hda_local.h>
 #include <sound/hda_auto_parser.h>
 
 #define SFX	"hda_codec: "
@@ -866,7 +865,7 @@ void snd_hda_pick_fixup(struct hda_codec *codec,
 		}
 	}
 	if (id < 0 && quirk) {
-		q = snd_pci_quirk_lookup(codec->bus->pci, quirk);
+		q = codec->quirk_lookup(codec, quirk);
 		if (q) {
 			id = q->value;
 #ifdef CONFIG_SND_DEBUG_VERBOSE

@@ -26,7 +26,8 @@
 #include <sound/core.h>
 #include <sound/control.h>
 #include <sound/hda_codec.h>
-#include <sound/hda_local.h>
+#include <sound/hda_auto_parser.h>
+#include <sound/hda_controls.h>
 #include <sound/hda_beep.h>
 
 enum {
@@ -170,7 +171,7 @@ static int snd_hda_do_attach(struct hda_beep *beep)
 	input_dev->evbit[0] = BIT_MASK(EV_SND);
 	input_dev->sndbit[0] = BIT_MASK(SND_BELL) | BIT_MASK(SND_TONE);
 	input_dev->event = snd_hda_beep_event;
-	input_dev->dev.parent = &codec->dev;
+	input_dev->dev.parent = codec->dev;
 	input_set_drvdata(input_dev, beep);
 
 	beep->dev = input_dev;
@@ -207,7 +208,7 @@ int snd_hda_attach_beep_device(struct hda_codec *codec, int nid)
 	if (beep == NULL)
 		return -ENOMEM;
 	snprintf(beep->phys, sizeof(beep->phys),
-		"card%d/codec#%d/beep0", codec->bus->card->number, codec->addr);
+		"card%d/codec#%d/beep0", codec->card->number, codec->addr);
 	/* enable linear scale */
 	snd_hda_codec_write_cache(codec, nid, 0,
 		AC_VERB_SET_DIGI_CONVERT_2, 0x01);

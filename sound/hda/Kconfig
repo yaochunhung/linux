@@ -60,7 +60,7 @@ config SND_HDA_GENERIC
 	tristate "Enable generic HD-audio codec parser"
 	help
 	  Say Y or M here to enable the generic HD-audio codec parser
-	  in snd-hda library.
+	  in HDA library.
 
 endif
 

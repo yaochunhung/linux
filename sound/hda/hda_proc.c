@@ -26,7 +26,8 @@
 #include <sound/core.h>
 #include <linux/module.h>
 #include <sound/hda_codec.h>
-#include <sound/hda_local.h>
+#include <sound/hda_auto_parser.h>
+#include <sound/hda_controls.h>
 
 static int dump_coef = -1;
 module_param(dump_coef, int, 0644);
@@ -92,25 +93,6 @@ static void print_nid_array(struct snd_info_buffer *buffer,
 				  get_amp_direction(kctl) ? "Out" : "In",
 				  get_amp_index(kctl),
 				  get_amp_offset(kctl));
-		}
-	}
-}
-
-static void print_nid_pcms(struct snd_info_buffer *buffer,
-			   struct hda_codec *codec, hda_nid_t nid)
-{
-	int pcm, type;
-	struct hda_pcm *cpcm;
-	for (pcm = 0; pcm < codec->num_pcms; pcm++) {
-		cpcm = &codec->pcm_info[pcm];
-		for (type = 0; type < 2; type++) {
-			if (cpcm->stream[type].nid != nid || cpcm->pcm == NULL)
-				continue;
-			snd_iprintf(buffer, "  Device: name=\"%s\", "
-				    "type=\"%s\", device=%i\n",
-				    cpcm->name,
-				    snd_hda_pcm_type_name[cpcm->pcm_type],
-				    cpcm->pcm->device);
 		}
 	}
 }
@@ -673,7 +655,6 @@ static void print_codec_info(struct snd_info_entry *entry,
 
 	if (!codec->afg)
 		return;
-	snd_hda_power_up(codec);
 	snd_iprintf(buffer, "Default PCM:\n");
 	print_pcm_caps(buffer, codec, codec->afg);
 	snd_iprintf(buffer, "Default Amp-In caps: ");
@@ -686,7 +667,6 @@ static void print_codec_info(struct snd_info_entry *entry,
 	nodes = snd_hda_get_sub_nodes(codec, codec->afg, &nid);
 	if (!nid || nodes < 0) {
 		snd_iprintf(buffer, "Invalid AFG subtree\n");
-		snd_hda_power_down(codec);
 		return;
 	}
 
@@ -728,7 +708,6 @@ static void print_codec_info(struct snd_info_entry *entry,
 
 		print_nid_array(buffer, codec, nid, &codec->mixers);
 		print_nid_array(buffer, codec, nid, &codec->nids);
-		print_nid_pcms(buffer, codec, nid);
 
 		/* volume knob is a special widget that always have connection
 		 * list
@@ -826,7 +805,6 @@ static void print_codec_info(struct snd_info_entry *entry,
 
 		kfree(conn);
 	}
-	snd_hda_power_down(codec);
 }
 
 /*
@@ -839,11 +817,11 @@ int snd_hda_codec_proc_new(struct hda_codec *codec)
 	int err;
 
 	snprintf(name, sizeof(name), "codec#%d", codec->addr);
-	err = snd_card_proc_new(codec->bus->card, name, &entry);
+	err = snd_card_proc_new(codec->card, name, &entry);
 	if (err < 0)
 		return err;
 
 	snd_info_set_text_ops(entry, codec, print_codec_info);
 	return 0;
 }
-
+EXPORT_SYMBOL_GPL(snd_hda_codec_proc_new);

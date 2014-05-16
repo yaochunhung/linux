@@ -22,8 +22,7 @@
 #include <linux/slab.h>
 #include <linux/compat.h>
 #include <sound/core.h>
-#include "hda_codec.h"
-#include "hda_local.h"
+#include <sound/hda_codec.h>
 #include <sound/hda_hwdep.h>
 #include <sound/minors.h>
 
@@ -101,7 +100,7 @@ int snd_hda_create_hwdep(struct hda_codec *codec)
 	int err;
 
 	sprintf(hwname, "HDA Codec %d", codec->addr);
-	err = snd_hwdep_new(codec->bus->card, hwname, codec->addr, &hwdep);
+	err = snd_hwdep_new(codec->card, hwname, codec->addr, &hwdep);
 	if (err < 0)
 		return err;
 	codec->hwdep = hwdep;
@@ -109,8 +108,10 @@ int snd_hda_create_hwdep(struct hda_codec *codec)
 	hwdep->iface = SNDRV_HWDEP_IFACE_HDA;
 	hwdep->private_data = codec;
 	hwdep->exclusive = 1;
+/* FIXME: Enable after moving to 3.15 */
+#if 0
 	hwdep->groups = snd_hda_dev_attr_groups;
-
+#endif
 	hwdep->ops.open = hda_hwdep_open;
 	hwdep->ops.ioctl = hda_hwdep_ioctl;
 #ifdef CONFIG_COMPAT
@@ -118,7 +119,9 @@ int snd_hda_create_hwdep(struct hda_codec *codec)
 #endif
 
 	/* link to codec */
-	hwdep->dev = &codec->dev;
-
+/* FIXME: Enable after moving to 3.15 */
+#if 0
+	hwdep->dev = codec->dev;
+#endif
 	return 0;
 }

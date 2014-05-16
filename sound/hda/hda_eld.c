@@ -27,7 +27,7 @@
 #include <sound/core.h>
 #include <asm/unaligned.h>
 #include <sound/hda_codec.h>
-#include <sound/hda_local.h>
+#include <sound/hda_hdmi.h>
 
 enum eld_versions {
 	ELD_VER_CEA_861D	= 2,
@@ -310,12 +310,14 @@ int snd_hdmi_parse_eld(struct parsed_hdmi_eld *e,
 out_fail:
 	return -EINVAL;
 }
+EXPORT_SYMBOL(snd_hdmi_parse_eld);
 
 int snd_hdmi_get_eld_size(struct hda_codec *codec, hda_nid_t nid)
 {
 	return snd_hda_codec_read(codec, nid, 0, AC_VERB_GET_HDMI_DIP_SIZE,
 						 AC_DIPSIZE_ELD_BUF);
 }
+EXPORT_SYMBOL(snd_hdmi_get_eld_size);
 
 int snd_hdmi_get_eld(struct hda_codec *codec, hda_nid_t nid,
 		     unsigned char *buf, int *eld_size)
@@ -371,6 +373,7 @@ int snd_hdmi_get_eld(struct hda_codec *codec, hda_nid_t nid,
 error:
 	return ret;
 }
+EXPORT_SYMBOL(snd_hdmi_get_eld);
 
 /**
  * SNDRV_PCM_RATE_* and AC_PAR_PCM values don't match, print correct rates with
@@ -431,6 +434,7 @@ void snd_print_channel_allocation(int spk_alloc, char *buf, int buflen)
 	}
 	buf[j] = '\0';	/* necessary when j == 0 */
 }
+EXPORT_SYMBOL(snd_print_channel_allocation);
 
 void snd_hdmi_show_eld(struct parsed_hdmi_eld *e)
 {
@@ -449,6 +453,7 @@ void snd_hdmi_show_eld(struct parsed_hdmi_eld *e)
 	for (i = 0; i < e->sad_count; i++)
 		hdmi_show_short_audio_desc(e->sad + i);
 }
+EXPORT_SYMBOL(snd_hdmi_show_eld);
 
 #ifdef CONFIG_PROC_FS
 
@@ -525,6 +530,7 @@ void snd_hdmi_print_eld_info(struct hdmi_eld *eld,
 	for (i = 0; i < e->sad_count; i++)
 		hdmi_print_sad_info(i, e->sad + i, buffer);
 }
+EXPORT_SYMBOL(snd_hdmi_print_eld_info);
 
 void snd_hdmi_write_eld_info(struct hdmi_eld *eld,
 			     struct snd_info_buffer *buffer)
@@ -588,52 +594,8 @@ void snd_hdmi_write_eld_info(struct hdmi_eld *eld,
 		}
 	}
 }
+EXPORT_SYMBOL(snd_hdmi_write_eld_info);
 #endif /* CONFIG_PROC_FS */
-
-/* update PCM info based on ELD */
-void snd_hdmi_eld_update_pcm_info(struct parsed_hdmi_eld *e,
-			      struct hda_pcm_stream *hinfo)
-{
-	u32 rates;
-	u64 formats;
-	unsigned int maxbps;
-	unsigned int channels_max;
-	int i;
-
-	/* assume basic audio support (the basic audio flag is not in ELD;
-	 * however, all audio capable sinks are required to support basic
-	 * audio) */
-	rates = SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
-		SNDRV_PCM_RATE_48000;
-	formats = SNDRV_PCM_FMTBIT_S16_LE;
-	maxbps = 16;
-	channels_max = 2;
-	for (i = 0; i < e->sad_count; i++) {
-		struct cea_sad *a = &e->sad[i];
-		rates |= a->rates;
-		if (a->channels > channels_max)
-			channels_max = a->channels;
-		if (a->format == AUDIO_CODING_TYPE_LPCM) {
-			if (a->sample_bits & AC_SUPPCM_BITS_20) {
-				formats |= SNDRV_PCM_FMTBIT_S32_LE;
-				if (maxbps < 20)
-					maxbps = 20;
-			}
-			if (a->sample_bits & AC_SUPPCM_BITS_24) {
-				formats |= SNDRV_PCM_FMTBIT_S32_LE;
-				if (maxbps < 24)
-					maxbps = 24;
-			}
-		}
-	}
-
-	/* restrict the parameters by the values the codec provides */
-	hinfo->rates &= rates;
-	hinfo->formats &= formats;
-	hinfo->maxbps = min(hinfo->maxbps, maxbps);
-	hinfo->channels_max = min(hinfo->channels_max, channels_max);
-}
-
 
 /* ATI/AMD specific stuff (ELD emulation) */
 
