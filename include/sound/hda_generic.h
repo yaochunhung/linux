@@ -90,22 +90,6 @@ extern const struct badness_table hda_main_out_badness;
 extern const struct badness_table hda_extra_out_badness;
 
 struct hda_gen_spec {
-	char stream_name_analog[32];	/* analog PCM stream */
-	const struct hda_pcm_stream *stream_analog_playback;
-	const struct hda_pcm_stream *stream_analog_capture;
-
-	char stream_name_alt_analog[32]; /* alternative analog PCM stream */
-	const struct hda_pcm_stream *stream_analog_alt_playback;
-	const struct hda_pcm_stream *stream_analog_alt_capture;
-
-	char stream_name_digital[32];	/* digital PCM stream */
-	const struct hda_pcm_stream *stream_digital_playback;
-	const struct hda_pcm_stream *stream_digital_capture;
-
-	/* PCM */
-	unsigned int active_streams;
-	struct mutex pcm_mutex;
-
 	/* playback */
 	struct hda_multi_out multiout;	/* playback set-up
 					 * max_channels, dacs must be set
@@ -148,9 +132,6 @@ struct hda_gen_spec {
 	int min_channel_count;		/* min. channel count for primary out */
 	int ext_channel_count;		/* current channel count for primary */
 	int const_channel_count;	/* channel count for all */
-
-	/* PCM information */
-	struct hda_pcm pcm_rec[3];	/* used in build_pcms() */
 
 	/* dynamic controls, init_verbs and input_mux */
 	struct auto_pin_cfg autocfg;
@@ -277,16 +258,6 @@ struct hda_gen_spec {
 			      struct snd_kcontrol *kcontrol,
 			      struct snd_ctl_elem_value *ucontrol);
 
-	/* PCM hooks */
-	void (*pcm_playback_hook)(struct hda_pcm_stream *hinfo,
-				  struct hda_codec *codec,
-				  struct snd_pcm_substream *substream,
-				  int action);
-	void (*pcm_capture_hook)(struct hda_pcm_stream *hinfo,
-				 struct hda_codec *codec,
-				 struct snd_pcm_substream *substream,
-				 int action);
-
 	/* automute / autoswitch hooks */
 	void (*hp_automute_hook)(struct hda_codec *codec,
 				 struct hda_jack_tbl *tbl);
@@ -321,7 +292,6 @@ snd_hda_gen_add_kctl(struct hda_gen_spec *spec, const char *name,
 int snd_hda_gen_parse_auto_config(struct hda_codec *codec,
 				  struct auto_pin_cfg *cfg);
 int snd_hda_gen_build_controls(struct hda_codec *codec);
-int snd_hda_gen_build_pcms(struct hda_codec *codec);
 
 /* standard jack event callbacks */
 void snd_hda_gen_hp_automute(struct hda_codec *codec,

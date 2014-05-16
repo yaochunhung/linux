@@ -360,6 +360,22 @@ unsigned int snd_hda_codec_eapd_power_filter(struct hda_codec *codec,
 					     unsigned int power_state);
 void snd_hda_codec_set_power_to_all(struct hda_codec *codec, hda_nid_t fg,
 				    unsigned int power_state);
+void snd_hda_schedule_power_save(struct hda_codec *codec);
+
+struct hda_amp_list {
+	hda_nid_t nid;
+	unsigned char dir;
+	unsigned char idx;
+};
+
+struct hda_loopback_check {
+	const struct hda_amp_list *amplist;
+	int power_on;
+};
+
+int snd_hda_check_amp_list_power(struct hda_codec *codec,
+				 struct hda_loopback_check *check,
+				 hda_nid_t nid);
 
 
 /*
@@ -431,4 +447,61 @@ static inline void snd_hda_power_sync(struct hda_codec *codec)
 	snd_hda_power_save(codec, 0, false);
 }
 
+/*
+ * generic proc interface
+ */
+#ifdef CONFIG_PROC_FS
+int snd_hda_codec_proc_new(struct hda_codec *codec);
+#else
+static inline int snd_hda_codec_proc_new(struct hda_codec *codec) { return 0; }
+#endif
+
+#define SND_PRINT_BITS_ADVISED_BUFSIZE	16
+void snd_print_pcm_bits(int pcm, char *buf, int buflen);
+
+/*
+ * hwdep interface
+ */
+#ifdef CONFIG_SND_HDA_HWDEP
+int snd_hda_create_hwdep(struct hda_codec *codec);
+#else
+static inline int snd_hda_create_hwdep(struct hda_codec *codec) { return 0; }
+#endif
+
+void snd_hda_sysfs_init(struct hda_codec *codec);
+void snd_hda_sysfs_clear(struct hda_codec *codec);
+
+extern const struct attribute_group *snd_hda_dev_attr_groups[];
+
+#ifdef CONFIG_SND_HDA_RECONFIG
+const char *snd_hda_get_hint(struct hda_codec *codec, const char *key);
+int snd_hda_get_bool_hint(struct hda_codec *codec, const char *key);
+int snd_hda_get_int_hint(struct hda_codec *codec, const char *key, int *valp);
+#else
+static inline
+const char *snd_hda_get_hint(struct hda_codec *codec, const char *key)
+{
+	return NULL;
+}
+
+static inline
+int snd_hda_get_bool_hint(struct hda_codec *codec, const char *key)
+{
+	return -ENOENT;
+}
+
+static inline
+int snd_hda_get_int_hint(struct hda_codec *codec, const char *key, int *valp)
+{
+	return -ENOENT;
+}
+#endif
+
+/*
+ * Debug macros
+ */
+#define codec_err(codec, fmt, args...) dev_err((codec)->dev, fmt, ##args)
+#define codec_warn(codec, fmt, args...) dev_warn((codec)->dev, fmt, ##args)
+#define codec_info(codec, fmt, args...) dev_info((codec)->dev, fmt, ##args)
+#define codec_dbg(codec, fmt, args...) dev_dbg((codec)->dev, fmt, ##args)
 #endif /* __SOUND_HDA_CODEC_H */
