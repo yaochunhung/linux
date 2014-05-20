@@ -17,9 +17,9 @@ TRACE_EVENT(azx_pcm_trigger,
 	TP_ARGS(chip, dev, cmd),
 
 	TP_STRUCT__entry(
-		__field( int, card )
-		__field( int, idx )
-		__field( int, cmd )
+		__field(int, card)
+		__field(int, idx)
+		__field(int, cmd)
 	),
 
 	TP_fast_assign(
@@ -33,15 +33,15 @@ TRACE_EVENT(azx_pcm_trigger,
 
 TRACE_EVENT(azx_get_position,
 
-    TP_PROTO(struct azx *chip, struct azx_dev *dev, unsigned int pos, unsigned int delay),
+	TP_PROTO(struct azx *chip, struct azx_dev *dev, unsigned int pos, unsigned int delay),
 
 	    TP_ARGS(chip, dev, pos, delay),
 
 	TP_STRUCT__entry(
-		__field( int, card )
-		__field( int, idx )
-		__field( unsigned int, pos )
-		__field( unsigned int, delay )
+		__field(int, card)
+		__field(int, idx)
+		__field(unsigned int, pos)
+		__field(unsigned int, delay)
 	),
 
 	TP_fast_assign(

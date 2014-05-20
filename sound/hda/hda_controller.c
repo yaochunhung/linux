@@ -355,7 +355,7 @@ static int azx_setup_periods(struct azx *chip,
 				pos_align;
 		pos_adj = frames_to_bytes(runtime, pos_adj);
 		if (pos_adj >= period_bytes) {
-			dev_warn(chip->card->dev,"Too big adjustment %d\n",
+			dev_warn(chip->card->dev, "Too big adjustment %d\n",
 				 pos_adj);
 			pos_adj = 0;
 		} else {
@@ -1194,8 +1194,7 @@ static void azx_update_rirb(struct azx *chip)
 				res, res_ex,
 				chip->rirb.rp, wp);
 			snd_BUG();
-		}
-		else if (res_ex & ICH6_RIRB_EX_UNSOL_EV)
+		} else if (res_ex & ICH6_RIRB_EX_UNSOL_EV)
 			snd_hda_queue_unsol_event(chip->bus, res, res_ex);
 		else if (chip->rirb.cmds[addr]) {
 			chip->rirb.res[addr] = res;
