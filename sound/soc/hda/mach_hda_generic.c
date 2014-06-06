@@ -48,6 +48,22 @@ struct snd_soc_dai_link mach_hda_generic_dailink[] = {
 		.codec_name = "codec#000.0",
 		.codec_dai_name = "ALC275-AIF3",
 	},
+	{
+		.name = "HDMI Playback 1",
+		.stream_name = "HDMI PB1",
+		.cpu_dai_name = "System Pin",
+		.platform_name = "0000:00:1b.0",
+		.codec_name = "codec#003.3",
+		.codec_dai_name = "intel-hdmi-hif1",
+	},
+	{
+		.name = "HDMI Playback 2",
+		.stream_name = "HDMI PB2",
+		.cpu_dai_name = "System Pin",
+		.platform_name = "0000:00:1b.0",
+		.codec_name = "codec#003.3",
+		.codec_dai_name = "intel-hdmi-hif2",
+	},
 };
 
 /* SoC card */

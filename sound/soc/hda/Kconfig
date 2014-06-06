@@ -29,6 +29,7 @@ config SND_SOC_HDA_GENERIC_MACH
 	tristate "SOC Machine Audio driver for HDA"
 	select SND_SOC_HDA_BUS
 	select SND_SOC_ALC269
+	select SND_SOC_HDMI
 	default n
 	help
 	This adds support for ASoC machine driver . This will create an alsa
