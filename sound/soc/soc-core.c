@@ -4013,7 +4013,11 @@ static int snd_soc_register_dai(struct device *dev,
 		return -ENOMEM;
 
 	/* create DAI component name */
-	dai->name = fmt_single_name(dev, &dai->id);
+	if (dai_drv->name)
+		dai->name = kstrdup(dai_drv->name, GFP_KERNEL);
+	else
+		dai->name = fmt_single_name(dev, &dai->id);
+
 	if (dai->name == NULL) {
 		kfree(dai);
 		return -ENOMEM;
