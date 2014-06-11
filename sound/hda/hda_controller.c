@@ -1301,10 +1301,18 @@ irqreturn_t azx_interrupt(int irq, void *dev_id)
 }
 EXPORT_SYMBOL_GPL(azx_interrupt);
 
+static bool is_input_stream(struct azx *chip, unsigned char index)
+{
+	return index < chip->playback_index_offset;
+}
+
 /* initialize SD streams */
 int azx_init_stream(struct azx *chip)
 {
 	int i;
+	int in_stream_tag = 0;
+	int out_stream_tag = 0;
+	
 
 	/* initialize each stream (aka device)
 	 * assign the starting bdl address to each stream (device)
@@ -1317,9 +1325,14 @@ int azx_init_stream(struct azx *chip)
 		azx_dev->sd_addr = chip->remap_addr + (0x20 * i + 0x80);
 		/* int mask: SDI0=0x01, SDI1=0x02, ... SDO3=0x80 */
 		azx_dev->sd_int_sta_mask = 1 << i;
-		/* stream tag: must be non-zero and unique */
 		azx_dev->index = i;
-		azx_dev->stream_tag = i + 1;
+		/* stream tag must be unique throughout
+		* the stream direction group,
+		* valid values 1...15
+		*/
+		azx_dev->stream_tag =
+			is_input_stream(chip, i) ?
+			++in_stream_tag : ++out_stream_tag;
 	}
 
 	return 0;
