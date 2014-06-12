@@ -1644,9 +1644,14 @@ static struct alc_patch alc275_drv_data = {
 	.patch = &patch_alc269,
 };
 
+static struct alc_patch alc286_drv_data = {
+	.patch = &patch_alc269,
+};
+
 static const struct snd_soc_hda_device_id realtek_list[] = {
 { .id = 0x10ec0269, .addr = 0, .name = "ALC269", (kernel_ulong_t)&alc269_drv_data},
 { .id = 0x10ec0275, .addr = 0, .name = "ALC275", (kernel_ulong_t)&alc275_drv_data},
+{ .id = 0x10ec0286, .addr = 0, .name = "ALC286", (kernel_ulong_t)&alc286_drv_data},
 {},
 };
 
