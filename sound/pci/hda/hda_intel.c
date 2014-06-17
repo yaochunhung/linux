@@ -3468,8 +3468,10 @@ static int azx_probe(struct pci_dev *pci,
 		return -ENOENT;
 	}
 
+	err = snd_card_create(index[dev], id[dev], THIS_MODULE, 0, &card);
+	/*fixme need soc-core chnages to be ported *
 	err = snd_card_new(&pci->dev, index[dev], id[dev], THIS_MODULE,
-			   0, &card);
+			   0, &card);*/
 	if (err < 0) {
 		dev_err(&pci->dev, "Error creating card!\n");
 		return err;
