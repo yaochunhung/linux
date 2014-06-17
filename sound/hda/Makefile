@@ -1,0 +1,16 @@
+snd-hda-codec-y := hda_codec.o hda_jack.o hda_auto_parser.o hda_eld.o \
+hda_sysfs.o
+snd-hda-codec-$(CONFIG_PROC_FS) += hda_proc.o
+snd-hda-codec-$(CONFIG_SND_HDA_HWDEP) += hda_hwdep.o
+snd-hda-codec-$(CONFIG_SND_HDA_INPUT_BEEP) += hda_beep.o
+
+# for trace-points
+CFLAGS_hda_codec.o := -I$(src)
+
+snd-hda-codec-generic-objs :=	hda_generic.o
+
+# common driver
+obj-$(CONFIG_SND_HDA_CODEC) := snd-hda-codec.o
+
+# codec drivers
+obj-$(CONFIG_SND_HDA_GENERIC) += snd-hda-codec-generic.o
