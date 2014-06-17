@@ -272,11 +272,23 @@ static void set_eapd(struct hda_codec *codec, hda_nid_t nid, int on)
 	}
 }
 
+static void alc_auto_setup_eapd(struct hda_codec *codec, bool on)
+{
+	/* We currently only handle front, HP */
+	static hda_nid_t pins[] = {
+		0x0f, 0x10, 0x14, 0x15, 0
+	};
+	hda_nid_t *p;
+	for (p = pins; *p; p++)
+		set_eapd(codec, *p, on);
+}
+
 /* generic EAPD initialization */
 static void alc_auto_init_amp(struct hda_codec *codec, int type)
 {
 	unsigned int tmp;
 
+	alc_auto_setup_eapd(codec, true);
 	switch (type) {
 	case ALC_INIT_GPIO1:
 		snd_hda_sequence_write(codec, alc_gpio1_init_verbs);
@@ -819,6 +831,14 @@ static void alc269_fixup_hweq(struct hda_codec *codec,
 	alc_write_coef_idx(codec, 0x1e, coef | 0x80);
 }
 
+static void alc269_fixup_headset_mic(struct hda_codec *codec,
+				       const struct hda_fixup *fix, int action)
+{
+	struct alc_spec *spec = codec->spec;
+	if (action == HDA_FIXUP_ACT_PRE_PROBE)
+		spec->parse_flags |= HDA_PINCFG_HEADSET_MIC;
+}
+
 static void alc271_fixup_dmic(struct hda_codec *codec,
 			      const struct hda_fixup *fix, int action)
 {
@@ -1034,6 +1054,7 @@ enum {
 	ALC271_FIXUP_DMIC,
 	ALC269_FIXUP_PCM_44K,
 	ALC269_FIXUP_STEREO_DMIC,
+	ALC269_FIXUP_HEADSET_MIC,
 	ALC269_FIXUP_QUANTA_MUTE,
 	ALC269_FIXUP_LIFEBOOK,
 	ALC269_FIXUP_AMIC,
@@ -1046,6 +1067,7 @@ enum {
 	ALC269_FIXUP_HP_GPIO_LED,
 	ALC269_FIXUP_INV_DMIC,
 	ALC269_FIXUP_LENOVO_DOCK,
+	ALC286_FIXUP_SONY_MIC_NO_PRESENCE,
 	ALC269_FIXUP_PINCFG_NO_HP_TO_LINEOUT,
 	ALC269_FIXUP_DELL1_MIC_NO_PRESENCE,
 	ALC269_FIXUP_DELL2_MIC_NO_PRESENCE,
@@ -1089,9 +1111,24 @@ static const struct hda_fixup alc269_fixups[] = {
 		.chained = true,
 		.chain_id = ALC275_FIXUP_SONY_VAIO_GPIO2
 	},
+	[ALC269_FIXUP_HEADSET_MIC] = {
+		.type = HDA_FIXUP_FUNC,
+		.v.func = alc269_fixup_headset_mic,
+	},
+	[ALC286_FIXUP_SONY_MIC_NO_PRESENCE] = {
+		.type = HDA_FIXUP_PINS,
+		.v.pins = (const struct hda_pintbl[]) {
+			{ 0x18, 0x01a1913c }, /* use as headset mic, without its own jack detect */
+			{ }
+		},
+		.chained = true,
+		.chain_id = ALC269_FIXUP_HEADSET_MIC
+	},
 };
 
 static const struct snd_pci_quirk alc269_fixup_tbl[] = {
+	SND_PCI_QUIRK(0x104d, 0x90b5, "Sony VAIO Pro 11", ALC286_FIXUP_SONY_MIC_NO_PRESENCE),
+	SND_PCI_QUIRK(0x104d, 0x90b6, "Sony VAIO Pro 13", ALC286_FIXUP_SONY_MIC_NO_PRESENCE),
 	SND_PCI_QUIRK(0x104d, 0x9073, "Sony VAIO", ALC275_FIXUP_SONY_VAIO_GPIO2),
 	SND_PCI_QUIRK(0x104d, 0x907b, "Sony VAIO", ALC275_FIXUP_SONY_HWEQ),
 	SND_PCI_QUIRK(0x104d, 0x9084, "Sony VAIO", ALC275_FIXUP_SONY_HWEQ),
@@ -1207,6 +1244,9 @@ static int patch_alc269(struct snd_soc_hda_codec *codec)
 			goto error;
 		spec->init_hook = alc269_fill_coef;
 		alc269_fill_coef(codec);
+		break;
+	case 0x10ec0286:
+		spec->codec_variant = ALC269_TYPE_ALC286;
 		break;
 	}
 

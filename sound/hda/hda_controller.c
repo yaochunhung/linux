@@ -123,6 +123,9 @@ int azx_setup_controller(struct azx *chip, struct azx_dev *azx_dev)
 	val = azx_sd_readl(chip, azx_dev, SD_CTL);
 	val = (val & ~SD_CTL_STREAM_TAG_MASK) |
 		(azx_dev->stream_tag << SD_CTL_STREAM_TAG_SHIFT);
+	dev_dbg(chip->dev,
+			"%s: stream _tag=0x%x, format_val=0x%x\n",
+			__func__, azx_dev->stream_tag, azx_dev->format_val);
 	if (!azx_snoop(chip))
 		val |= SD_CTL_TRAFFIC_PRIO;
 	azx_sd_writel(chip, azx_dev, SD_CTL, val);
