@@ -182,7 +182,7 @@ struct hda_codec {
 	struct snd_array user_pins;	/* default pin configs to override */
 #endif
 
-#ifdef CONFIG_SND_HDA_HWDEP
+#ifdef CONFIG_SND_CORE_HDA_HWDEP
 	struct snd_hwdep *hwdep;	/* assigned hwdep device */
 #endif
 
@@ -478,7 +478,7 @@ void snd_print_pcm_bits(int pcm, char *buf, int buflen);
 /*
  * hwdep interface
  */
-#ifdef CONFIG_SND_HDA_HWDEP
+#ifdef CONFIG_SND_CORE_HDA_HWDEP
 int snd_hda_create_hwdep(struct hda_codec *codec);
 #else
 static inline int snd_hda_create_hwdep(struct hda_codec *codec) { return 0; }

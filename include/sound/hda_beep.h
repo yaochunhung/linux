@@ -42,7 +42,7 @@ struct hda_beep {
 	struct mutex mutex;
 };
 
-#ifdef CONFIG_SND_HDA_INPUT_BEEP
+#ifdef CONFIG_SND_CORE_HDA_INPUT_BEEP
 int snd_hda_enable_beep_device(struct hda_codec *codec, int enable);
 int snd_hda_attach_beep_device(struct hda_codec *codec, int nid);
 void snd_hda_detach_beep_device(struct hda_codec *codec);

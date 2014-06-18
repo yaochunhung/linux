@@ -602,7 +602,7 @@ int snd_hda_get_devices(struct hda_codec *codec, hda_nid_t nid,
 	return devices;
 }
 
-#if IS_ENABLED(CONFIG_SND_HDA_GENERIC)
+#if IS_ENABLED(CONFIG_SND_CORE_HDA_GENERIC)
 #define is_generic_config(codec) \
 	(codec->modelname && !strcmp(codec->modelname, "generic"))
 #else
@@ -1136,9 +1136,9 @@ int snd_hda_codec_configure(struct hda_codec *codec)
 #endif
 	}
 	if (!patch) {
-#if IS_MODULE(CONFIG_SND_HDA_GENERIC)
+#if IS_MODULE(CONFIG_SND_CORE_HDA_GENERIC)
 		patch = load_parser(codec, snd_hda_parse_generic_codec);
-#elif IS_BUILTIN(CONFIG_SND_HDA_GENERIC)
+#elif IS_BUILTIN(CONFIG_SND_CORE_HDA_GENERIC)
 		patch = snd_hda_parse_generic_codec;
 #endif
 	}

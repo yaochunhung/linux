@@ -83,7 +83,7 @@
 /* stereo mute switch */
 #define HDA_CODEC_MUTE(xname, nid, xindex, direction) \
 	HDA_CODEC_MUTE_MONO(xname, nid, 3, xindex, direction)
-#ifdef CONFIG_SND_HDA_INPUT_BEEP
+#ifdef CONFIG_SND_CORE_HDA_INPUT_BEEP
 /* special beep mono mute switch with index (index=0,1,...) (channel=1,2) */
 #define HDA_CODEC_MUTE_BEEP_MONO_IDX(xname, xcidx, nid, channel, xindex, direction) \
 	{ .iface = SNDRV_CTL_ELEM_IFACE_MIXER, .name = xname, .index = xcidx, \
@@ -96,7 +96,7 @@
 /* no digital beep - just the standard one */
 #define HDA_CODEC_MUTE_BEEP_MONO_IDX(xname, xcidx, nid, ch, xidx, dir) \
 	HDA_CODEC_MUTE_MONO_IDX(xname, xcidx, nid, ch, xidx, dir)
-#endif /* CONFIG_SND_HDA_INPUT_BEEP */
+#endif /* CONFIG_SND_CORE_HDA_INPUT_BEEP */
 /* special beep mono mute switch */
 #define HDA_CODEC_MUTE_BEEP_MONO(xname, nid, channel, xindex, direction) \
 	HDA_CODEC_MUTE_BEEP_MONO_IDX(xname, 0, nid, channel, xindex, direction)
@@ -118,7 +118,7 @@ int snd_hda_mixer_amp_switch_get(struct snd_kcontrol *kcontrol,
 				 struct snd_ctl_elem_value *ucontrol);
 int snd_hda_mixer_amp_switch_put(struct snd_kcontrol *kcontrol,
 				 struct snd_ctl_elem_value *ucontrol);
-#ifdef CONFIG_SND_HDA_INPUT_BEEP
+#ifdef CONFIG_SND_CORE_HDA_INPUT_BEEP
 int snd_hda_mixer_amp_switch_get_beep(struct snd_kcontrol *kcontrol,
 				      struct snd_ctl_elem_value *ucontrol);
 int snd_hda_mixer_amp_switch_put_beep(struct snd_kcontrol *kcontrol,
