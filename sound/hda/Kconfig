@@ -1,14 +1,27 @@
 menu "HD-Audio Common Library"
 
-config SND_HDA_CODEC
-	tristate "Enable HD Audio Codec Library"
+config SND_CORE_HDA
+	tristate "Enable HD Audio Common Library"
 	default n
 	select SND_VMASTER
 	select SND_KCTL_JACK
 	help
 	  Say Y here to enable the HD-audio codec common library.
 
-if SND_HDA_CODEC
+if SND_CORE_HDA
+
+config SND_HDA_PREALLOC_SIZE
+	int "Pre-allocated buffer size for HD-audio driver"
+	range 0 32768
+        default 64
+	help
+	Specifies the default pre-allocated buffer-size in kB for the
+	HD-audio driver.  A larger buffer (e.g. 2048) is preferred for systems
+	using PulseAudio.  The default 64 is chosen just
+	for compatibility reasons.
+
+	Note that the pre-allocation size can be changed dynamically
+        via a proc file (/proc/asound/card*/pcm*/sub*/prealloc), too.
 
 config SND_HDA_RECONFIG
 	bool "Allow dynamic codec reconfiguration"
