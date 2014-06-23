@@ -1,5 +1,5 @@
 /*
- *  Common defines for the alsa driver code base for HD Audio.
+ *  defines for HD Audio controller register.
  *
  *  This program is free software; you can redistribute it and/or modify it
  *  under the terms of the GNU General Public License as published by the Free
@@ -12,12 +12,8 @@
  *  more details.
  */
 
-#ifndef __SOUND_HDA_PRIV_H
-#define __SOUND_HDA_PRIV_H
-
-#include <linux/clocksource.h>
-#include <sound/core.h>
-#include <sound/pcm.h>
+#ifndef __SOUND_HDA_REGISTER_H
+#define __SOUND_HDA_REGISTER_H
 
 /*
  * registers
@@ -223,202 +219,6 @@ enum {
 /* HD Audio class code */
 #define PCI_CLASS_MULTIMEDIA_HD_AUDIO	0x0403
 
-struct azx_dev {
-	struct snd_dma_buffer bdl; /* BDL buffer */
-	u32 *posbuf;		/* position buffer pointer */
-
-	unsigned int bufsize;	/* size of the play buffer in bytes */
-	unsigned int period_bytes; /* size of the period in bytes */
-	unsigned int frags;	/* number for period in the play buffer */
-	unsigned int fifo_size;	/* FIFO size */
-	unsigned long start_wallclk;	/* start + minimum wallclk */
-	unsigned long period_wallclk;	/* wallclk for period */
-
-	void __iomem *sd_addr;	/* stream descriptor pointer */
-
-	u32 sd_int_sta_mask;	/* stream int status mask */
-
-	/* pcm support */
-	struct snd_pcm_substream *substream;	/* assigned substream,
-						 * set in PCM open
-						 */
-	unsigned int format_val;	/* format value to be set in the
-					 * controller and the codec
-					 */
-	unsigned char stream_tag;	/* assigned stream */
-	unsigned char index;		/* stream index */
-	int assigned_key;		/* last device# key assigned to */
-
-	unsigned int opened:1;
-	unsigned int running:1;
-	unsigned int irq_pending:1;
-	unsigned int prepared:1;
-	unsigned int locked:1;
-	/*
-	 * For VIA:
-	 *  A flag to ensure DMA position is 0
-	 *  when link position is not greater than FIFO size
-	 */
-	unsigned int insufficient:1;
-	unsigned int wc_marked:1;
-	unsigned int no_period_wakeup:1;
-
-	struct timecounter  azx_tc;
-	struct cyclecounter azx_cc;
-
-	int delay_negative_threshold;
-
-#ifdef CONFIG_SND_HDA_DSP_LOADER
-	/* Allows dsp load to have sole access to the playback stream. */
-	struct mutex dsp_mutex;
-#endif
-};
-
-/* CORB/RIRB */
-struct azx_rb {
-	u32 *buf;		/* CORB/RIRB buffer
-				 * Each CORB entry is 4byte, RIRB is 8byte
-				 */
-	dma_addr_t addr;	/* physical address of CORB/RIRB buffer */
-	/* for RIRB */
-	unsigned short rp, wp;	/* read/write pointers */
-	int cmds[AZX_MAX_CODECS];	/* number of pending requests */
-	u32 res[AZX_MAX_CODECS];	/* last read value */
-};
-
-struct azx;
-
-/* Functions to read/write to hda registers. */
-struct hda_controller_ops {
-	/* Register Access */
-	void (*reg_writel)(u32 value, u32 __iomem *addr);
-	u32 (*reg_readl)(u32 __iomem *addr);
-	void (*reg_writew)(u16 value, u16 __iomem *addr);
-	u16 (*reg_readw)(u16 __iomem *addr);
-	void (*reg_writeb)(u8 value, u8 __iomem *addr);
-	u8 (*reg_readb)(u8 __iomem *addr);
-	/* Disable msi if supported, PCI only */
-	int (*disable_msi_reset_irq)(struct azx *);
-	/* Allocation ops */
-	int (*dma_alloc_pages)(struct azx *chip,
-			       int type,
-			       size_t size,
-			       struct snd_dma_buffer *buf);
-	void (*dma_free_pages)(struct azx *chip, struct snd_dma_buffer *buf);
-	int (*substream_alloc_pages)(struct azx *chip,
-				     struct snd_pcm_substream *substream,
-				     size_t size);
-	int (*substream_free_pages)(struct azx *chip,
-				    struct snd_pcm_substream *substream);
-	void (*pcm_mmap_prepare)(struct snd_pcm_substream *substream,
-				 struct vm_area_struct *area);
-	/* Check if current position is acceptable */
-	int (*position_check)(struct azx *chip, struct azx_dev *azx_dev);
-};
-
-struct azx_pcm {
-	struct azx *chip;
-	struct snd_pcm *pcm;
-	struct hda_codec *codec;
-	struct hda_pcm_stream *hinfo[2];
-	struct list_head list;
-};
-
-struct azx {
-	struct snd_card *card;
-	struct pci_dev *pci;
-	int dev_index;
-
-	/* chip type specific */
-	int driver_type;
-	unsigned int driver_caps;
-	int playback_streams;
-	int playback_index_offset;
-	int capture_streams;
-	int capture_index_offset;
-	int num_streams;
-	const int *jackpoll_ms; /* per-card jack poll interval */
-
-	/* Register interaction. */
-	const struct hda_controller_ops *ops;
-
-	/* pci resources */
-	unsigned long addr;
-	void __iomem *remap_addr;
-	int irq;
-
-	/* locks */
-	spinlock_t reg_lock;
-	struct mutex open_mutex; /* Prevents concurrent open/close operations */
-	struct completion probe_wait;
-
-	/* streams (x num_streams) */
-	struct azx_dev *azx_dev;
-
-	/* PCM */
-	struct list_head pcm_list; /* azx_pcm list */
-
-	/* HD codec */
-	unsigned short codec_mask;
-	int  codec_probe_mask; /* copied from probe_mask option */
-	struct hda_bus *bus;
-	unsigned int beep_mode;
-
-	/* CORB/RIRB */
-	struct azx_rb corb;
-	struct azx_rb rirb;
-
-	/* CORB/RIRB and position buffers */
-	struct snd_dma_buffer rb;
-	struct snd_dma_buffer posbuf;
-
-#ifdef CONFIG_SND_HDA_PATCH_LOADER
-	const struct firmware *fw;
-#endif
-
-	/* flags */
-	int position_fix[2]; /* for both playback/capture streams */
-	const int *bdl_pos_adj;
-	int poll_count;
-	unsigned int running:1;
-	unsigned int initialized:1;
-	unsigned int single_cmd:1;
-	unsigned int polling_mode:1;
-	unsigned int msi:1;
-	unsigned int irq_pending_warned:1;
-	unsigned int probing:1; /* codec probing phase */
-	unsigned int snoop:1;
-	unsigned int align_buffer_size:1;
-	unsigned int region_requested:1;
-
-	/* VGA-switcheroo setup */
-	unsigned int use_vga_switcheroo:1;
-	unsigned int vga_switcheroo_registered:1;
-	unsigned int init_failed:1; /* delayed init failed */
-	unsigned int disabled:1; /* disabled by VGA-switcher */
-
-	/* for debugging */
-	unsigned int last_cmd[AZX_MAX_CODECS];
-
-	/* for pending irqs */
-	struct work_struct irq_pending_work;
-
-	struct work_struct probe_work;
-
-	/* reboot notifier (for mysterious hangup problem at power-down) */
-	struct notifier_block reboot_notifier;
-
-	/* card list (for power_save trigger) */
-	struct list_head list;
-
-#ifdef CONFIG_SND_HDA_DSP_LOADER
-	struct azx_dev saved_azx_dev;
-#endif
-
-	/* secondary power domain for hdmi audio under vga device */
-	struct dev_pm_domain hdmi_pm_domain;
-};
-
 #ifdef CONFIG_SND_VERBOSE_PRINTK
 #define SFX	/* nop */
 #else
@@ -461,4 +261,4 @@ struct azx {
 #define azx_sd_readb(chip, dev, reg) \
 	((chip)->ops->reg_readb((dev)->sd_addr + ICH6_REG_##reg))
 
-#endif /* __SOUND_HDA_PRIV_H */
+#endif /* __SOUND_HDA_REGISTER_H */

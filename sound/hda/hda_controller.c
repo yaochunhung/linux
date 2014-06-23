@@ -1,11 +1,14 @@
 /*
  *
- *  Implementation of primary alsa driver code base for Intel HD Audio.
+ *  Implementation of Common HDA driver funcitons for Intel HD Audio.
  *
+ *  Copyright (c) 2014 Intel Corporation
  *  Copyright(c) 2004 Intel Corporation. All rights reserved.
  *
  *  Copyright (c) 2004 Takashi Iwai <tiwai@suse.de>
  *                     PeiSen Hou <pshou@realtek.com.tw>
+ *
+ *  Modified by: KP Jeeja <jeeja.kp@intel.com>
  *
  *  This program is free software; you can redistribute it and/or modify it
  *  under the terms of the GNU General Public License as published by the Free
@@ -29,31 +32,20 @@
 #include <linux/slab.h>
 #include <sound/core.h>
 #include <sound/initval.h>
-#include <sound/hda_priv.h>
+#include <sound/hda_register.h>
 #include <sound/hda_controller.h>
 
+/*FIXME
 #define CREATE_TRACE_POINTS
 #include "hda_intel_trace.h"
-
-/* DSP lock helpers */
-#ifdef CONFIG_SND_HDA_DSP_LOADER
-#define dsp_lock_init(dev)	mutex_init(&(dev)->dsp_mutex)
-#define dsp_lock(dev)		mutex_lock(&(dev)->dsp_mutex)
-#define dsp_unlock(dev)		mutex_unlock(&(dev)->dsp_mutex)
-#define dsp_is_locked(dev)	((dev)->locked)
-#else
-#define dsp_lock_init(dev)	do {} while (0)
-#define dsp_lock(dev)		do {} while (0)
-#define dsp_unlock(dev)		do {} while (0)
-#define dsp_is_locked(dev)	0
-#endif
+*/
 
 /*
  * AZX stream operations.
  */
 
 /* start a stream */
-static void azx_stream_start(struct azx *chip, struct azx_dev *azx_dev)
+void azx_stream_start(struct azx *chip, struct azx_dev *azx_dev)
 {
 	/*
 	 * Before stream start, initialize parameter
@@ -68,7 +60,7 @@ static void azx_stream_start(struct azx *chip, struct azx_dev *azx_dev)
 		      azx_sd_readb(chip, azx_dev, SD_CTL) |
 		      SD_CTL_DMA_START | SD_INT_MASK);
 }
-
+EXPORT_SYMBOL_GPL(azx_stream_start);
 /* stop DMA */
 static void azx_stream_clear(struct azx *chip, struct azx_dev *azx_dev)
 {
@@ -89,7 +81,7 @@ void azx_stream_stop(struct azx *chip, struct azx_dev *azx_dev)
 EXPORT_SYMBOL_GPL(azx_stream_stop);
 
 /* reset stream */
-static void azx_stream_reset(struct azx *chip, struct azx_dev *azx_dev)
+void azx_stream_reset(struct azx *chip, struct azx_dev *azx_dev)
 {
 	unsigned char val;
 	int timeout;
@@ -117,11 +109,12 @@ static void azx_stream_reset(struct azx *chip, struct azx_dev *azx_dev)
 	/* reset first position - may not be synced with hw at this time */
 	*azx_dev->posbuf = 0;
 }
+EXPORT_SYMBOL_GPL(azx_stream_reset);
 
 /*
  * set up the SD for streaming
  */
-static int azx_setup_controller(struct azx *chip, struct azx_dev *azx_dev)
+int azx_setup_controller(struct azx *chip, struct azx_dev *azx_dev)
 {
 	unsigned int val;
 	/* make sure the run bit is zero for SD */
@@ -165,9 +158,10 @@ static int azx_setup_controller(struct azx *chip, struct azx_dev *azx_dev)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(azx_setup_controller);
 
 /* assign a stream for the PCM */
-static inline struct azx_dev *
+inline struct azx_dev *
 azx_assign_device(struct azx *chip, struct snd_pcm_substream *substream)
 {
 	int dev, i, nums;
@@ -212,50 +206,11 @@ static inline void azx_release_device(struct azx_dev *azx_dev)
 	azx_dev->opened = 0;
 }
 
-static cycle_t azx_cc_read(const struct cyclecounter *cc)
-{
-	struct azx_dev *azx_dev = container_of(cc, struct azx_dev, azx_cc);
-	struct snd_pcm_substream *substream = azx_dev->substream;
-	struct azx_pcm *apcm = snd_pcm_substream_chip(substream);
-	struct azx *chip = apcm->chip;
+/*
+ *	pcm helper functions
+ */
 
-	return azx_readl(chip, WALLCLK);
-}
-
-static void azx_timecounter_init(struct snd_pcm_substream *substream,
-				bool force, cycle_t last)
-{
-	struct azx_dev *azx_dev = get_azx_dev(substream);
-	struct timecounter *tc = &azx_dev->azx_tc;
-	struct cyclecounter *cc = &azx_dev->azx_cc;
-	u64 nsec;
-
-	cc->read = azx_cc_read;
-	cc->mask = CLOCKSOURCE_MASK(32);
-
-	/*
-	 * Converting from 24 MHz to ns means applying a 125/3 factor.
-	 * To avoid any saturation issues in intermediate operations,
-	 * the 125 factor is applied first. The division is applied
-	 * last after reading the timecounter value.
-	 * Applying the 1/3 factor as part of the multiplication
-	 * requires at least 20 bits for a decent precision, however
-	 * overflows occur after about 4 hours or less, not a option.
-	 */
-
-	cc->mult = 125; /* saturation after 195 years */
-	cc->shift = 0;
-
-	nsec = 0; /* audio time is elapsed time since trigger */
-	timecounter_init(tc, cc, nsec);
-	if (force)
-		/*
-		 * force timecounter to use predefined value,
-		 * used for synchronized starts
-		 */
-		tc->cycle_last = last;
-}
-
+#if 0
 static u64 azx_adjust_codec_delay(struct snd_pcm_substream *substream,
 				u64 nsec)
 {
@@ -275,6 +230,7 @@ static u64 azx_adjust_codec_delay(struct snd_pcm_substream *substream,
 
 	return (nsec > codec_nsecs) ? nsec - codec_nsecs : 0;
 }
+#endif
 
 /*
  * set up a BDL entry
@@ -322,7 +278,7 @@ static int setup_bdle(struct azx *chip,
 /*
  * set up BDL entries
  */
-static int azx_setup_periods(struct azx *chip,
+int azx_setup_periods(struct azx *chip,
 			     struct snd_pcm_substream *substream,
 			     struct azx_dev *azx_dev)
 {
@@ -355,7 +311,7 @@ static int azx_setup_periods(struct azx *chip,
 				pos_align;
 		pos_adj = frames_to_bytes(runtime, pos_adj);
 		if (pos_adj >= period_bytes) {
-			dev_warn(chip->card->dev, "Too big adjustment %d\n",
+			dev_warn(chip->dev, "Too big adjustment %d\n",
 				 pos_adj);
 			pos_adj = 0;
 		} else {
@@ -384,292 +340,11 @@ static int azx_setup_periods(struct azx *chip,
 	return 0;
 
  error:
-	dev_err(chip->card->dev, "Too many BDL entries: buffer=%d, period=%d\n",
+	dev_err(chip->dev, "Too many BDL entries: buffer=%d, period=%d\n",
 		azx_dev->bufsize, period_bytes);
 	return -EINVAL;
 }
-
-/*
- * PCM ops
- */
-
-static int azx_pcm_close(struct snd_pcm_substream *substream)
-{
-	struct azx_pcm *apcm = snd_pcm_substream_chip(substream);
-	struct hda_pcm_stream *hinfo = apcm->hinfo[substream->stream];
-	struct azx *chip = apcm->chip;
-	struct azx_dev *azx_dev = get_azx_dev(substream);
-	unsigned long flags;
-
-	mutex_lock(&chip->open_mutex);
-	spin_lock_irqsave(&chip->reg_lock, flags);
-	azx_dev->substream = NULL;
-	azx_dev->running = 0;
-	spin_unlock_irqrestore(&chip->reg_lock, flags);
-	azx_release_device(azx_dev);
-	hinfo->ops.close(hinfo, apcm->codec, substream);
-	snd_hda_power_down(apcm->codec);
-	mutex_unlock(&chip->open_mutex);
-	return 0;
-}
-
-static int azx_pcm_hw_params(struct snd_pcm_substream *substream,
-			     struct snd_pcm_hw_params *hw_params)
-{
-	struct azx_pcm *apcm = snd_pcm_substream_chip(substream);
-	struct azx *chip = apcm->chip;
-	int ret;
-
-	dsp_lock(get_azx_dev(substream));
-	if (dsp_is_locked(get_azx_dev(substream))) {
-		ret = -EBUSY;
-		goto unlock;
-	}
-
-	ret = chip->ops->substream_alloc_pages(chip, substream,
-					  params_buffer_bytes(hw_params));
-unlock:
-	dsp_unlock(get_azx_dev(substream));
-	return ret;
-}
-
-static int azx_pcm_hw_free(struct snd_pcm_substream *substream)
-{
-	struct azx_pcm *apcm = snd_pcm_substream_chip(substream);
-	struct azx_dev *azx_dev = get_azx_dev(substream);
-	struct azx *chip = apcm->chip;
-	struct hda_pcm_stream *hinfo = apcm->hinfo[substream->stream];
-	int err;
-
-	/* reset BDL address */
-	dsp_lock(azx_dev);
-	if (!dsp_is_locked(azx_dev)) {
-		azx_sd_writel(chip, azx_dev, SD_BDLPL, 0);
-		azx_sd_writel(chip, azx_dev, SD_BDLPU, 0);
-		azx_sd_writel(chip, azx_dev, SD_CTL, 0);
-		azx_dev->bufsize = 0;
-		azx_dev->period_bytes = 0;
-		azx_dev->format_val = 0;
-	}
-
-	snd_hda_codec_cleanup(apcm->codec, hinfo, substream);
-
-	err = chip->ops->substream_free_pages(chip, substream);
-	azx_dev->prepared = 0;
-	dsp_unlock(azx_dev);
-	return err;
-}
-
-static int azx_pcm_prepare(struct snd_pcm_substream *substream)
-{
-	struct azx_pcm *apcm = snd_pcm_substream_chip(substream);
-	struct azx *chip = apcm->chip;
-	struct azx_dev *azx_dev = get_azx_dev(substream);
-	struct hda_pcm_stream *hinfo = apcm->hinfo[substream->stream];
-	struct snd_pcm_runtime *runtime = substream->runtime;
-	unsigned int bufsize, period_bytes, format_val, stream_tag;
-	int err;
-	struct hda_spdif_out *spdif =
-		snd_hda_spdif_out_of_nid(apcm->codec, hinfo->nid);
-	unsigned short ctls = spdif ? spdif->ctls : 0;
-
-	dsp_lock(azx_dev);
-	if (dsp_is_locked(azx_dev)) {
-		err = -EBUSY;
-		goto unlock;
-	}
-
-	azx_stream_reset(chip, azx_dev);
-	format_val = snd_hda_calc_stream_format(runtime->rate,
-						runtime->channels,
-						runtime->format,
-						hinfo->maxbps,
-						ctls);
-	if (!format_val) {
-		dev_err(chip->card->dev,
-			"invalid format_val, rate=%d, ch=%d, format=%d\n",
-			runtime->rate, runtime->channels, runtime->format);
-		err = -EINVAL;
-		goto unlock;
-	}
-
-	bufsize = snd_pcm_lib_buffer_bytes(substream);
-	period_bytes = snd_pcm_lib_period_bytes(substream);
-
-	dev_dbg(chip->card->dev, "azx_pcm_prepare: bufsize=0x%x, format=0x%x\n",
-		bufsize, format_val);
-
-	if (bufsize != azx_dev->bufsize ||
-	    period_bytes != azx_dev->period_bytes ||
-	    format_val != azx_dev->format_val ||
-	    runtime->no_period_wakeup != azx_dev->no_period_wakeup) {
-		azx_dev->bufsize = bufsize;
-		azx_dev->period_bytes = period_bytes;
-		azx_dev->format_val = format_val;
-		azx_dev->no_period_wakeup = runtime->no_period_wakeup;
-		err = azx_setup_periods(chip, substream, azx_dev);
-		if (err < 0)
-			goto unlock;
-	}
-
-	/* when LPIB delay correction gives a small negative value,
-	 * we ignore it; currently set the threshold statically to
-	 * 64 frames
-	 */
-	if (runtime->period_size > 64)
-		azx_dev->delay_negative_threshold = -frames_to_bytes(runtime, 64);
-	else
-		azx_dev->delay_negative_threshold = 0;
-
-	/* wallclk has 24Mhz clock source */
-	azx_dev->period_wallclk = (((runtime->period_size * 24000) /
-						runtime->rate) * 1000);
-	azx_setup_controller(chip, azx_dev);
-	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
-		azx_dev->fifo_size =
-			azx_sd_readw(chip, azx_dev, SD_FIFOSIZE) + 1;
-	else
-		azx_dev->fifo_size = 0;
-
-	stream_tag = azx_dev->stream_tag;
-	/* CA-IBG chips need the playback stream starting from 1 */
-	if ((chip->driver_caps & AZX_DCAPS_CTX_WORKAROUND) &&
-	    stream_tag > chip->capture_streams)
-		stream_tag -= chip->capture_streams;
-	err = snd_hda_codec_prepare(apcm->codec, hinfo, stream_tag,
-				     azx_dev->format_val, substream);
-
- unlock:
-	if (!err)
-		azx_dev->prepared = 1;
-	dsp_unlock(azx_dev);
-	return err;
-}
-
-static int azx_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
-{
-	struct azx_pcm *apcm = snd_pcm_substream_chip(substream);
-	struct azx *chip = apcm->chip;
-	struct azx_dev *azx_dev;
-	struct snd_pcm_substream *s;
-	int rstart = 0, start, nsync = 0, sbits = 0;
-	int nwait, timeout;
-
-	azx_dev = get_azx_dev(substream);
-	trace_azx_pcm_trigger(chip, azx_dev, cmd);
-
-	if (dsp_is_locked(azx_dev) || !azx_dev->prepared)
-		return -EPIPE;
-
-	switch (cmd) {
-	case SNDRV_PCM_TRIGGER_START:
-		rstart = 1;
-	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
-	case SNDRV_PCM_TRIGGER_RESUME:
-		start = 1;
-		break;
-	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
-	case SNDRV_PCM_TRIGGER_SUSPEND:
-	case SNDRV_PCM_TRIGGER_STOP:
-		start = 0;
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	snd_pcm_group_for_each_entry(s, substream) {
-		if (s->pcm->card != substream->pcm->card)
-			continue;
-		azx_dev = get_azx_dev(s);
-		sbits |= 1 << azx_dev->index;
-		nsync++;
-		snd_pcm_trigger_done(s, substream);
-	}
-
-	spin_lock(&chip->reg_lock);
-
-	/* first, set SYNC bits of corresponding streams */
-	if (chip->driver_caps & AZX_DCAPS_OLD_SSYNC)
-		azx_writel(chip, OLD_SSYNC,
-			azx_readl(chip, OLD_SSYNC) | sbits);
-	else
-		azx_writel(chip, SSYNC, azx_readl(chip, SSYNC) | sbits);
-
-	snd_pcm_group_for_each_entry(s, substream) {
-		if (s->pcm->card != substream->pcm->card)
-			continue;
-		azx_dev = get_azx_dev(s);
-		if (start) {
-			azx_dev->start_wallclk = azx_readl(chip, WALLCLK);
-			if (!rstart)
-				azx_dev->start_wallclk -=
-						azx_dev->period_wallclk;
-			azx_stream_start(chip, azx_dev);
-		} else {
-			azx_stream_stop(chip, azx_dev);
-		}
-		azx_dev->running = start;
-	}
-	spin_unlock(&chip->reg_lock);
-	if (start) {
-		/* wait until all FIFOs get ready */
-		for (timeout = 5000; timeout; timeout--) {
-			nwait = 0;
-			snd_pcm_group_for_each_entry(s, substream) {
-				if (s->pcm->card != substream->pcm->card)
-					continue;
-				azx_dev = get_azx_dev(s);
-				if (!(azx_sd_readb(chip, azx_dev, SD_STS) &
-				      SD_STS_FIFO_READY))
-					nwait++;
-			}
-			if (!nwait)
-				break;
-			cpu_relax();
-		}
-	} else {
-		/* wait until all RUN bits are cleared */
-		for (timeout = 5000; timeout; timeout--) {
-			nwait = 0;
-			snd_pcm_group_for_each_entry(s, substream) {
-				if (s->pcm->card != substream->pcm->card)
-					continue;
-				azx_dev = get_azx_dev(s);
-				if (azx_sd_readb(chip, azx_dev, SD_CTL) &
-				    SD_CTL_DMA_START)
-					nwait++;
-			}
-			if (!nwait)
-				break;
-			cpu_relax();
-		}
-	}
-	spin_lock(&chip->reg_lock);
-	/* reset SYNC bits */
-	if (chip->driver_caps & AZX_DCAPS_OLD_SSYNC)
-		azx_writel(chip, OLD_SSYNC,
-			azx_readl(chip, OLD_SSYNC) & ~sbits);
-	else
-		azx_writel(chip, SSYNC, azx_readl(chip, SSYNC) & ~sbits);
-	if (start) {
-		azx_timecounter_init(substream, 0, 0);
-		if (nsync > 1) {
-			cycle_t cycle_last;
-
-			/* same start cycle for master and group */
-			azx_dev = get_azx_dev(substream);
-			cycle_last = azx_dev->azx_tc.cycle_last;
-
-			snd_pcm_group_for_each_entry(s, substream) {
-				if (s->pcm->card != substream->pcm->card)
-					continue;
-				azx_timecounter_init(s, 1, cycle_last);
-			}
-		}
-	}
-	spin_unlock(&chip->reg_lock);
-	return 0;
-}
+EXPORT_SYMBOL_GPL(azx_setup_periods);
 
 /* get the current DMA position with correction on VIA chips */
 static unsigned int azx_via_get_position(struct azx *chip,
@@ -727,16 +402,13 @@ static unsigned int azx_via_get_position(struct azx *chip,
 	return bound_pos + mod_dma_pos;
 }
 
-unsigned int azx_get_position(struct azx *chip,
-			      struct azx_dev *azx_dev,
-			      bool with_check)
+unsigned int azx_calculate_position(struct azx *chip, struct azx_dev *azx_dev,
+			     bool with_check, int codec_delay)
 {
 	struct snd_pcm_substream *substream = azx_dev->substream;
-	struct azx_pcm *apcm = snd_pcm_substream_chip(substream);
 	unsigned int pos;
-	int stream = substream->stream;
-	struct hda_pcm_stream *hinfo = apcm->hinfo[stream];
 	int delay = 0;
+	int stream = substream->stream;
 
 	switch (chip->position_fix[stream]) {
 	case POS_FIX_LPIB:
@@ -751,7 +423,7 @@ unsigned int azx_get_position(struct azx *chip,
 		pos = le32_to_cpu(*azx_dev->posbuf);
 		if (with_check && chip->position_fix[stream] == POS_FIX_AUTO) {
 			if (!pos || pos == (u32)-1) {
-				dev_info(chip->card->dev,
+				dev_info(chip->dev,
 					 "Invalid position buffer, using LPIB read method instead.\n");
 				chip->position_fix[stream] = POS_FIX_LPIB;
 				pos = azx_sd_readl(chip, azx_dev, SD_LPIB);
@@ -780,7 +452,7 @@ unsigned int azx_get_position(struct azx *chip,
 				delay += azx_dev->bufsize;
 		}
 		if (delay >= azx_dev->period_bytes) {
-			dev_info(chip->card->dev,
+			dev_info(chip->dev,
 				 "Unstable LPIB (%d >= %d); disabling LPIB delay counting\n",
 				 delay, azx_dev->period_bytes);
 			delay = 0;
@@ -790,27 +462,18 @@ unsigned int azx_get_position(struct azx *chip,
 	}
 
 	if (substream->runtime) {
-		if (hinfo->ops.get_delay)
-			delay += hinfo->ops.get_delay(hinfo, apcm->codec,
-						      substream);
+			delay += codec_delay;
 		substream->runtime->delay = delay;
 	}
 
-	trace_azx_get_position(chip, azx_dev, pos, delay);
+	/*FIXME
+	trace_azx_get_position(chip, azx_dev, pos, delay);*/
+
 	return pos;
 }
-EXPORT_SYMBOL_GPL(azx_get_position);
+EXPORT_SYMBOL_GPL(azx_calculate_position);
 
-static snd_pcm_uframes_t azx_pcm_pointer(struct snd_pcm_substream *substream)
-{
-	struct azx_pcm *apcm = snd_pcm_substream_chip(substream);
-	struct azx *chip = apcm->chip;
-	struct azx_dev *azx_dev = get_azx_dev(substream);
-	return bytes_to_frames(substream->runtime,
-			       azx_get_position(chip, azx_dev, false));
-}
-
-static int azx_get_wallclock_tstamp(struct snd_pcm_substream *substream,
+int azx_get_wallclock_tstamp(struct snd_pcm_substream *substream,
 				struct timespec *ts)
 {
 	struct azx_dev *azx_dev = get_azx_dev(substream);
@@ -818,61 +481,85 @@ static int azx_get_wallclock_tstamp(struct snd_pcm_substream *substream,
 
 	nsec = timecounter_read(&azx_dev->azx_tc);
 	nsec = div_u64(nsec, 3); /* can be optimized */
-	nsec = azx_adjust_codec_delay(substream, nsec);
+	/*FIXME
+	nsec = azx_adjust_codec_delay(substream, nsec);*/
 
 	*ts = ns_to_timespec(nsec);
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(azx_get_wallclock_tstamp);
 
-static struct snd_pcm_hardware azx_pcm_hw = {
-	.info =			(SNDRV_PCM_INFO_MMAP |
-				 SNDRV_PCM_INFO_INTERLEAVED |
-				 SNDRV_PCM_INFO_BLOCK_TRANSFER |
-				 SNDRV_PCM_INFO_MMAP_VALID |
-				 /* No full-resume yet implemented */
-				 /* SNDRV_PCM_INFO_RESUME |*/
-				 SNDRV_PCM_INFO_PAUSE |
-				 SNDRV_PCM_INFO_SYNC_START |
-				 SNDRV_PCM_INFO_HAS_WALL_CLOCK |
-				 SNDRV_PCM_INFO_NO_PERIOD_WAKEUP),
-	.formats =		SNDRV_PCM_FMTBIT_S16_LE,
-	.rates =		SNDRV_PCM_RATE_48000,
-	.rate_min =		48000,
-	.rate_max =		48000,
-	.channels_min =		2,
-	.channels_max =		2,
-	.buffer_bytes_max =	AZX_MAX_BUF_SIZE,
-	.period_bytes_min =	128,
-	.period_bytes_max =	AZX_MAX_BUF_SIZE / 2,
-	.periods_min =		2,
-	.periods_max =		AZX_MAX_FRAG,
-	.fifo_size =		0,
-};
-
-static int azx_pcm_open(struct snd_pcm_substream *substream)
+void azx_reset_device(struct azx *chip, struct azx_dev *azx_dev)
 {
-	struct azx_pcm *apcm = snd_pcm_substream_chip(substream);
-	struct hda_pcm_stream *hinfo = apcm->hinfo[substream->stream];
-	struct azx *chip = apcm->chip;
-	struct azx_dev *azx_dev;
-	struct snd_pcm_runtime *runtime = substream->runtime;
-	unsigned long flags;
-	int err;
-	int buff_step;
+	azx_sd_writel(chip, azx_dev, SD_BDLPL, 0);
+	azx_sd_writel(chip, azx_dev, SD_BDLPU, 0);
+	azx_sd_writel(chip, azx_dev, SD_CTL, 0);
+	azx_dev->bufsize = 0;
+	azx_dev->period_bytes = 0;
+	azx_dev->format_val = 0;
+}
+EXPORT_SYMBOL_GPL(azx_reset_device);
 
-	mutex_lock(&chip->open_mutex);
-	azx_dev = azx_assign_device(chip, substream);
-	if (azx_dev == NULL) {
-		mutex_unlock(&chip->open_mutex);
-		return -EBUSY;
+int azx_set_device_params(struct azx *chip, struct snd_pcm_substream *substream,
+				unsigned int format_val)
+{
+
+	unsigned int bufsize, period_bytes, stream_tag;
+	struct azx_dev *azx_dev = get_azx_dev(substream);
+	struct snd_pcm_runtime *runtime = substream->runtime;
+	int err;
+
+	bufsize = snd_pcm_lib_buffer_bytes(substream);
+	period_bytes = snd_pcm_lib_period_bytes(substream);
+
+	dev_dbg(chip->dev, "azx_pcm_prepare: bufsize=0x%x, format=0x%x\n",
+		bufsize, format_val);
+
+	if (bufsize != azx_dev->bufsize ||
+	    period_bytes != azx_dev->period_bytes ||
+	    format_val != azx_dev->format_val ||
+	    runtime->no_period_wakeup != azx_dev->no_period_wakeup) {
+		azx_dev->bufsize = bufsize;
+		azx_dev->period_bytes = period_bytes;
+		azx_dev->format_val = format_val;
+		azx_dev->no_period_wakeup = runtime->no_period_wakeup;
+		err = azx_setup_periods(chip, substream, azx_dev);
+		if (err < 0)
+			return err;
 	}
-	runtime->hw = azx_pcm_hw;
-	runtime->hw.channels_min = hinfo->channels_min;
-	runtime->hw.channels_max = hinfo->channels_max;
-	runtime->hw.formats = hinfo->formats;
-	runtime->hw.rates = hinfo->rates;
-	snd_pcm_limit_hw_rates(runtime);
+
+	/* when LPIB delay correction gives a small negative value,
+	 * we ignore it; currently set the threshold statically to
+	 * 64 frames
+	 */
+	if (runtime->period_size > 64)
+		azx_dev->delay_negative_threshold = -frames_to_bytes(runtime, 64);
+	else
+		azx_dev->delay_negative_threshold = 0;
+
+	/* wallclk has 24Mhz clock source */
+	azx_dev->period_wallclk = (((runtime->period_size * 24000) /
+						runtime->rate) * 1000);
+	azx_setup_controller(chip, azx_dev);
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+		azx_dev->fifo_size =
+			azx_sd_readw(chip, azx_dev, SD_FIFOSIZE) + 1;
+	else
+		azx_dev->fifo_size = 0;
+
+	stream_tag = azx_dev->stream_tag;
+	/* CA-IBG chips need the playback stream starting from 1 */
+	if ((chip->driver_caps & AZX_DCAPS_CTX_WORKAROUND) &&
+	    stream_tag > chip->capture_streams)
+		stream_tag -= chip->capture_streams;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(azx_set_device_params);
+
+void azx_set_pcm_constrains(struct azx *chip, struct snd_pcm_runtime *runtime)
+{
+	int buff_step;
 	snd_pcm_hw_constraint_integer(runtime, SNDRV_PCM_HW_PARAM_PERIODS);
 
 	/* avoid wrap-around with wall-clock */
@@ -899,130 +586,9 @@ static int azx_pcm_open(struct snd_pcm_substream *substream)
 				   buff_step);
 	snd_pcm_hw_constraint_step(runtime, 0, SNDRV_PCM_HW_PARAM_PERIOD_BYTES,
 				   buff_step);
-	snd_hda_power_up_d3wait(apcm->codec);
-	err = hinfo->ops.open(hinfo, apcm->codec, substream);
-	if (err < 0) {
-		azx_release_device(azx_dev);
-		snd_hda_power_down(apcm->codec);
-		mutex_unlock(&chip->open_mutex);
-		return err;
-	}
-	snd_pcm_limit_hw_rates(runtime);
-	/* sanity check */
-	if (snd_BUG_ON(!runtime->hw.channels_min) ||
-	    snd_BUG_ON(!runtime->hw.channels_max) ||
-	    snd_BUG_ON(!runtime->hw.formats) ||
-	    snd_BUG_ON(!runtime->hw.rates)) {
-		azx_release_device(azx_dev);
-		hinfo->ops.close(hinfo, apcm->codec, substream);
-		snd_hda_power_down(apcm->codec);
-		mutex_unlock(&chip->open_mutex);
-		return -EINVAL;
-	}
 
-	/* disable WALLCLOCK timestamps for capture streams
-	   until we figure out how to handle digital inputs */
-	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
-		runtime->hw.info &= ~SNDRV_PCM_INFO_HAS_WALL_CLOCK;
-
-	spin_lock_irqsave(&chip->reg_lock, flags);
-	azx_dev->substream = substream;
-	azx_dev->running = 0;
-	spin_unlock_irqrestore(&chip->reg_lock, flags);
-
-	runtime->private_data = azx_dev;
-	snd_pcm_set_sync(substream);
-	mutex_unlock(&chip->open_mutex);
-	return 0;
 }
-
-static int azx_pcm_mmap(struct snd_pcm_substream *substream,
-			struct vm_area_struct *area)
-{
-	struct azx_pcm *apcm = snd_pcm_substream_chip(substream);
-	struct azx *chip = apcm->chip;
-	if (chip->ops->pcm_mmap_prepare)
-		chip->ops->pcm_mmap_prepare(substream, area);
-	return snd_pcm_lib_default_mmap(substream, area);
-}
-
-static struct snd_pcm_ops azx_pcm_ops = {
-	.open = azx_pcm_open,
-	.close = azx_pcm_close,
-	.ioctl = snd_pcm_lib_ioctl,
-	.hw_params = azx_pcm_hw_params,
-	.hw_free = azx_pcm_hw_free,
-	.prepare = azx_pcm_prepare,
-	.trigger = azx_pcm_trigger,
-	.pointer = azx_pcm_pointer,
-	.wall_clock =  azx_get_wallclock_tstamp,
-	.mmap = azx_pcm_mmap,
-	.page = snd_pcm_sgbuf_ops_page,
-};
-
-static void azx_pcm_free(struct snd_pcm *pcm)
-{
-	struct azx_pcm *apcm = pcm->private_data;
-	if (apcm) {
-		list_del(&apcm->list);
-		kfree(apcm);
-	}
-}
-
-#define MAX_PREALLOC_SIZE	(32 * 1024 * 1024)
-
-static int azx_attach_pcm_stream(struct hda_bus *bus, struct hda_codec *codec,
-				 struct hda_pcm *cpcm)
-{
-	struct azx *chip = bus->private_data;
-	struct snd_pcm *pcm;
-	struct azx_pcm *apcm;
-	int pcm_dev = cpcm->device;
-	unsigned int size;
-	int s, err;
-
-	list_for_each_entry(apcm, &chip->pcm_list, list) {
-		if (apcm->pcm->device == pcm_dev) {
-			dev_err(chip->card->dev, "PCM %d already exists\n",
-				pcm_dev);
-			return -EBUSY;
-		}
-	}
-	err = snd_pcm_new(chip->card, cpcm->name, pcm_dev,
-			  cpcm->stream[SNDRV_PCM_STREAM_PLAYBACK].substreams,
-			  cpcm->stream[SNDRV_PCM_STREAM_CAPTURE].substreams,
-			  &pcm);
-	if (err < 0)
-		return err;
-	strlcpy(pcm->name, cpcm->name, sizeof(pcm->name));
-	apcm = kzalloc(sizeof(*apcm), GFP_KERNEL);
-	if (apcm == NULL)
-		return -ENOMEM;
-	apcm->chip = chip;
-	apcm->pcm = pcm;
-	apcm->codec = codec;
-	pcm->private_data = apcm;
-	pcm->private_free = azx_pcm_free;
-	if (cpcm->pcm_type == HDA_PCM_TYPE_MODEM)
-		pcm->dev_class = SNDRV_PCM_CLASS_MODEM;
-	list_add_tail(&apcm->list, &chip->pcm_list);
-	cpcm->pcm = pcm;
-	for (s = 0; s < 2; s++) {
-		apcm->hinfo[s] = &cpcm->stream[s];
-		if (cpcm->stream[s].substreams)
-			snd_pcm_set_ops(pcm, s, &azx_pcm_ops);
-	}
-	/* buffer pre-allocation */
-	size = CONFIG_SND_HDA_PREALLOC_SIZE * 1024;
-	if (size > MAX_PREALLOC_SIZE)
-		size = MAX_PREALLOC_SIZE;
-	snd_pcm_lib_preallocate_pages_for_all(pcm, SNDRV_DMA_TYPE_DEV_SG,
-					      chip->card->dev,
-					      size, MAX_PREALLOC_SIZE);
-	/* link to codec */
-	pcm->dev = &codec->dev;
-	return 0;
-}
+EXPORT_SYMBOL_GPL(azx_set_pcm_constrains);
 
 /*
  * CORB / RIRB interface
@@ -1035,7 +601,7 @@ static int azx_alloc_cmd_io(struct azx *chip)
 	err = chip->ops->dma_alloc_pages(chip, SNDRV_DMA_TYPE_DEV,
 					 PAGE_SIZE, &chip->rb);
 	if (err < 0)
-		dev_err(chip->card->dev, "cannot allocate CORB/RIRB\n");
+		dev_err(chip->dev, "cannot allocate CORB/RIRB\n");
 	return err;
 }
 EXPORT_SYMBOL_GPL(azx_alloc_cmd_io);
@@ -1065,7 +631,7 @@ static void azx_init_cmd_io(struct azx *chip)
 			udelay(1);
 		}
 		if (timeout <= 0)
-			dev_err(chip->card->dev, "CORB reset timeout#1, CORBRP = %d\n",
+			dev_err(chip->dev, "CORB reset timeout#1, CORBRP = %d\n",
 				azx_readw(chip, CORBRP));
 
 		azx_writew(chip, CORBRP, 0);
@@ -1075,7 +641,7 @@ static void azx_init_cmd_io(struct azx *chip)
 			udelay(1);
 		}
 		if (timeout <= 0)
-			dev_err(chip->card->dev, "CORB reset timeout#2, CORBRP = %d\n",
+			dev_err(chip->dev, "CORB reset timeout#2, CORBRP = %d\n",
 				azx_readw(chip, CORBRP));
 	}
 
@@ -1164,6 +730,46 @@ static int azx_corb_send_cmd(struct hda_bus *bus, u32 val)
 
 #define ICH6_RIRB_EX_UNSOL_EV	(1<<4)
 
+/**
+ * snd_hda_queue_unsol_event - add an unsolicited event to queue
+ * @bus: the BUS
+ * @res: unsolicited event (lower 32bit of RIRB entry)
+ * @res_ex: codec addr and flags (upper 32bit or RIRB entry)
+ *
+ * Adds the given event to the queue.  The events are processed in
+ * the workqueue asynchronously.  Call this function in the interrupt
+ * hanlder when RIRB receives an unsolicited event.
+ *
+ * Returns 0 if successful, or a negative error code.
+ */
+int snd_hda_queue_unsol_event(struct hda_bus *bus, u32 res, u32 res_ex)
+{
+	struct hda_bus_unsolicited *unsol;
+	unsigned int wp;
+
+	if (!bus || !bus->workq)
+		return 0;
+
+	/*FIXME
+	trace_hda_unsol_event(bus, res, res_ex);*/
+
+	unsol = bus->unsol;
+	if (!unsol)
+		return 0;
+
+	wp = (unsol->wp + 1) % HDA_UNSOL_QUEUE_SIZE;
+	unsol->wp = wp;
+
+	wp <<= 1;
+	unsol->queue[wp] = res;
+	unsol->queue[wp + 1] = res_ex;
+
+	queue_work(bus->workq, &unsol->work);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(snd_hda_queue_unsol_event);
+
 /* retrieve RIRB entry - called from interrupt handler */
 static void azx_update_rirb(struct azx *chip)
 {
@@ -1190,7 +796,7 @@ static void azx_update_rirb(struct azx *chip)
 		res = le32_to_cpu(chip->rirb.buf[rp]);
 		addr = res_ex & 0xf;
 		if ((addr >= AZX_MAX_CODECS) || !(chip->codec_mask & (1 << addr))) {
-			dev_err(chip->card->dev, "spurious response %#x:%#x, rp = %d, wp = %d",
+			dev_err(chip->dev, "spurious response %#x:%#x, rp = %d, wp = %d",
 				res, res_ex,
 				chip->rirb.rp, wp);
 			snd_BUG();
@@ -1201,7 +807,7 @@ static void azx_update_rirb(struct azx *chip)
 			smp_wmb();
 			chip->rirb.cmds[addr]--;
 		} else if (printk_ratelimit()) {
-			dev_err(chip->card->dev, "spurious response %#x:%#x, last cmd=%#08x\n",
+			dev_err(chip->dev, "spurious response %#x:%#x, last cmd=%#08x\n",
 				res, res_ex,
 				chip->last_cmd[addr]);
 		}
@@ -1248,7 +854,7 @@ static unsigned int azx_rirb_get_response(struct hda_bus *bus,
 		return -1;
 
 	if (!chip->polling_mode && chip->poll_count < 2) {
-		dev_dbg(chip->card->dev,
+		dev_dbg(chip->dev,
 			"azx_get_response timeout, polling the codec once: last cmd=0x%08x\n",
 			chip->last_cmd[addr]);
 		do_poll = 1;
@@ -1258,7 +864,7 @@ static unsigned int azx_rirb_get_response(struct hda_bus *bus,
 
 
 	if (!chip->polling_mode) {
-		dev_warn(chip->card->dev,
+		dev_warn(chip->dev,
 			 "azx_get_response timeout, switching to polling mode: last cmd=0x%08x\n",
 			 chip->last_cmd[addr]);
 		chip->polling_mode = 1;
@@ -1266,7 +872,7 @@ static unsigned int azx_rirb_get_response(struct hda_bus *bus,
 	}
 
 	if (chip->msi) {
-		dev_warn(chip->card->dev,
+		dev_warn(chip->dev,
 			 "No response from codec, disabling MSI: last cmd=0x%08x\n",
 			 chip->last_cmd[addr]);
 		if (chip->ops->disable_msi_reset_irq(chip) &&
@@ -1294,7 +900,7 @@ static unsigned int azx_rirb_get_response(struct hda_bus *bus,
 		return -1; /* give a chance to retry */
 	}
 
-	dev_err(chip->card->dev,
+	dev_err(chip->dev,
 		"azx_get_response timeout, switching to single_cmd mode: last cmd=0x%08x\n",
 		chip->last_cmd[addr]);
 	chip->single_cmd = 1;
@@ -1331,7 +937,7 @@ static int azx_single_wait_for_response(struct azx *chip, unsigned int addr)
 		udelay(1);
 	}
 	if (printk_ratelimit())
-		dev_dbg(chip->card->dev, "get_response timeout: IRS=0x%x\n",
+		dev_dbg(chip->dev, "get_response timeout: IRS=0x%x\n",
 			azx_readw(chip, IRS));
 	chip->rirb.res[addr] = -1;
 	return -EIO;
@@ -1359,7 +965,7 @@ static int azx_single_send_cmd(struct hda_bus *bus, u32 val)
 		udelay(1);
 	}
 	if (printk_ratelimit())
-		dev_dbg(chip->card->dev,
+		dev_dbg(chip->dev,
 			"send_cmd timeout: IRS=0x%x, val=0x%x\n",
 			azx_readw(chip, IRS), val);
 	return -EIO;
@@ -1381,7 +987,7 @@ static unsigned int azx_single_get_response(struct hda_bus *bus,
  */
 
 /* send a command */
-static int azx_send_cmd(struct hda_bus *bus, unsigned int val)
+int azx_send_cmd(struct hda_bus *bus, unsigned int val)
 {
 	struct azx *chip = bus->private_data;
 
@@ -1396,7 +1002,7 @@ static int azx_send_cmd(struct hda_bus *bus, unsigned int val)
 EXPORT_SYMBOL_GPL(azx_send_cmd);
 
 /* get a response */
-static unsigned int azx_get_response(struct hda_bus *bus,
+unsigned int azx_get_response(struct hda_bus *bus,
 				     unsigned int addr)
 {
 	struct azx *chip = bus->private_data;
@@ -1409,125 +1015,9 @@ static unsigned int azx_get_response(struct hda_bus *bus,
 }
 EXPORT_SYMBOL_GPL(azx_get_response);
 
-#ifdef CONFIG_SND_HDA_DSP_LOADER
-/*
- * DSP loading code (e.g. for CA0132)
- */
-
-/* use the first stream for loading DSP */
-static struct azx_dev *
-azx_get_dsp_loader_dev(struct azx *chip)
-{
-	return &chip->azx_dev[chip->playback_index_offset];
-}
-
-static int azx_load_dsp_prepare(struct hda_bus *bus, unsigned int format,
-				unsigned int byte_size,
-				struct snd_dma_buffer *bufp)
-{
-	u32 *bdl;
-	struct azx *chip = bus->private_data;
-	struct azx_dev *azx_dev;
-	int err;
-
-	azx_dev = azx_get_dsp_loader_dev(chip);
-
-	dsp_lock(azx_dev);
-	spin_lock_irq(&chip->reg_lock);
-	if (azx_dev->running || azx_dev->locked) {
-		spin_unlock_irq(&chip->reg_lock);
-		err = -EBUSY;
-		goto unlock;
-	}
-	azx_dev->prepared = 0;
-	chip->saved_azx_dev = *azx_dev;
-	azx_dev->locked = 1;
-	spin_unlock_irq(&chip->reg_lock);
-
-	err = chip->ops->dma_alloc_pages(chip, SNDRV_DMA_TYPE_DEV_SG,
-					 byte_size, bufp);
-	if (err < 0)
-		goto err_alloc;
-
-	azx_dev->bufsize = byte_size;
-	azx_dev->period_bytes = byte_size;
-	azx_dev->format_val = format;
-
-	azx_stream_reset(chip, azx_dev);
-
-	/* reset BDL address */
-	azx_sd_writel(chip, azx_dev, SD_BDLPL, 0);
-	azx_sd_writel(chip, azx_dev, SD_BDLPU, 0);
-
-	azx_dev->frags = 0;
-	bdl = (u32 *)azx_dev->bdl.area;
-	err = setup_bdle(chip, bufp, azx_dev, &bdl, 0, byte_size, 0);
-	if (err < 0)
-		goto error;
-
-	azx_setup_controller(chip, azx_dev);
-	dsp_unlock(azx_dev);
-	return azx_dev->stream_tag;
-
- error:
-	chip->ops->dma_free_pages(chip, bufp);
- err_alloc:
-	spin_lock_irq(&chip->reg_lock);
-	if (azx_dev->opened)
-		*azx_dev = chip->saved_azx_dev;
-	azx_dev->locked = 0;
-	spin_unlock_irq(&chip->reg_lock);
- unlock:
-	dsp_unlock(azx_dev);
-	return err;
-}
-
-static void azx_load_dsp_trigger(struct hda_bus *bus, bool start)
-{
-	struct azx *chip = bus->private_data;
-	struct azx_dev *azx_dev = azx_get_dsp_loader_dev(chip);
-
-	if (start)
-		azx_stream_start(chip, azx_dev);
-	else
-		azx_stream_stop(chip, azx_dev);
-	azx_dev->running = start;
-}
-
-static void azx_load_dsp_cleanup(struct hda_bus *bus,
-				 struct snd_dma_buffer *dmab)
-{
-	struct azx *chip = bus->private_data;
-	struct azx_dev *azx_dev = azx_get_dsp_loader_dev(chip);
-
-	if (!dmab->area || !azx_dev->locked)
-		return;
-
-	dsp_lock(azx_dev);
-	/* reset BDL address */
-	azx_sd_writel(chip, azx_dev, SD_BDLPL, 0);
-	azx_sd_writel(chip, azx_dev, SD_BDLPU, 0);
-	azx_sd_writel(chip, azx_dev, SD_CTL, 0);
-	azx_dev->bufsize = 0;
-	azx_dev->period_bytes = 0;
-	azx_dev->format_val = 0;
-
-	chip->ops->dma_free_pages(chip, dmab);
-	dmab->area = NULL;
-
-	spin_lock_irq(&chip->reg_lock);
-	if (azx_dev->opened)
-		*azx_dev = chip->saved_azx_dev;
-	azx_dev->locked = 0;
-	spin_unlock_irq(&chip->reg_lock);
-	dsp_unlock(azx_dev);
-}
-#endif /* CONFIG_SND_HDA_DSP_LOADER */
-
 int azx_alloc_stream_pages(struct azx *chip)
 {
 	int i, err;
-	struct snd_card *card = chip->card;
 
 	for (i = 0; i < chip->num_streams; i++) {
 		dsp_lock_init(&chip->azx_dev[i]);
@@ -1536,7 +1026,7 @@ int azx_alloc_stream_pages(struct azx *chip)
 						 BDL_SIZE,
 						 &chip->azx_dev[i].bdl);
 		if (err < 0) {
-			dev_err(card->dev, "cannot allocate BDL\n");
+			dev_err(chip->dev, "cannot allocate BDL\n");
 			return -ENOMEM;
 		}
 	}
@@ -1544,7 +1034,7 @@ int azx_alloc_stream_pages(struct azx *chip)
 	err = chip->ops->dma_alloc_pages(chip, SNDRV_DMA_TYPE_DEV,
 					 chip->num_streams * 8, &chip->posbuf);
 	if (err < 0) {
-		dev_err(card->dev, "cannot allocate posbuf\n");
+		dev_err(chip->dev, "cannot allocate posbuf\n");
 		return -ENOMEM;
 	}
 
@@ -1630,7 +1120,7 @@ static int azx_reset(struct azx *chip, int full_reset)
       __skip:
 	/* check to see if controller is ready */
 	if (!azx_readb(chip, GCTL)) {
-		dev_dbg(chip->card->dev, "azx_reset: controller not ready!\n");
+		dev_dbg(chip->dev, "azx_reset: controller not ready!\n");
 		return -EBUSY;
 	}
 
@@ -1642,7 +1132,7 @@ static int azx_reset(struct azx *chip, int full_reset)
 	/* detect codecs */
 	if (!chip->codec_mask) {
 		chip->codec_mask = azx_readw(chip, STATESTS);
-		dev_dbg(chip->card->dev, "codec_mask = 0x%x\n",
+		dev_dbg(chip->dev, "codec_mask = 0x%x\n",
 			chip->codec_mask);
 	}
 
@@ -1759,7 +1249,7 @@ irqreturn_t azx_interrupt(int irq, void *dev_id)
 
 #ifdef CONFIG_PM_RUNTIME
 	if (chip->driver_caps & AZX_DCAPS_PM_RUNTIME)
-		if (chip->card->dev->power.runtime_status != RPM_ACTIVE)
+		if (!pm_runtime_active(chip->dev))
 			return IRQ_NONE;
 #endif
 
@@ -1811,198 +1301,6 @@ irqreturn_t azx_interrupt(int irq, void *dev_id)
 }
 EXPORT_SYMBOL_GPL(azx_interrupt);
 
-/*
- * Codec initerface
- */
-
-/*
- * Probe the given codec address
- */
-static int probe_codec(struct azx *chip, int addr)
-{
-	unsigned int cmd = (addr << 28) | (AC_NODE_ROOT << 20) |
-		(AC_VERB_PARAMETERS << 8) | AC_PAR_VENDOR_ID;
-	unsigned int res;
-
-	mutex_lock(&chip->bus->cmd_mutex);
-	chip->probing = 1;
-	azx_send_cmd(chip->bus, cmd);
-	res = azx_get_response(chip->bus, addr);
-	chip->probing = 0;
-	mutex_unlock(&chip->bus->cmd_mutex);
-	if (res == -1)
-		return -EIO;
-	dev_dbg(chip->card->dev, "codec #%d probed OK\n", addr);
-	return 0;
-}
-
-static void azx_bus_reset(struct hda_bus *bus)
-{
-	struct azx *chip = bus->private_data;
-
-	bus->in_reset = 1;
-	azx_stop_chip(chip);
-	azx_init_chip(chip, 1);
-#ifdef CONFIG_PM
-	if (chip->initialized) {
-		struct azx_pcm *p;
-		list_for_each_entry(p, &chip->pcm_list, list)
-			snd_pcm_suspend_all(p->pcm);
-		snd_hda_suspend(chip->bus);
-		snd_hda_resume(chip->bus);
-	}
-#endif
-	bus->in_reset = 0;
-}
-
-#ifdef CONFIG_PM
-/* power-up/down the controller */
-static void azx_power_notify(struct hda_bus *bus, bool power_up)
-{
-	struct azx *chip = bus->private_data;
-
-	if (!(chip->driver_caps & AZX_DCAPS_PM_RUNTIME))
-		return;
-
-	if (power_up)
-		pm_runtime_get_sync(chip->card->dev);
-	else
-		pm_runtime_put_sync(chip->card->dev);
-}
-#endif
-
-static int get_jackpoll_interval(struct azx *chip)
-{
-	int i;
-	unsigned int j;
-
-	if (!chip->jackpoll_ms)
-		return 0;
-
-	i = chip->jackpoll_ms[chip->dev_index];
-	if (i == 0)
-		return 0;
-	if (i < 50 || i > 60000)
-		j = 0;
-	else
-		j = msecs_to_jiffies(i);
-	if (j == 0)
-		dev_warn(chip->card->dev,
-			 "jackpoll_ms value out of range: %d\n", i);
-	return j;
-}
-
-/* Codec initialization */
-int azx_codec_create(struct azx *chip, const char *model,
-		     unsigned int max_slots,
-		     int *power_save_to)
-{
-	struct hda_bus_template bus_temp;
-	int c, codecs, err;
-
-	memset(&bus_temp, 0, sizeof(bus_temp));
-	bus_temp.private_data = chip;
-	bus_temp.modelname = model;
-	bus_temp.pci = chip->pci;
-	bus_temp.ops.command = azx_send_cmd;
-	bus_temp.ops.get_response = azx_get_response;
-	bus_temp.ops.attach_pcm = azx_attach_pcm_stream;
-	bus_temp.ops.bus_reset = azx_bus_reset;
-#ifdef CONFIG_PM
-	bus_temp.power_save = power_save_to;
-	bus_temp.ops.pm_notify = azx_power_notify;
-#endif
-#ifdef CONFIG_SND_HDA_DSP_LOADER
-	bus_temp.ops.load_dsp_prepare = azx_load_dsp_prepare;
-	bus_temp.ops.load_dsp_trigger = azx_load_dsp_trigger;
-	bus_temp.ops.load_dsp_cleanup = azx_load_dsp_cleanup;
-#endif
-
-	err = snd_hda_bus_new(chip->card, &bus_temp, &chip->bus);
-	if (err < 0)
-		return err;
-
-	if (chip->driver_caps & AZX_DCAPS_RIRB_DELAY) {
-		dev_dbg(chip->card->dev, "Enable delay in RIRB handling\n");
-		chip->bus->needs_damn_long_delay = 1;
-	}
-
-	codecs = 0;
-	if (!max_slots)
-		max_slots = AZX_DEFAULT_CODECS;
-
-	/* First try to probe all given codec slots */
-	for (c = 0; c < max_slots; c++) {
-		if ((chip->codec_mask & (1 << c)) & chip->codec_probe_mask) {
-			if (probe_codec(chip, c) < 0) {
-				/* Some BIOSen give you wrong codec addresses
-				 * that don't exist
-				 */
-				dev_warn(chip->card->dev,
-					 "Codec #%d probe error; disabling it...\n", c);
-				chip->codec_mask &= ~(1 << c);
-				/* More badly, accessing to a non-existing
-				 * codec often screws up the controller chip,
-				 * and disturbs the further communications.
-				 * Thus if an error occurs during probing,
-				 * better to reset the controller chip to
-				 * get back to the sanity state.
-				 */
-				azx_stop_chip(chip);
-				azx_init_chip(chip, 1);
-			}
-		}
-	}
-
-	/* AMD chipsets often cause the communication stalls upon certain
-	 * sequence like the pin-detection.  It seems that forcing the synced
-	 * access works around the stall.  Grrr...
-	 */
-	if (chip->driver_caps & AZX_DCAPS_SYNC_WRITE) {
-		dev_dbg(chip->card->dev, "Enable sync_write for stable communication\n");
-		chip->bus->sync_write = 1;
-		chip->bus->allow_bus_reset = 1;
-	}
-
-	/* Then create codec instances */
-	for (c = 0; c < max_slots; c++) {
-		if ((chip->codec_mask & (1 << c)) & chip->codec_probe_mask) {
-			struct hda_codec *codec;
-			err = snd_hda_codec_new(chip->bus, c, &codec);
-			if (err < 0)
-				continue;
-			codec->jackpoll_interval = get_jackpoll_interval(chip);
-			codec->beep_mode = chip->beep_mode;
-			codecs++;
-		}
-	}
-	if (!codecs) {
-		dev_err(chip->card->dev, "no codecs initialized\n");
-		return -ENXIO;
-	}
-	return 0;
-}
-EXPORT_SYMBOL_GPL(azx_codec_create);
-
-/* configure each codec instance */
-int azx_codec_configure(struct azx *chip)
-{
-	struct hda_codec *codec;
-	list_for_each_entry(codec, &chip->bus->codec_list, list) {
-		snd_hda_codec_configure(codec);
-	}
-	return 0;
-}
-EXPORT_SYMBOL_GPL(azx_codec_configure);
-
-/* mixer creation - all stuff is implemented in hda module */
-int azx_mixer_create(struct azx *chip)
-{
-	return snd_hda_build_controls(chip->bus);
-}
-EXPORT_SYMBOL_GPL(azx_mixer_create);
-
-
 /* initialize SD streams */
 int azx_init_stream(struct azx *chip)
 {
@@ -2028,5 +1326,5 @@ int azx_init_stream(struct azx *chip)
 }
 EXPORT_SYMBOL_GPL(azx_init_stream);
 
-MODULE_LICENSE("GPL");
+MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Common HDA driver funcitons");

@@ -6,9 +6,6 @@
 #define HDA_RW_NO_RESPONSE_FALLBACK (1 << 0)
 */
 
-struct hda_bus;
-struct hda_bus_unsolicited;
-
 /* bus operators */
 struct hda_bus_ops {
 	/* send a single command */
@@ -55,31 +52,18 @@ struct hda_bus_template {
  * A hda_bus contains several codecs in the list codec_list.
  */
 struct hda_bus {
-	struct snd_card *card;
-
-	/* copied from template */
 	void *private_data;
 	struct pci_dev *pci;
 	const char *modelname;
 	int *power_save;
-	struct hda_bus_ops ops;
-
-	/* codec linked list */
-	struct list_head codec_list;
-	unsigned int num_codecs;
-	/* link caddr -> codec */
-	struct hda_codec *caddr_tbl[HDA_MAX_CODEC_ADDRESS + 1];
 
 	struct mutex cmd_mutex;
 	struct mutex prepare_mutex;
 
 	 /* unsolicited event queue */
-	 struct hda_bus_unsolicited *unsol;
-	 char workq_name[16];
-	 struct workqueue_struct *workq; /* common workqueue for codecs */
-
-	 /* assigned PCMs */
-	DECLARE_BITMAP(pcm_dev_bits, SNDRV_PCM_DEVICES);
+	struct hda_bus_unsolicited *unsol;
+	char workq_name[16];
+	struct workqueue_struct *workq; /* common workqueue for codecs */
 
 	/* misc op flags */
 	unsigned int needs_damn_long_delay:1;
@@ -90,10 +74,24 @@ struct hda_bus {
 	unsigned int rirb_error:1;      /* error in codec communication */
 	unsigned int response_reset:1;  /* controller was reset */
 	unsigned int in_reset:1;        /* during reset operation */
-	unsigned int power_keep_link_on:1; /* don't power off HDA link */
 	unsigned int no_response_fallback:1; /* don't fallback at RIRB error */
 
-	int primary_dig_out_type;       /* primary digital out PCM type */
+};
+
+/*
+ * unsolicited event handler
+ */
+
+#define HDA_UNSOL_QUEUE_SIZE    64
+
+struct hda_bus_unsolicited {
+	/* ring buffer */
+	u32 queue[HDA_UNSOL_QUEUE_SIZE * 2];
+	unsigned int rp, wp;
+
+	/* workqueue */
+	struct work_struct work;
+	struct hda_bus *bus;
 };
 
 #endif /* _HDA_BUS_H_ */
