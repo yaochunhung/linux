@@ -712,6 +712,126 @@ static int dapm_is_shared_kcontrol(struct snd_soc_dapm_context *dapm,
  * Determine if a kcontrol is shared. If it is, look it up. If it isn't,
  * create it. Either way, add the widget into the control's widget list
  */
+static int dapm_create_or_share_pga_kcontrol(struct snd_soc_dapm_widget *w,
+	int kci, struct snd_soc_dapm_path *path)
+{
+	struct snd_soc_dapm_context *dapm = w->dapm;
+	struct snd_card *card = dapm->card->snd_card;
+	const char *prefix;
+	size_t prefix_len;
+	int shared;
+	struct snd_kcontrol *kcontrol;
+	struct snd_soc_dapm_widget_list *wlist;
+	int wlistentries;
+	size_t wlistsize;
+	bool wname_in_long_name, kcname_in_long_name;
+	size_t name_len;
+	char *long_name;
+	const char *name;
+	int ret;
+
+	if (dapm->codec)
+	prefix = dapm->codec->name_prefix;
+	else
+	prefix = NULL;
+
+	if (prefix)
+		prefix_len = strlen(prefix) + 1;
+	else
+		prefix_len = 0;
+
+	shared = dapm_is_shared_kcontrol(dapm, w, &w->kcontrol_news[kci],
+					 &kcontrol);
+
+	if (kcontrol) {
+		wlist = kcontrol->private_data;
+		wlistentries = wlist->num_widgets + 1;
+	} else {
+		wlist = NULL;
+		wlistentries = 1;
+	}
+
+	wlistsize = sizeof(struct snd_soc_dapm_widget_list) +
+			wlistentries * sizeof(struct snd_soc_dapm_widget *);
+	wlist = krealloc(wlist, wlistsize, GFP_KERNEL);
+	if (wlist == NULL) {
+		dev_err(dapm->dev, "ASoC: can't allocate widget list for %s\n",
+			w->name);
+		return -ENOMEM;
+	}
+	wlist->num_widgets = wlistentries;
+	wlist->widgets[wlistentries - 1] = w;
+
+	if (!kcontrol) {
+		if (shared) {
+			wname_in_long_name = false;
+			kcname_in_long_name = true;
+		} else {
+			switch (w->id) {
+			case snd_soc_dapm_pga:
+				wname_in_long_name = false;
+				kcname_in_long_name = true;
+				break;
+			default:
+				kfree(wlist);
+				return -EINVAL;
+			}
+		}
+
+		if (wname_in_long_name && kcname_in_long_name) {
+			name_len = strlen(w->name) - prefix_len + 1 +
+				strlen(w->kcontrol_news[kci].name) + 1;
+
+			long_name = kmalloc(name_len, GFP_KERNEL);
+			if (long_name == NULL) {
+				kfree(wlist);
+				return -ENOMEM;
+			}
+
+			/*
+			 * The control will get a prefix from the control
+			 * creation process but we're also using the same
+			 * prefix for widgets so cut the prefix off the
+			 * front of the widget name.
+			*/
+			snprintf(long_name, name_len, "%s %s",
+				 w->name + prefix_len,
+				 w->kcontrol_news[kci].name);
+			long_name[name_len - 1] = '\0';
+
+			name = long_name;
+		} else if (wname_in_long_name) {
+			long_name = NULL;
+			name = w->name + prefix_len;
+		} else {
+			long_name = NULL;
+			name = w->kcontrol_news[kci].name;
+		}
+
+		kcontrol = snd_soc_cnew(&w->kcontrol_news[kci], wlist, name,
+					prefix);
+		ret = snd_ctl_add(card, kcontrol);
+		if (ret < 0) {
+			dev_err(dapm->dev,
+				"ASoC: failed to add widget %s dapm kcontrol %s: %d\n",
+				w->name, name, ret);
+			kfree(wlist);
+			kfree(long_name);
+			return ret;
+		}
+
+	}
+
+	kcontrol->private_data = wlist;
+	w->kcontrols[kci] = kcontrol;
+
+	return 0;
+}
+
+/*
+ * Determine if a kcontrol is shared. If it is, look it up. If it isn't,
+ * create it. Either way, add the widget into the control's widget list
+ */
 static int dapm_create_or_share_mixmux_kcontrol(struct snd_soc_dapm_widget *w,
 	int kci)
 {
@@ -880,11 +1000,33 @@ static int dapm_new_mux(struct snd_soc_dapm_widget *w)
 /* create new dapm volume control */
 static int dapm_new_pga(struct snd_soc_dapm_widget *w)
 {
-	if (w->num_kcontrols)
+	struct snd_soc_dapm_context *dapm = w->dapm;
+	struct snd_soc_dapm_path *path;
+	int ret;
+
+	if (w->num_kcontrols > 1) {
 		dev_err(w->dapm->dev,
-			"ASoC: PGA controls not supported: '%s'\n", w->name);
+			"ASoC: PGA controls has incorrect number of controls: '%s'\n", w->name);
+		return -EINVAL;
+	}
+
+	if (!w->num_kcontrols)
+		return 0;
+
+	if (list_empty(&w->sources)) {
+		dev_err(dapm->dev, "ASoC: pga %s has no paths\n", w->name);
+		return -EINVAL;
+	}
+
+	path = list_first_entry(&w->sources, struct snd_soc_dapm_path,
+				list_sink);
+
+	ret = dapm_create_or_share_pga_kcontrol(w, 0, path);
+	if (ret < 0)
+		return ret;
 
 	return 0;
+
 }
 
 /* reset 'walked' bit for each dapm path */
