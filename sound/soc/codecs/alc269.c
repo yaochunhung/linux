@@ -1397,26 +1397,22 @@ static int alc_set_hw_params(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_hda_codec *codec = snd_soc_dai_get_drvdata(dai);
 	struct snd_pcm_runtime *runtime = substream->runtime;
-	struct hda_cvt_setup *cvt;
 	struct snd_soc_hda_dma_params *dd;
 	struct hda_dai_map *map;
 	int ret, idx;
+	int format_id;
 
 	idx = snd_soc_hda_get_dai_map(codec, dai);
 	if (idx < 0)
 		return -1;
 	map = &codec->nid_list[idx];
 
-	cvt = snd_hda_get_cvt_setup(&codec->hdac, map->nid);
-	if (cvt == NULL)
-		return -1;
 
-	cvt->format_id = snd_hda_calc_stream_format(params_rate(hparams),
+	dd = kzalloc(sizeof(*dd), GFP_KERNEL);
+	dd->format = snd_hda_calc_stream_format(params_rate(hparams),
 			params_channels(hparams), params_format(hparams),
 			map->maxbps, 0);
-	soc_codec_dbg(codec, "hda format val = 0x%x\n", cvt->format_id);
-	dd = devm_kzalloc(&codec->hdev->dev, sizeof(*dd), GFP_KERNEL);
-	dd->format = cvt->format_id;
+	soc_codec_dbg(codec, "hda format val = 0x%x\n", dd->format);
 	snd_soc_dai_set_dma_data(dai, substream, (void *)dd);
 	return 0;
 
@@ -1430,7 +1426,7 @@ static int alc_prepare(struct snd_pcm_substream *substream,
 	struct hda_dai_map *map;
 	struct hda_cvt_setup *cvt;
 	struct snd_soc_dai *cpu_dai;
-	struct snd_soc_hda_dma_params *dp;
+	struct snd_soc_hda_dma_params *dp, *dd;
 	int idx;
 
 	if (substream == NULL)
@@ -1446,9 +1442,13 @@ static int alc_prepare(struct snd_pcm_substream *substream,
 		return -1;
 
 	cpu_dai = rtd->cpu_dai;
-	dp = (struct snd_soc_hda_dma_params *)snd_soc_dai_get_dma_data(cpu_dai, substream);
+	dp = (struct snd_soc_hda_dma_params *)
+				snd_soc_dai_get_dma_data(cpu_dai, substream);
 	soc_codec_dbg(codec, "stream tag from cpu dai %d\n", dp->stream_tag);
-	snd_hda_codec_setup_stream(&codec->hdac, map->nid, dp->stream_tag, 0, cvt->format_id);
+
+	dd = (struct snd_soc_hda_dma_params *)
+				snd_soc_dai_get_dma_data(dai, substream);
+	snd_hda_codec_setup_stream(&codec->hdac, map->nid, dp->stream_tag, 0, dd->format);
 	return 0;
 
 }
@@ -1460,6 +1460,7 @@ static int alc_hw_free(struct snd_pcm_substream *substream,
 	struct snd_soc_hda_codec *codec = snd_soc_dai_get_drvdata(dai);
 	struct snd_soc_pcm_runtime *rtd = snd_pcm_substream_chip(substream);
 	struct hda_dai_map *map;
+	struct snd_soc_hda_dma_params *dd;
 	int idx;
 
 	if (substream == NULL)
@@ -1470,6 +1471,11 @@ static int alc_hw_free(struct snd_pcm_substream *substream,
 		return -1;
 	map = &codec->nid_list[idx];
 	__snd_hda_codec_cleanup_stream(&codec->hdac, map->nid, 1);
+
+	dd = (struct snd_soc_hda_dma_params *)
+				snd_soc_dai_get_dma_data(dai, substream);
+
+	kfree(dd);
 	return 0;
 }
 
@@ -1478,8 +1484,6 @@ static struct snd_soc_dai_ops alc_dai_ops = {
 	.hw_params = alc_set_hw_params,
 	.hw_free = alc_hw_free,
 };
-
-
 
 static struct snd_soc_dai_driver dyn_dais[AUTO_CFG_MAX_OUTS+AUTO_CFG_MAX_INS];
 static int alc_dev_probe(struct snd_soc_hda_device *hdev)

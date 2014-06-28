@@ -1614,10 +1614,9 @@ static int hdmi_set_hw_params(struct snd_pcm_substream *substream,
 	struct hda_codec *codec = &hcodec->hdac;
 	struct hdmi_spec *spec = codec->spec;
 
-	struct hdmi_spec_per_cvt *per_cvt;
 	struct snd_soc_hda_dma_params *dd;
 	struct hdmi_dai_pin_map *map;
-	int pin_idx, cvt_idx;
+	int pin_idx, format;
 
 	struct hda_spdif_out *spdif;
 	unsigned short ctls;
@@ -1637,19 +1636,9 @@ static int hdmi_set_hw_params(struct snd_pcm_substream *substream,
 	mutex_unlock(&codec->spdif_mutex);
 
 	if (map->nid) {
-		cvt_idx = cvt_nid_to_cvt_index(codec, map->nid);
-		if (snd_BUG_ON(cvt_idx < 0))
-			return -EINVAL;
-		per_cvt = get_cvt(spec, cvt_idx);
-
-		per_cvt->formats = snd_hda_calc_stream_format(params_rate(hparams),
-				params_channels(hparams), params_format(hparams),
-				per_cvt->maxbps, ctls);
-		snd_printd("hda cvt_idx %d format val = 0x%llx\n", cvt_idx, per_cvt->formats);
-
-			dd = devm_kzalloc(codec->dev, sizeof(*dd), GFP_KERNEL);
-			dd->format = per_cvt->formats;
-			snd_soc_dai_set_dma_data(dai, substream, (void *)dd);
+		dd = kzalloc(sizeof(*dd), GFP_KERNEL);
+		dd->format = format;
+		snd_soc_dai_set_dma_data(dai, substream, (void *)dd);
 	}
 	return 0;
 }
@@ -1680,7 +1669,7 @@ static int hdmi_playback_prepare(struct snd_pcm_substream *substream,
 	bool non_pcm;
 	struct hdmi_dai_pin_map *map;
 	struct snd_soc_dai *cpu_dai;
-	struct snd_soc_hda_dma_params *dp;
+	struct snd_soc_hda_dma_params *dp, *dd;
 	struct hdmi_spec_per_cvt *per_cvt;
 
 	snd_printd("In %s\n", __func__);
@@ -1711,13 +1700,14 @@ static int hdmi_playback_prepare(struct snd_pcm_substream *substream,
 	cpu_dai = rtd->cpu_dai;
 	dp = (struct snd_soc_hda_dma_params *)snd_soc_dai_get_dma_data(cpu_dai, substream);
 
+	dd = (struct snd_soc_hda_dma_params *)snd_soc_dai_get_dma_data(dai, substream);
 	snd_printd("stream tag from cpu dai %d format in cvt 0x%llx\n", dp->stream_tag,
-				per_cvt->formats);
+				dd->format);
 
 	hdmi_setup_audio_infoframe(codec, per_pin, non_pcm);
 	mutex_unlock(&per_pin->lock);
 
-	return spec->ops.setup_stream(codec, cvt_nid, pin_nid, dp->stream_tag, per_cvt->formats);
+	return spec->ops.setup_stream(codec, cvt_nid, pin_nid, dp->stream_tag, dd->format);
 }
 
 static int hdmi_playback_cleanup(struct snd_pcm_substream *substream,
@@ -1726,6 +1716,7 @@ static int hdmi_playback_cleanup(struct snd_pcm_substream *substream,
 	struct snd_soc_hda_codec *hcodec = snd_soc_dai_get_drvdata(dai);
 	struct hda_codec *codec = &hcodec->hdac;
 	struct hdmi_spec *spec = codec->spec;
+	struct snd_soc_hda_dma_params *dd;
 
 	int pin_idx;
 	struct hdmi_dai_pin_map *map;
@@ -1738,6 +1729,9 @@ static int hdmi_playback_cleanup(struct snd_pcm_substream *substream,
 	map = get_dai_pin_map(spec, pin_idx);
 
 	__snd_hda_codec_cleanup_stream(codec, map->nid, 1);
+
+	dd = (struct snd_soc_hda_dma_params *)snd_soc_dai_get_dma_data(dai, substream);
+	kfree(dd);
 
 	return 0;
 }
