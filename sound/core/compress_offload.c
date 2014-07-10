@@ -123,6 +123,7 @@ static int snd_compr_open(struct inode *inode, struct file *f)
 	}
 	runtime->state = SNDRV_PCM_STATE_OPEN;
 	init_waitqueue_head(&runtime->sleep);
+	init_waitqueue_head(&runtime->wait);
 	data->stream.runtime = runtime;
 	f->private_data = (void *)data;
 	mutex_lock(&compr->lock);
@@ -734,12 +735,12 @@ static int snd_compress_wait_for_drain(struct snd_compr_stream *stream)
 
 static int snd_compr_drain(struct snd_compr_stream *stream)
 {
-	int retval;
+	int retval = 0;
 
 	if (stream->runtime->state == SNDRV_PCM_STATE_PREPARED ||
 			stream->runtime->state == SNDRV_PCM_STATE_SETUP)
 		return -EPERM;
-
+	stream->runtime->drain_wake = 0;
 	retval = stream->ops->trigger(stream, SND_COMPR_TRIGGER_DRAIN);
 	if (retval) {
 		pr_debug("SND_COMPR_TRIGGER_DRAIN failed %d\n", retval);
@@ -747,7 +748,9 @@ static int snd_compr_drain(struct snd_compr_stream *stream)
 		return retval;
 	}
 
-	return snd_compress_wait_for_drain(stream);
+	retval = snd_compress_wait_for_drain(stream);
+	stream->runtime->state = SNDRV_PCM_STATE_SETUP;
+	return retval;
 }
 
 static int snd_compr_next_track(struct snd_compr_stream *stream)
@@ -782,6 +785,7 @@ static int snd_compr_partial_drain(struct snd_compr_stream *stream)
 	if (stream->next_track == false)
 		return -EPERM;
 
+	stream->runtime->drain_wake = 0;
 	retval = stream->ops->trigger(stream, SND_COMPR_TRIGGER_PARTIAL_DRAIN);
 	if (retval) {
 		pr_debug("Partial drain returned failure\n");
