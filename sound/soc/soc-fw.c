@@ -1090,6 +1090,97 @@ err_se:
 	return NULL;
 }
 
+static struct snd_kcontrol_new *soc_fw_dapm_widget_dbytes_create(struct soc_fw *sfw,
+		int count)
+{
+	struct snd_soc_fw_bytes_ext *be;
+	struct soc_bytes_ext  *sbe;
+	struct snd_kcontrol_new *kc;
+	int i, err, ext;
+
+	pr_info("%s...\n", __func__);
+
+	kc = kzalloc(sizeof(*kc) * count, GFP_KERNEL);
+	if (!kc)
+		return NULL;
+
+	for (i = 0; i < count; i++) {
+		be = (struct snd_soc_fw_bytes_ext *)sfw->pos;
+
+		/* validate kcontrol */
+		if (strnlen(be->hdr.name, SND_SOC_FW_TEXT_SIZE) ==
+			SND_SOC_FW_TEXT_SIZE)
+			goto err;
+
+		sbe = kzalloc(sizeof(*sbe) + be->pvt_data_len, GFP_KERNEL);
+		if (!sbe)
+			goto err;
+
+		sfw->pos += (sizeof(struct snd_soc_fw_bytes_ext) + be->pvt_data_len);
+
+		dev_dbg(sfw->dev,
+			"ASoC: adding bytes kcontrol %s with access 0x%x\n",
+			be->hdr.name, be->hdr.access);
+
+		memset(kc, 0, sizeof(kc));
+		pr_info("siizeof kc %d\n", (int)sizeof(kc));
+
+		kc[i].name = be->hdr.name;
+		kc[i].private_value = (long)sbe;
+		kc[i].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+		kc[i].access = be->hdr.access;
+
+		sbe->max = be->max;
+
+		pr_info("%s: name%s\n", __func__, kc[i].name);
+		pr_info("%s: dat2 len %d\n", __func__, be->pvt_data_len);
+		pr_info("%s: iface %d\n", __func__, kc[i].iface);
+		pr_info("%s: access %d\n", __func__, kc[i].access);
+		pr_info("%s: dat5 len %d\n", __func__, be->pvt_data_len);
+
+		if (be->pvt_data_len)
+			soc_fw_init_pvt_data(sfw, be->hdr.index, (unsigned long)sbe, (unsigned long)be);
+
+		INIT_LIST_HEAD(&sbe->list);
+
+		/* map standard io handlers and check for external handlers */
+		ext = soc_fw_kcontrol_bind_io(be->hdr.index, &kc[i], io_ops,
+				ARRAY_SIZE(io_ops));
+		if (ext) {
+			/* none exist, so now try and map ext handlers */
+			ext = soc_fw_kcontrol_bind_io(be->hdr.index, &kc[i],
+					sfw->io_ops, sfw->io_ops_count);
+			if (ext) {
+				dev_err(sfw->dev,
+						"ASoC: no complete mixer IO handler for %s type (g,p,i) %d:%d:%d\n",
+						be->hdr.name,
+						SOC_CONTROL_GET_ID_GET(be->hdr.index),
+						SOC_CONTROL_GET_ID_PUT(be->hdr.index),
+						SOC_CONTROL_GET_ID_INFO(be->hdr.index));
+				kfree(sbe);
+				continue;
+			}
+			err = soc_fw_init_kcontrol(sfw, &kc[i]);
+			if (err < 0) {
+				dev_err(sfw->dev, "ASoC: failed to init %s\n",
+						be->hdr.name);
+				kfree(sbe);
+				continue;
+			}
+		}
+	}
+	pr_info("%s: Exit\n", __func__);
+	return kc;
+
+err:
+	for (--i; i >= 0; i--)
+		kfree((void *)kc[i].private_value);
+
+	kfree(kc);
+
+	return NULL;
+}
+
 static int soc_fw_dapm_widget_create(struct soc_fw *sfw,
 	struct snd_soc_fw_dapm_widget *w)
 {
@@ -1164,6 +1255,17 @@ static int soc_fw_dapm_widget_create(struct soc_fw *sfw,
 		widget.kcontrol_enum = 1;
 		widget.kcontrol_news = soc_fw_dapm_widget_denum_create(sfw);
 		if (!widget.kcontrol_news) {
+			ret = -ENOMEM;
+			goto hdr_err;
+		}
+		break;
+	case SOC_CONTROL_TYPE_BYTES_EXT:
+		pr_info("%s: Bytes_Ext....\n", __func__);
+
+		widget.num_kcontrols = w->num_kcontrols;
+		widget.kcontrol_news = soc_fw_dapm_widget_dbytes_create(sfw, widget.num_kcontrols);
+		if (!widget.kcontrol_news) {
+			pr_info("%s: Bytes_Ext: no control\n", __func__);
 			ret = -ENOMEM;
 			goto hdr_err;
 		}
