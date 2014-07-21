@@ -565,9 +565,12 @@ static int soc_compr_pointer(struct snd_compr_stream *cstream,
 	struct snd_soc_pcm_runtime *rtd = cstream->private_data;
 	struct snd_soc_platform *platform = rtd->platform;
 
+	mutex_lock_nested(&rtd->pcm_mutex, rtd->pcm_subclass);
+
 	if (platform->driver->compr_ops && platform->driver->compr_ops->pointer)
 		 platform->driver->compr_ops->pointer(cstream, tstamp);
 
+	mutex_unlock(&rtd->pcm_mutex);
 	return 0;
 }
 
