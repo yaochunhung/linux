@@ -281,8 +281,11 @@ static inline struct azx_dev *get_azx_dev(struct snd_pcm_substream *substream)
 void azx_stream_start(struct azx *chip, struct azx_dev *azx_dev);
 void azx_stream_stop(struct azx *chip, struct azx_dev *azx_dev);
 void azx_stream_reset(struct azx *chip, struct azx_dev *azx_dev);
-int azx_setup_controller(struct azx *chip, struct azx_dev *azx_dev);
-
+int azx_setup_controller(struct azx *chip, struct azx_dev *azx_dev,
+			 bool enable_lpib);
+int setup_bdle(struct azx *chip, struct snd_dma_buffer *dmab,
+		struct azx_dev *azx_dev, u32 **bdlp,
+		int ofs, int size, int with_ioc, bool bdry_check);
 /* Allocation functions. */
 int azx_alloc_stream_pages(struct azx *chip);
 void azx_free_stream_pages(struct azx *chip);
@@ -305,6 +308,7 @@ void azx_set_pcm_constrains(struct azx *chip, struct snd_pcm_runtime *runtime);
 void azx_init_chip(struct azx *chip, int full_reset);
 void azx_stop_chip(struct azx *chip);
 void azx_enter_link_reset(struct azx *chip);
+void azx_exit_link_reset(struct azx *chip);
 irqreturn_t azx_interrupt(int irq, void *dev_id);
 
 /* Codec interface */

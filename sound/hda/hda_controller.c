@@ -56,8 +56,8 @@ void azx_stream_start(struct azx *chip, struct azx_dev *azx_dev)
 	azx_writel(chip, INTCTL,
 		   azx_readl(chip, INTCTL) | (1 << azx_dev->index));
 	/* set DMA start and interrupt mask */
-	azx_sd_writeb(chip, azx_dev, SD_CTL,
-		      azx_sd_readb(chip, azx_dev, SD_CTL) |
+	azx_sd_writel(chip, azx_dev, SD_CTL,
+		      azx_sd_readl(chip, azx_dev, SD_CTL) |
 		      SD_CTL_DMA_START | SD_INT_MASK);
 }
 EXPORT_SYMBOL_GPL(azx_stream_start);
@@ -111,22 +111,64 @@ void azx_stream_reset(struct azx *chip, struct azx_dev *azx_dev)
 }
 EXPORT_SYMBOL_GPL(azx_stream_reset);
 
+void azx_dev_trace(struct azx *chip, struct azx_dev *azx_dev)
+{
+	dev_dbg(chip->dev, "azx_dev: index:%x\n"
+		"bdl:\n\tdevtype:%x,\n\tdev:%p,\n\tarea:%p,\n\taddr:%x,\n\tbytes:%xi\n",
+		azx_dev->index,
+		azx_dev->bdl.dev.type,
+		azx_dev->bdl.dev.dev,
+		azx_dev->bdl.area,
+		azx_dev->bdl.addr,
+		azx_dev->bdl.bytes);
+
+	dev_dbg(chip->dev, "\nposbuf:%p,\nbufsize:%x,\nperiod_bytes:%x,\nfrags:%x"
+	"\nfifo_size:%x,\nstart_wallclk:%x,\nperiod_wallclk:%x,\nsd_addr:%p"
+	"\nsd_int_sta_mask:%x,\nsubstream:%p,\nformat_val:%x,\nstream_tag:%x"
+	"\nf.opened:%d,\nf.running:%d,\nf.prepared:%d,\nf.locked:%d,\nf.insufficient:%d,"
+	"\nwc_marked:%d,\nno_period_wakeup:%d,\nf.decoupled:%d,\npphc_addr:%p,"
+	"\npplc_addr:%p\n",
+	azx_dev->posbuf,
+	azx_dev->bufsize,
+	azx_dev->period_bytes,
+	azx_dev->frags,
+	azx_dev->fifo_size,
+	azx_dev->start_wallclk,
+	azx_dev->period_wallclk,
+	azx_dev->sd_addr,
+	azx_dev->sd_int_sta_mask,
+	azx_dev->substream,
+	azx_dev->format_val,
+	azx_dev->stream_tag,
+	azx_dev->opened,
+	azx_dev->running,
+	azx_dev->prepared,
+	azx_dev->locked,
+	azx_dev->insufficient,
+	azx_dev->wc_marked,
+	azx_dev->no_period_wakeup,
+	azx_dev->decoupled,
+	azx_dev->pphc_addr,
+	azx_dev->pplc_addr);
+}
+
 /*
  * set up the SD for streaming
  */
-int azx_setup_controller(struct azx *chip, struct azx_dev *azx_dev)
+int azx_setup_controller(struct azx *chip, struct azx_dev *azx_dev,
+				bool enable_lpib)
 {
 	unsigned int val;
+	azx_dev_trace(chip, azx_dev);
 	/* make sure the run bit is zero for SD */
-	azx_stream_clear(chip, azx_dev);
+	if (enable_lpib)
+		azx_stream_clear(chip, azx_dev);
 	/* program the stream_tag */
 	val = azx_sd_readl(chip, azx_dev, SD_CTL);
 	val = (val & ~SD_CTL_STREAM_TAG_MASK) |
 		(azx_dev->stream_tag << SD_CTL_STREAM_TAG_SHIFT);
-	dev_dbg(chip->dev,
-			"%s: stream _tag=0x%x, format_val=0x%x\n",
-			__func__, azx_dev->stream_tag, azx_dev->format_val);
-	if (!azx_snoop(chip))
+	/*FIXME commented for download
+	if (!azx_snoop(chip))*/
 		val |= SD_CTL_TRAFFIC_PRIO;
 	azx_sd_writel(chip, azx_dev, SD_CTL, val);
 
@@ -148,16 +190,19 @@ int azx_setup_controller(struct azx *chip, struct azx_dev *azx_dev)
 		      upper_32_bits(azx_dev->bdl.addr));
 
 	/* enable the position buffer */
-	if (chip->position_fix[0] != POS_FIX_LPIB ||
-	    chip->position_fix[1] != POS_FIX_LPIB) {
-		if (!(azx_readl(chip, DPLBASE) & ICH6_DPLBASE_ENABLE))
-			azx_writel(chip, DPLBASE,
+	if (enable_lpib) {
+		if (chip->position_fix[0] != POS_FIX_LPIB ||
+			chip->position_fix[1] != POS_FIX_LPIB) {
+			if (!(azx_readl(chip, DPLBASE) & ICH6_DPLBASE_ENABLE))
+				azx_writel(chip, DPLBASE,
 				(u32)chip->posbuf.addr | ICH6_DPLBASE_ENABLE);
-	}
+		}
 
-	/* set the interrupt enable bits in the descriptor control register */
-	azx_sd_writel(chip, azx_dev, SD_CTL,
-		      azx_sd_readl(chip, azx_dev, SD_CTL) | SD_INT_MASK);
+		/* set the interrupt enable bits in the descriptor control register */
+		azx_sd_writel(chip, azx_dev, SD_CTL,
+			      azx_sd_readl(chip, azx_dev, SD_CTL) |
+						 SD_INT_MASK);
+	}
 
 	return 0;
 }
@@ -238,13 +283,14 @@ static u64 azx_adjust_codec_delay(struct snd_pcm_substream *substream,
 /*
  * set up a BDL entry
  */
-static int setup_bdle(struct azx *chip,
+int setup_bdle(struct azx *chip,
 		      struct snd_dma_buffer *dmab,
 		      struct azx_dev *azx_dev, u32 **bdlp,
-		      int ofs, int size, int with_ioc)
+		      int ofs, int size, int with_ioc, bool bdry_check)
 {
 	u32 *bdl = *bdlp;
 
+	dev_dbg(chip->dev, "bdlp:0x%p, bdl:0x%p, dmab:0x%p\n", bdlp, bdl, dmab);
 	while (size > 0) {
 		dma_addr_t addr;
 		int chunk;
@@ -253,13 +299,15 @@ static int setup_bdle(struct azx *chip,
 			return -EINVAL;
 
 		addr = snd_sgbuf_get_addr(dmab, ofs);
+		dev_dbg(chip->dev, "buffer address=%ul\n", addr);
 		/* program the address field of the BDL entry */
 		bdl[0] = cpu_to_le32((u32)addr);
 		bdl[1] = cpu_to_le32(upper_32_bits(addr));
 		/* program the size field of the BDL entry */
 		chunk = snd_sgbuf_get_chunk_size(dmab, ofs, size);
 		/* one BDLE cannot cross 4K boundary on CTHDA chips */
-		if (chip->driver_caps & AZX_DCAPS_4K_BDLE_BOUNDARY) {
+		if (chip->driver_caps & AZX_DCAPS_4K_BDLE_BOUNDARY
+				|| bdry_check) {
 			u32 remain = 0x1000 - (ofs & 0xfff);
 			if (chunk > remain)
 				chunk = remain;
@@ -275,8 +323,10 @@ static int setup_bdle(struct azx *chip,
 		ofs += chunk;
 	}
 	*bdlp = bdl;
+	dev_dbg(chip->dev, "bdl: 0x%p, ofs:0x%x\n", bdl, ofs);
 	return ofs;
 }
+EXPORT_SYMBOL_GPL(setup_bdle);
 
 /*
  * set up BDL entries
@@ -320,7 +370,7 @@ int azx_setup_periods(struct azx *chip,
 		} else {
 			ofs = setup_bdle(chip, snd_pcm_get_dma_buf(substream),
 					 azx_dev,
-					 &bdl, ofs, pos_adj, true);
+					 &bdl, ofs, pos_adj, true, false);
 			if (ofs < 0)
 				goto error;
 		}
@@ -331,12 +381,12 @@ int azx_setup_periods(struct azx *chip,
 		if (i == periods - 1 && pos_adj)
 			ofs = setup_bdle(chip, snd_pcm_get_dma_buf(substream),
 					 azx_dev, &bdl, ofs,
-					 period_bytes - pos_adj, 0);
+					 period_bytes - pos_adj, 0, 0);
 		else
 			ofs = setup_bdle(chip, snd_pcm_get_dma_buf(substream),
 					 azx_dev, &bdl, ofs,
 					 period_bytes,
-					 !azx_dev->no_period_wakeup);
+					 !azx_dev->no_period_wakeup, 0);
 		if (ofs < 0)
 			goto error;
 	}
@@ -544,7 +594,7 @@ int azx_set_device_params(struct azx *chip, struct snd_pcm_substream *substream,
 	/* wallclk has 24Mhz clock source */
 	azx_dev->period_wallclk = (((runtime->period_size * 24000) /
 						runtime->rate) * 1000);
-	azx_setup_controller(chip, azx_dev);
+	azx_setup_controller(chip, azx_dev, 1);
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 		azx_dev->fifo_size =
 			azx_sd_readw(chip, azx_dev, SD_FIFOSIZE) + 1;
@@ -1085,7 +1135,7 @@ void azx_enter_link_reset(struct azx *chip)
 EXPORT_SYMBOL_GPL(azx_enter_link_reset);
 
 /* exit link reset */
-static void azx_exit_link_reset(struct azx *chip)
+void azx_exit_link_reset(struct azx *chip)
 {
 	unsigned long timeout;
 
@@ -1096,6 +1146,7 @@ static void azx_exit_link_reset(struct azx *chip)
 			time_before(jiffies, timeout))
 		usleep_range(500, 1000);
 }
+EXPORT_SYMBOL_GPL(azx_exit_link_reset);
 
 /* reset codec link */
 static int azx_reset(struct azx *chip, int full_reset)
@@ -1264,7 +1315,7 @@ irqreturn_t azx_interrupt(int irq, void *dev_id)
 	}
 
 	status = azx_readl(chip, INTSTS);
-	if (status == 0 || status == 0xffffffff) {
+	if (status == 0) {
 		spin_unlock(&chip->reg_lock);
 		return IRQ_NONE;
 	}
@@ -1306,6 +1357,7 @@ EXPORT_SYMBOL_GPL(azx_interrupt);
 
 static bool is_input_stream(struct azx *chip, unsigned char index)
 {
+
 	return index < chip->playback_index_offset;
 }
 
