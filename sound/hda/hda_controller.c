@@ -1120,7 +1120,7 @@ static int azx_reset(struct azx *chip, int full_reset)
 	/* Brent Chartrand said to wait >= 540us for codecs to initialize */
 	usleep_range(1000, 1200);
 
-      __skip:
+__skip:
 	/* check to see if controller is ready */
 	if (!azx_readb(chip, GCTL)) {
 		dev_dbg(chip->dev, "azx_reset: controller not ready!\n");
@@ -1315,7 +1315,6 @@ int azx_init_stream(struct azx *chip)
 	int i;
 	int in_stream_tag = 0;
 	int out_stream_tag = 0;
-	
 
 	/* initialize each stream (aka device)
 	 * assign the starting bdl address to each stream (device)
@@ -1333,14 +1332,169 @@ int azx_init_stream(struct azx *chip)
 		* the stream direction group,
 		* valid values 1...15
 		*/
-		azx_dev->stream_tag =
-			is_input_stream(chip, i) ?
-			++in_stream_tag : ++out_stream_tag;
+		azx_dev->stream_tag = is_input_stream(chip, i) ?
+					 ++in_stream_tag : ++out_stream_tag;
+
+		if (chip->ppcap_offset) {
+			azx_dev->pphc_addr = chip->remap_addr +
+						 chip->ppcap_offset +
+						 PPHC_BASE +
+						 PPHC_INTERVAL * azx_dev->index;
+
+			azx_dev->pplc_addr = chip->remap_addr +
+						 chip->ppcap_offset +
+						 PPLC_BASE +
+						 PPLC_MULTI *
+						 chip->num_streams +
+						 PPLC_INTERVAL * azx_dev->index;
+		}
+		dev_dbg(chip->dev,
+			"pphc_addr: 0x%p, "
+			"pplc_addr: 0x%p, "
+			"ppcap_offset: 0x%x, "
+			"DMA id: 0x%x",
+			azx_dev->pphc_addr,
+			azx_dev->pplc_addr,
+			chip->ppcap_offset,
+			azx_dev->index);
+
+		dev_dbg(chip->dev,
+			"Stream Id: 0x%x, Tag: 0x%x, "
+			"sd addr: 0x%x, posbuf: 0x%x",
+			azx_dev->index,
+			azx_dev->stream_tag,
+			azx_dev->sd_addr,
+			azx_dev->posbuf);
 	}
 
 	return 0;
 }
 EXPORT_SYMBOL_GPL(azx_init_stream);
+
+void azx_spbcap_one_enable(struct azx *chip, bool enable, int num_stream)
+{
+	u32 mask = 0;
+	u32 register_mask = 0;
+
+	if (!chip->spbcap_offset) {
+		dev_err(chip->dev, "Address of SPB capability is NULL");
+		return;
+	}
+
+	mask |= (1 << num_stream);
+	register_mask = azx_readl_alt(chip, chip->spbcap_offset +
+			ICH6_REG_SPB_SPBFCCTL);
+
+	mask |= register_mask;
+
+	azx_writel_alt(chip,
+		chip->spbcap_offset + ICH6_REG_SPB_SPBFCCTL,
+		enable ? mask : 0);
+
+}
+EXPORT_SYMBOL_GPL(azx_spbcap_one_enable);
+
+/**
+ * azx_ppcap_enable - enable the Processing Pipe capability
+ * @chip: device context
+ * @ppcap_offset: offset of the PP capability header
+ * @enable: enable or disable
+ *
+ * This function enables the Processing Pipe capability
+ * by setting PPCTL.GPROCEN =1.
+ */
+
+void azx_ppcap_enable(struct azx *chip, bool enable)
+{
+	if (!chip->ppcap_offset) {
+		dev_err(chip->dev, "Address of PP capability is NULL");
+		return;
+	}
+
+	azx_writel_andor(
+		chip,
+		chip->ppcap_offset + ICH6_REG_PP_PPCTL,
+		~PPCTL_GPROCEN,
+		enable ? PPCTL_GPROCEN : 0);
+}
+
+int azx_parse_capabilities(struct azx *chip)
+{
+	unsigned int cur_cap;
+	unsigned int offset;
+
+	offset = azx_readl(chip, LLCH);
+
+	/* Lets walk the linked capabilities list */
+	do {
+		cur_cap = azx_readl_alt(chip, offset);
+
+		dev_dbg(chip->dev,
+			"Capability version: 0x%x",
+			((cur_cap & CAP_HDR_VER_MASK) >> CAP_HDR_VER_OFF)
+			);
+		if (((cur_cap & CAP_HDR_VER_MASK) >> CAP_HDR_VER_OFF) == 0) {
+			/*	The usage of this check is TBD
+			*	For now there's only a single version
+			*	of linked capability header format
+			*	so some handling might be required in the future
+			*/
+		}
+
+		dev_dbg(chip->dev,
+			"HDA capability ID: 0x%x",
+			(cur_cap & CAP_HDR_ID_MASK) >> CAP_HDR_ID_OFF
+			);
+
+		switch ((cur_cap & CAP_HDR_ID_MASK) >> CAP_HDR_ID_OFF) {
+		case ML_CAP_ID:
+			dev_dbg(chip->dev, "Found ML capability");
+			break;
+		case GTS_CAP_ID:
+			dev_dbg(chip->dev, "Found GTS capability");
+			break;
+		case PP_CAP_ID:
+			/* PP capability found,
+			* the Audio DSP is present so let's handle it
+			*/
+			dev_dbg(chip->dev, "Found PP capability");
+			/* First enable the capability */
+			chip->ppcap_offset = offset;
+			azx_ppcap_enable(chip, true);
+			/* Register the device in the system */
+			break;
+		case SPB_CAP_ID:
+			/* SPIB capability found, handler function */
+			dev_dbg(chip->dev, "Found SPB capability");
+			/* Setting the offset */
+			chip->spbcap_offset = offset;
+			break;
+		default:
+			dev_dbg(chip->dev, "Unknown capability");
+			break;
+		}
+		/* read the offset of next capabiity */
+		offset = cur_cap & CAP_HDR_NXT_PTR_MASK;
+	} while (offset);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(azx_parse_capabilities);
+
+void azx_ppcap_int_enable(struct azx *chip, bool enable)
+{
+	if (!chip->ppcap_offset) {
+		dev_err(chip->dev, "Address of PP capability is NULL\n");
+		return;
+	}
+
+	azx_writel_andor(
+		chip,
+		chip->ppcap_offset + ICH6_REG_PP_PPCTL,
+		~PPCTL_PIE,
+		enable ? PPCTL_PIE : 0);
+}
+EXPORT_SYMBOL_GPL(azx_ppcap_int_enable);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Common HDA driver funcitons");

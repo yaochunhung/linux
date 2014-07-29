@@ -175,7 +175,7 @@ enum {
 #define use_vga_switcheroo(chip)	0
 #endif
 #ifdef CONFIG_X86
-static void __mark_pages_wc(struct azx *chip, struct snd_dma_buffer *dmab, bool on)
+void __mark_pages_wc(struct azx *chip, struct snd_dma_buffer *dmab, bool on)
 {
 	int pages;
 
@@ -201,31 +201,8 @@ static void __mark_pages_wc(struct azx *chip, struct snd_dma_buffer *dmab, bool 
 	else
 		set_memory_wb((unsigned long)dmab->area, pages);
 }
-
-static inline void mark_pages_wc(struct azx *chip, struct snd_dma_buffer *buf,
-				 bool on)
-{
-	__mark_pages_wc(chip, buf, on);
-}
-static inline void mark_runtime_wc(struct azx *chip, struct azx_dev *azx_dev,
-				   struct snd_pcm_substream *substream, bool on)
-{
-	if (azx_dev->wc_marked != on) {
-		__mark_pages_wc(chip, snd_pcm_get_dma_buf(substream), on);
-		azx_dev->wc_marked = on;
-	}
-}
-#else
-/* NOP for other archs */
-static inline void mark_pages_wc(struct azx *chip, struct snd_dma_buffer *buf,
-				 bool on)
-{
-}
-static inline void mark_runtime_wc(struct azx *chip, struct azx_dev *azx_dev,
-				   struct snd_pcm_substream *substream, bool on)
-{
-}
 #endif
+
 static int azx_acquire_irq(struct azx *chip, int do_disconnect);
 
 /*

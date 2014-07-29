@@ -80,6 +80,10 @@ struct azx_dev {
 	struct cyclecounter azx_cc;
 
 	int delay_negative_threshold;
+
+	unsigned int decoupled:1;
+	void __iomem *pphc_addr;        /* processing pipe stream regs pointer */
+	void __iomem *pplc_addr;        /* processing pipe stream regs pointer */
 };
 
 /* CORB/RIRB */
@@ -202,6 +206,9 @@ struct azx {
 
 	/* secondary power domain for hdmi audio under vga device */
 	struct dev_pm_domain hdmi_pm_domain;
+	unsigned int ppcap_offset;
+	unsigned int spbcap_offset;
+	struct azx_dev saved_azx_dev;
 };
 
 static struct snd_pcm_hardware azx_pcm_hw = {
@@ -229,6 +236,40 @@ static struct snd_pcm_hardware azx_pcm_hw = {
 	.fifo_size =		0,
 };
 
+
+void __mark_pages_wc(struct azx *chip, struct snd_dma_buffer *dmab, bool on);
+
+#ifdef CONFIG_X86
+static inline void mark_pages_wc(struct azx *chip, struct snd_dma_buffer *buf,
+				 bool on)
+{
+	__mark_pages_wc(chip, buf, on);
+}
+static inline void mark_runtime_wc(struct azx *chip, struct azx_dev *azx_dev,
+				   struct snd_pcm_substream *substream, bool on)
+{
+	if (azx_dev->wc_marked != on) {
+		__mark_pages_wc(chip, snd_pcm_get_dma_buf(substream), on);
+		azx_dev->wc_marked = on;
+	}
+}
+#else
+/* NOP for other archs */
+static inline void mark_pages_wc(struct azx *chip, struct snd_dma_buffer *buf,
+				 bool on)
+{
+}
+static inline void mark_runtime_wc(struct azx *chip, struct azx_dev *azx_dev,
+				   struct snd_pcm_substream *substream, bool on)
+{
+}
+#endif
+
+/*capabilities parsing functions*/
+int azx_parse_capabilities(struct azx *chip);
+void azx_ppcap_enable(struct azx *chip, bool enable);
+void azx_ppcap_int_enable(struct azx *chip, bool enable);
+void azx_spbcap_one_enable(struct azx *chip, bool enable, int num_stream);
 
 /* PCM setup */
 static inline struct azx_dev *get_azx_dev(struct snd_pcm_substream *substream)
