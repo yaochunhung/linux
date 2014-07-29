@@ -36,6 +36,10 @@
 #define ICH6_REG_STATESTS		0x0e
 #define ICH6_REG_GSTS			0x10
 #define   ICH6_GSTS_FSTS	(1 << 1)   /* flush status */
+#define ICH6_REG_GCAP2			0x12
+#define ICH6_REG_LLCH			0x14
+#define HDA_OUTSTRMPAY			0x18
+#define HDA_INSTRMPAY			0x1A
 #define ICH6_REG_INTCTL			0x20
 #define ICH6_REG_INTSTS			0x24
 #define ICH6_REG_WALLCLK		0x30	/* 24Mhz source */
@@ -89,6 +93,7 @@ enum { SDI0, SDI1, SDI2, SDI3, SDO0, SDO1, SDO2, SDO3 };
 #define ICH6_REG_SD_FIFOW		0x0e
 #define ICH6_REG_SD_FIFOSIZE		0x10
 #define ICH6_REG_SD_FORMAT		0x12
+#define ICH6_REG_SD_FIFOL		0x14
 #define ICH6_REG_SD_BDLPL		0x18
 #define ICH6_REG_SD_BDLPU		0x1c
 
@@ -231,14 +236,227 @@ enum {
 #define azx_snoop(chip)		true
 #endif
 
+
+/* Some temporary defines to turn on/off functionalilies for test purposes */
+
+/* Timeouts */
+#define LINK_STRST_TIMEOUT 50
+#define LINK_STOP_TIMEOUT 50
+
+#define REG_MASK(bit_num, offset) \
+	(((1 << (bit_num)) - 1) << (offset))
+
+#define HDA_RECUR_REG_OFFSET(_BASE_, _INTERVAL_, _X_, _OFFSET_) \
+	((_BASE_) + ((_INTERVAL_) * (_X_)) + (_OFFSET_))
+
+/* Intel® HD Audio HW specific definitions and parameters*/
+
+#define HDA_PPLCB(_HSTISC_, _HSTOSC_) \
+	(0x10 + 0x10 * ((_HSTISC_) + (_HSTOSC_)))
+
+/* SPT specific definitions */
+
+/* TODO: this parameter should be taken from HW */
+#define HDA_SPT_HSTISC			0x7
+/* TODO: this parameter should be taken from HW */
+#define HDA_SPT_HSTOSC			0x9
+
+#define HDA_SPT_PPLCB	HDA_PPLCB(HDA_SPT_HSTISC, HDA_SPT_HSTOSC)
+
+#define ICH6_REG_CAP_HDR		0x0
+#define CAP_HDR_VER_OFF			28
+#define CAP_HDR_VER_MASK		(0xF << CAP_HDR_VER_OFF)
+#define CAP_HDR_ID_OFF			16
+#define CAP_HDR_ID_MASK			(0xFFF << CAP_HDR_ID_OFF)
+#define CAP_HDR_NXT_PTR_MASK	0xFFFF
+
+/*	registers of Intel® HD Audio Software Position Based FIFO
+*	Capability Structure
+*/
+#define SPB_CAP_ID					0x4
+#define ICH6_REG_SPB_BASE_ADDR		0x700
+#define ICH6_REG_SPB_SPBFCH			0x00
+#define ICH6_REG_SPB_SPBFCCTL		0x04
+/* Base used to calculate the iterating register offset */
+#define ICH6_REG_SPB_XBASE			0x08
+/* Interval used to calculate the iterating register offset */
+#define ICH6_REG_SPB_XINTERVAL		0x08
+
+#define ICH6_REG_SPB_RECUR(_X_, _OFFSET_) \
+	HDA_RECUR_REG_OFFSET( \
+		ICH6_REG_SPB_XBASE, \
+		ICH6_REG_SPB_XINTERVAL, \
+		(_X_), \
+		(_OFFSET_) \
+		)
+
+#define ICH6_REG_SPB_SDXSPIB(_X_)	ICH6_REG_SPB_RECUR((_X_), 0x00)
+#define ICH6_REG_SPB_SDXMAXFIFOS(_X_)	ICH6_REG_SPB_RECUR((_X_), 0x04)
+
+/*	registers of Intel® HD Audio Global Time Synchronization
+*	Capability Structure
+*/
+#define GTS_CAP_ID					0x1
+#define ICH6_REG_GTS_GTSCH			0x00
+#define ICH6_REG_GTS_GTSCD			0x04
+#define ICH6_REG_GTS_GTSCTLAC		0x0C
+#define ICH6_REG_GTS_XBASE			0x20
+#define ICH6_REG_GTS_XINTERVAL		0x20
+
+#define ICH6_REG_GTS_RECUR(_X_, _OFFSET_) \
+	HDA_RECUR_REG_OFFSET( \
+		ICH6_REG_GTS_XBASE, \
+		ICH6_REG_GTS_XINTERVAL, \
+		(_X_), \
+		(_OFFSET_) \
+		)
+
+#define ICH6_REG_GTS_GTSCC(_X_)		ICH6_REG_GTS_RECUR((_X_), 0x00)
+#define ICH6_REG_GTS_WALFCC(_X_)	ICH6_REG_GTS_RECUR((_X_), 0x04)
+#define ICH6_REG_GTS_TSCCL(_X_)		ICH6_REG_GTS_RECUR((_X_), 0x08)
+#define ICH6_REG_GTS_TSCCU(_X_)		ICH6_REG_GTS_RECUR((_X_), 0x0C)
+#define ICH6_REG_GTS_LLPFOC(_X_)	ICH6_REG_GTS_RECUR((_X_), 0x14)
+#define ICH6_REG_GTS_LLPCL(_X_)		ICH6_REG_GTS_RECUR((_X_), 0x18)
+#define ICH6_REG_GTS_LLPCU(_X_)		ICH6_REG_GTS_RECUR((_X_), 0x1C)
+
+/* registers in Intel® HD Audio Processing Pipe Capability Structure */
+#define PP_CAP_ID					0x3
+#define ICH6_REG_PP_PPCH			0x10
+
+#define ICH6_REG_PP_PPCTL			0x04
+#define PPCTL_PIE					(1<<31)
+#define PPCTL_GPROCEN				(1<<30)
+/* _X_ = dma engine # and cannot
+ * exceed 29 (per spec max 30 dma engines)
+ */
+#define PPCTL_PROCEN(_X_)				(1<<(_X_))
+
+#define ICH6_REG_PP_PPSTS			0x08
+
+
+#define ICH6_REG_PP_XBASE			0x10
+#define ICH6_REG_PP_XINTERVAL		0x10
+
+#define ICH6_REG_PP_RECUR(_X_, _OFFSET_) \
+	HDA_RECUR_REG_OFFSET( \
+		ICH6_REG_PP_XBASE, \
+		ICH6_REG_PP_XINTERVAL, \
+		(_X_), \
+		(_OFFSET_) \
+		)
+
+#define PPHC_BASE			0x10
+#define PPHC_INTERVAL		0x10
+
+#define REG_PPHCLLPL			0x0
+#define REG_PPHCLLPU			0x4
+#define REG_PPHCLDPL			0x8
+#define REG_PPHCLDPU			0xC
+
+#define PPLC_BASE			0x10
+#define PPLC_MULTI			0x10
+#define PPLC_INTERVAL		0x10
+
+#define REG_PPLCCTL			0x0
+#define PPLCCTL_STRM_BITS	4
+#define PPLCCTL_STRM_SHIFT	20
+#define PPLCCTL_STRM_MASK \
+	REG_MASK(PPLCCTL_STRM_BITS, PPLCCTL_STRM_SHIFT)
+#define PPLCCTL_RUN		(1<<1)
+#define PPLCCTL_STRST	(1<<0)
+
+#define REG_PPLCFMT			0x4
+#define REG_PPLCLLPL		0x8
+#define REG_PPLCLLPU		0xC
+
+#define ICH6_REG_PP_PPHCXLLPL(_X_) \
+	ICH6_REG_PP_RECUR((_X_), 0x00)
+#define ICH6_REG_PP_PPHCXLLPU(_X_) \
+	ICH6_REG_PP_RECUR((_X_), 0x04)
+#define ICH6_REG_PP_PPHCXLDPL(_X_) \
+	ICH6_REG_PP_RECUR((_X_), 0x08)
+#define ICH6_REG_PP_PPHCXLDPU(_X_) \
+	ICH6_REG_PP_RECUR((_X_), 0x0C)
+#define ICH6_REG_PP_PPLCXCTL(_X_) \
+	ICH6_REG_PP_RECUR((_X_), HDA_SPT_PPLCB + 0x00)
+#define ICH6_REG_PP_PPLCXFMT(_X_) \
+	ICH6_REG_PP_RECUR((_X_), HDA_SPT_PPLCB + 0x04)
+#define ICH6_REG_PP_PPLCXLLPL(_X_) \
+	ICH6_REG_PP_RECUR((_X_), HDA_SPT_PPLCB + 0x08)
+#define ICH6_REG_PP_PPLCXLLPU(_X_) \
+	ICH6_REG_PP_RECUR((_X_), HDA_SPT_PPLCB + 0x0C)
+
+/* registers in Intel® HD Audio Multiple Links Capability Structure */
+#define ML_CAP_ID					0x2
+#define ICH6_REG_ML_MLCH			0x00
+#define ICH6_REG_ML_MLCD			0x04
+#define ICH6_REG_ML_XBASE			0x40
+#define ICH6_REG_ML_XINTERVAL		0x40
+
+#define ICH6_REG_ML_RECUR(_X_, _OFFSET_) \
+	HDA_RECUR_REG_OFFSET( \
+		HDA_ML_XBASE, \
+		HDA_ML_XINTERVAL, \
+		(_X_), \
+		(_OFFSET_) \
+		)
+
+#define ICH6_REG_ML_LCAPX(_X_)		ICH6_REG_ML_RECUR((_X_), 0x00)
+#define ICH6_REG_ML_LCTLX(_X_)		ICH6_REG_ML_RECUR((_X_), 0x04)
+#define ICH6_REG_ML_LOSIDVX(_X_)	ICH6_REG_ML_RECUR((_X_), 0x08)
+#define ICH6_REG_ML_LSDIIDX(_X_)	ICH6_REG_ML_RECUR((_X_), 0x0C)
+#define ICH6_REG_ML_LPSOOX(_X_)		ICH6_REG_ML_RECUR((_X_), 0x10)
+#define ICH6_REG_ML_LPSIOX(_X_)		ICH6_REG_ML_RECUR((_X_), 0x12)
+#define ICH6_REG_ML_LWALFC(_X_)		ICH6_REG_ML_RECUR((_X_), 0x18)
+#define ICH6_REG_ML_LOUTPAYX(_X_)	ICH6_REG_ML_RECUR((_X_), 0x20)
+#define ICH6_REG_ML_LINPAYX(_X_)	ICH6_REG_ML_RECUR((_X_), 0x30)
+
+/* Intel® HD Audio Vendor Specific Registers */
+#define ICH6_REG_VS_EM1					0x1000
+#define ICH6_REG_VS_INRC				0x1004
+#define ICH6_REG_VS_OUTRC				0x1008
+#define ICH6_REG_VS_FIFOTRK				0x100C
+#define ICH6_REG_VS_FIFOTRK2			0x1010
+#define ICH6_REG_VS_EM2					0x1030
+#define ICH6_REG_VS_EM3L				0x1038
+#define ICH6_REG_VS_EM3U				0x103C
+#define ICH6_REG_VS_EM4L				0x1040
+#define ICH6_REG_VS_EM4U				0x1044
+#define ICH6_REG_VS_LTRC				0x1048
+#define ICH6_REG_VS_D0I3C				0x104A
+#define ICH6_REG_VS_PCE					0x104B
+#define ICH6_REG_VS_L2MAGC				0x1050
+#define ICH6_REG_VS_L2LAHPT				0x1054
+#define ICH6_REG_VS_SDXDPIB_XBASE		0x1084
+#define ICH6_REG_VS_SDXDPIB_XINTERVAL	0x20
+#define ICH6_REG_VS_SDXDPIB
+#define ICH6_REG_VS_SDXEFIFOS_XBASE		0x1094
+#define ICH6_REG_VS_SDXEFIFOS_XINTERVAL	0x20
+#define ICH6_REG_VS_SDXEFIFOS
+
+/* Intel® HD Audio Alias Registers */
+#define ICH6_REG_ALIAS_WLCLKA			0x2030
+#define ICH6_REG_ALIAS_SDXLPIBA_XBASE		0x2084
+#define ICH6_REG_ALIAS_SDXLPIBA_XINTERVAL	0x20
+#define ICH6_REG_ALIAS_SDXLPIBA
+
 /*
  * macros for easy use
  */
+#define azx_writel_andor(chip, reg, mask_and, mask_or) \
+	azx_writel_alt( \
+		(chip), \
+		(reg), \
+		(azx_readl_alt((chip), (reg)) & (mask_and)) | (mask_or))
 
 #define azx_writel(chip, reg, value) \
 	((chip)->ops->reg_writel(value, (chip)->remap_addr + ICH6_REG_##reg))
+#define azx_writel_alt(chip, reg, value) \
+	((chip)->ops->reg_writel(value, (chip)->remap_addr + reg))
 #define azx_readl(chip, reg) \
 	((chip)->ops->reg_readl((chip)->remap_addr + ICH6_REG_##reg))
+#define azx_readl_alt(chip, reg) \
+	((chip)->ops->reg_readl((chip)->remap_addr + reg))
 #define azx_writew(chip, reg, value) \
 	((chip)->ops->reg_writew(value, (chip)->remap_addr + ICH6_REG_##reg))
 #define azx_readw(chip, reg) \
@@ -260,5 +478,56 @@ enum {
 	((chip)->ops->reg_writeb(value, (dev)->sd_addr + ICH6_REG_##reg))
 #define azx_sd_readb(chip, dev, reg) \
 	((chip)->ops->reg_readb((dev)->sd_addr + ICH6_REG_##reg))
+
+#define azx_pphc_writel(chip, dev, reg, value) \
+	((chip)->ops->reg_writel(value, (dev)->pphc_addr + (reg)))
+#define azx_pphc_readl(chip, dev, reg) \
+	((chip)->ops->reg_readl((dev)->pphc_addr + (reg)))
+#define azx_pphc_writew(chip, dev, reg, value) \
+	((chip)->ops->reg_writew(value, (dev)->pphc_addr + (reg)))
+#define azx_pphc_readw(chip, dev, reg) \
+	((chip)->ops->reg_readw((dev)->pphc_addr, (reg)))
+#define azx_pphc_writeb(chip, dev, reg, value) \
+	((chip)->ops->reg_writeb(value, (dev)->pphc_addr + (reg)))
+#define azx_pphc_readb(chip, dev, reg) \
+	((chip)->ops->reg_readb((dev)->pphc_addr, (reg)))
+
+#define azx_pplc_writel(chip, dev, reg, value) \
+	((chip)->ops->reg_writel(value, (dev)->pplc_addr + (reg)))
+#define azx_pplc_readl(chip, dev, reg) \
+	((chip)->ops->reg_readl((dev)->pplc_addr + (reg)))
+#define azx_pplc_writew(chip, dev, reg, value) \
+	((chip)->ops->reg_writew(value, (dev)->pplc_addr + (reg)))
+#define azx_pplc_readw(chip, dev, reg) \
+	((chip)->ops->reg_readw((dev)->pplc_addr + (reg)))
+#define azx_pplc_writeb(chip, dev, reg, value) \
+	((chip)->ops->reg_writeb(value, (dev)->pplc_addr + (reg)))
+#define azx_pplc_readb(chip, dev, reg) \
+	((chip)->ops->reg_readb((dev)->pplc_addr + (reg)))
+
+#define azx_pphc_writel_andor(chip, dev, reg, mask_and, mask_or) \
+	((chip)->ops->reg_writel( \
+		((chip)->ops->reg_readl((dev)->pphc_addr + (reg)) & (mask_and)) | (mask_or), \
+		((dev)->pphc_addr + (reg))))
+#define azx_pphc_writew_andor(chip, dev, reg, mask_and, mask_or) \
+	((chip)->ops->reg_writew( \
+		((chip)->ops->reg_readl((dev)->pphc_addr + (reg)) & (mask_and)) | (mask_or), \
+		(dev)->pphc_addr + (reg)))
+#define azx_pphc_writeb_andor(chip, dev, reg, mask_and, mask_or) \
+	((chip)->ops->reg_writeb( \
+		((chip)->ops->reg_readb((dev)->pphc_addr + (reg)) & (mask_and)) | (mask_or), \
+		(dev)->pphc_addr + (reg)))
+#define azx_pplc_writel_andor(chip, dev, reg, mask_and, mask_or) \
+	((chip)->ops->reg_writel( \
+		((chip)->ops->reg_readl((dev)->pplc_addr + (reg)) & (mask_and)) | (mask_or), \
+		(dev)->pplc_addr + (reg)))
+#define azx_pplc_writew_andor(chip, dev, reg, mask_and, mask_or) \
+	((chip)->ops->reg_writew( \
+		((chip)->ops->reg_readl((dev)->pplc_addr + (reg)) & (mask_and)) | (mask_or),\
+		(dev)->pplc_addr + (reg)))
+#define azx_pplc_writeb_andor(chip, dev, reg, mask_and, mask_or) \
+	((chip)->ops->reg_writeb( \
+		((chip)->ops->reg_readb((dev)->pplc_addr + (reg)) & (mask_and)) | (mask_or),\
+		(dev)->pplc_addr + (reg)))
 
 #endif /* __SOUND_HDA_REGISTER_H */
