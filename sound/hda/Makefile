@@ -1,4 +1,4 @@
-snd-hda-controller-objs := hda_controller.o
+snd-hda-controller-objs := hda_controller.o hda_dma.o
 
 snd-hda-codec-y := hda_codec.o hda_jack.o hda_auto_parser.o hda_eld.o hda_sysfs.o
 snd-hda-codec-$(CONFIG_PROC_FS) += hda_proc.o
