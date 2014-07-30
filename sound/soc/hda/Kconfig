@@ -24,6 +24,11 @@ if  SND_SOC_HDA_INTEL
 	Note that the pre-allocation size can be changed dynamically
 	via a proc file (/proc/asound/card*/pcm*/sub*/prealloc), too.
 
+config SND_HDA_INTEL_SKL_FPGA
+	tristate "Intel HD Audio SKL FPGA"
+        help
+          Say Y here to enable the support for SKL/SPT audio FPGA Device.
+	  To compile this driver as a module, choose M here.
 endif
 
 config SND_SOC_HDA_SST_DSP

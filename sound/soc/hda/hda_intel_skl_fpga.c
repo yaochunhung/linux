@@ -1,0 +1,263 @@
+/*
+ * Intel HDA SKYLAKE FPGA driver
+ *
+ * Copyright (C) 2013, Intel Corporation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License version
+ * 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ */
+
+
+#include <linux/module.h>
+#include <linux/pci.h>
+#include <linux/debugfs.h>
+#include <asm/uaccess.h>
+
+
+#define HDA_INTEL_SKL_FPGA_ROM_SIZE (32 * 1024)
+#define HDA_INTEL_SKL_FPGA_ROM_BAR_IDX 2
+#define HDA_INTEL_SKL_FPGA_ROM_KEY_OFFSET 0x805c
+#define HDA_INTEL_SKL_FPGA_ROM_MEM_OFFSET 0xc000
+
+struct hda_intel_skl_fpga_dev {
+	void __iomem *rom_mem_base;
+	struct pci_dev *pdev;
+};
+
+static u32 hda_intel_skl_fpga_readl(
+	struct hda_intel_skl_fpga_dev *fpgadev,
+	u32 offset)
+{
+	u32 val;
+	val = readl((fpgadev)->rom_mem_base + offset);
+
+	return val;
+}
+
+static void hda_intel_skl_fpga_writel(
+	struct hda_intel_skl_fpga_dev *fpgadev,
+	u32 offset,
+	u32 val)
+{
+	writel(val, (fpgadev)->rom_mem_base + offset);
+}
+
+
+static int hda_intel_skl_fpga_rom_open(struct inode *inode, struct file *file)
+{
+	file->private_data = inode->i_private;
+	return 0;
+}
+
+static ssize_t hda_intel_skl_fpga_rom_read(struct file *file,
+		char __user *buffer, size_t count, loff_t *ppos)
+{
+	struct hda_intel_skl_fpga_dev *fpgadev = file->private_data;
+	int i, size;
+	u32 *buf;
+
+	dev_dbg(&fpgadev->pdev->dev, "%s: pbuf: %p, *ppos: 0x%llx",
+		__func__, buffer, *ppos);
+
+	size = HDA_INTEL_SKL_FPGA_ROM_SIZE;
+
+	if (*ppos >= size)
+		return 0;
+	if (*ppos + count > size)
+		count = size - *ppos;
+
+	buf = kzalloc(size, GFP_KERNEL);
+	if (!buf) {
+		dev_dbg(&fpgadev->pdev->dev, " %s: kzalloc failed, aborting\n",
+			__func__);
+		return -ENOMEM;
+	}
+	/* half of rom image in 32bit chunks */
+	size = size / 2 / sizeof(*buf);
+
+	/* read first half of rom image */
+	hda_intel_skl_fpga_writel(
+		fpgadev, HDA_INTEL_SKL_FPGA_ROM_KEY_OFFSET, 0);
+	for (i = 0; i < size; i++)
+		buf[i] = hda_intel_skl_fpga_readl(
+					fpgadev,
+					HDA_INTEL_SKL_FPGA_ROM_MEM_OFFSET
+					+ i * sizeof(*buf));
+
+	/* read second half of rom image */
+	hda_intel_skl_fpga_writel(
+		fpgadev, HDA_INTEL_SKL_FPGA_ROM_KEY_OFFSET, 1);
+	for (i = 0; i < size; i++)
+		buf[i + size] = hda_intel_skl_fpga_readl(
+					fpgadev,
+					HDA_INTEL_SKL_FPGA_ROM_MEM_OFFSET
+					+ i * sizeof(*buf));
+
+	copy_to_user(buffer, buf, count);
+	kfree(buf);
+
+	*ppos += count;
+
+	dev_dbg(&fpgadev->pdev->dev, "%s: *ppos: 0x%llx, count: %zu",
+		__func__, *ppos, count);
+
+	return count;
+}
+
+static ssize_t hda_intel_skl_fpga_rom_write(struct file *file,
+		const char __user *buffer, size_t count, loff_t *ppos)
+{
+	struct hda_intel_skl_fpga_dev *fpgadev = file->private_data;
+	int i, size;
+	u32 *buf;
+
+	dev_dbg(&fpgadev->pdev->dev, "%s: pbuf: %p, *ppos: 0x%llx",
+			__func__, buffer, *ppos);
+
+	size = HDA_INTEL_SKL_FPGA_ROM_SIZE;
+
+	if (*ppos >= size)
+		return 0;
+	if (*ppos + count > size)
+		count = size - *ppos;
+
+	buf = kzalloc(size, GFP_KERNEL);
+	if (!buf) {
+		dev_dbg(&fpgadev->pdev->dev, " %s: kzalloc failed, aborting\n",
+			__func__);
+		return -ENOMEM;
+	}
+
+	copy_from_user(buf, buffer, count);
+
+	/* half of rom image in 32bit chunks */
+	size = size / 2 / sizeof(*buf);
+
+	/* write first half of rom image */
+	hda_intel_skl_fpga_writel(
+		fpgadev, HDA_INTEL_SKL_FPGA_ROM_KEY_OFFSET, 0);
+	for (i = 0; i < size; i++)
+		hda_intel_skl_fpga_writel(
+					fpgadev,
+					HDA_INTEL_SKL_FPGA_ROM_MEM_OFFSET
+					+ i * sizeof(*buf), buf[i]);
+
+	/* write second half of rom image */
+	hda_intel_skl_fpga_writel(
+		fpgadev, HDA_INTEL_SKL_FPGA_ROM_KEY_OFFSET, 1);
+	for (i = 0; i < size; i++)
+		hda_intel_skl_fpga_writel(
+					fpgadev,
+					HDA_INTEL_SKL_FPGA_ROM_MEM_OFFSET
+					+ i * sizeof(*buf), buf[i + size]);
+
+	kfree(buf);
+	*ppos += count;
+
+	dev_dbg(&fpgadev->pdev->dev, "%s: *ppos: 0x%llx, count: %zu",
+		__func__, *ppos, count);
+
+	return count;
+}
+
+static const struct file_operations hda_intel_skl_fpga_rom_fops = {
+	.owner = THIS_MODULE,
+	.open = hda_intel_skl_fpga_rom_open,
+	.read = hda_intel_skl_fpga_rom_read,
+	.write = hda_intel_skl_fpga_rom_write,
+};
+
+static int hda_intel_skl_fpga_probe(struct pci_dev *pdev,
+		const struct pci_device_id *pci_id)
+{
+	struct hda_intel_skl_fpga_dev *fpgadev;
+	int ret = 0;
+
+	ret = pci_enable_device(pdev);
+	if (ret) {
+		dev_err(&pdev->dev, "%s: pci_enable_device failed: %d\n",
+			__func__, ret);
+		return ret;
+	}
+
+	fpgadev = kzalloc(sizeof(struct hda_intel_skl_fpga_dev), GFP_KERNEL);
+	if (!fpgadev) {
+		dev_err(&pdev->dev, "%s: kzalloc failed, aborting.\n",
+			__func__);
+		ret = -ENOMEM;
+		goto err_alloc;
+	}
+
+	fpgadev->rom_mem_base
+		= pci_ioremap_bar(pdev, HDA_INTEL_SKL_FPGA_ROM_BAR_IDX);
+	if (!fpgadev->rom_mem_base) {
+		dev_err(&pdev->dev, "%s: ioremap failed, aborting\n",
+			__func__);
+		ret = -ENXIO;
+		goto err_map;
+	}
+
+	fpgadev->pdev = pdev;
+
+	pci_set_drvdata(pdev, fpgadev);
+
+	if (!debugfs_create_file("intel_oed_rom", 0644, NULL,
+		fpgadev, &hda_intel_skl_fpga_rom_fops)) {
+		dev_err(&pdev->dev, "%s: cannot create debugfs entry.\n",
+			__func__);
+		ret = -ENODEV;
+		goto err_map;
+	}
+
+	return ret;
+
+err_map:
+	if (fpgadev->rom_mem_base) {
+		iounmap(fpgadev->rom_mem_base);
+		fpgadev->rom_mem_base = NULL;
+	}
+	kfree(fpgadev);
+err_alloc:
+	pci_disable_device(pdev);
+	return ret;
+}
+
+static void hda_intel_skl_fpga_remove(struct pci_dev *pdev)
+{
+	struct hda_intel_skl_fpga_dev *fpgadev = pci_get_drvdata(pdev);
+
+	/* unmap PCI memory space, mapped during device init. */
+	if (fpgadev->rom_mem_base) {
+		iounmap(fpgadev->rom_mem_base);
+		fpgadev->rom_mem_base = NULL;
+	}
+	pci_disable_device(pdev);
+	kfree(fpgadev);
+}
+
+/* PCI IDs */
+static DEFINE_PCI_DEVICE_TABLE(hda_intel_skl_fpga_ids) = {
+	{ PCI_DEVICE(0x8086, 0xF501) },
+	{ 0, }
+};
+MODULE_DEVICE_TABLE(pci, hda_intel_skl_fpga_ids);
+
+/* pci_driver definition */
+static struct pci_driver hda_intel_skl_fpga_driver = {
+	.name = KBUILD_MODNAME,
+	.id_table = hda_intel_skl_fpga_ids,
+	.probe = hda_intel_skl_fpga_probe,
+	.remove = hda_intel_skl_fpga_remove,
+};
+
+module_pci_driver(hda_intel_skl_fpga_driver);
+
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Intel HDA SKYLAKE FPGA driver");
