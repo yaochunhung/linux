@@ -878,7 +878,7 @@ int hda_sst_dsp_control_init(struct snd_soc_platform *platform)
 	}
 
 	dev_dbg(platform->dev, "In%s req firmware topology bin\n",  __func__);
-	ret = request_firmware(&fw, "dfw_sst_new.bin", platform->dev);
+	ret = request_firmware(&fw, "dfw_sst.bin", platform->dev);
 	if (fw == NULL) {
 		dev_err(chip->dev, "config firmware request failed with %d\n", ret);
 		return ret;
