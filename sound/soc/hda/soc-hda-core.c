@@ -366,7 +366,7 @@ static void azx_clear_irq_pending(struct azx *chip)
 
 static int azx_acquire_irq(struct azx *chip, int do_disconnect)
 {
-	unsigned long flags;
+	unsigned long flags = 0;
 
 	if (chip->ppcap_offset)
 		flags = IRQF_SHARED;
@@ -1032,7 +1032,8 @@ int azx_codec_create(struct azx *chip, const char *model)
 	/* First try to probe all given codec slots */
 	for (c = 0; c < max_slots; c++) {
 		if ((chip->codec_mask & (1 << c)) & chip->codec_probe_mask) {
-			if (probe_codec(chip, c) < 0) {
+			if (probe_codec(chip, c) < 0 &&
+				!chip->ppcap_offset) {
 				/* Some BIOSen give you wrong codec addresses
 				 * that don't exist
 				 */
@@ -1159,6 +1160,7 @@ static int azx_first_init(struct azx *chip)
 		return -ENXIO;
 	}
 
+	azx_parse_capabilities(chip);
 	if (chip->msi)
 		if (pci_enable_msi(pci) < 0)
 			chip->msi = 0;
@@ -1168,8 +1170,6 @@ static int azx_first_init(struct azx *chip)
 
 	pci_set_master(pci);
 	synchronize_irq(chip->irq);
-
-	azx_parse_capabilities(chip);
 
 	gcap = azx_readw(chip, GCAP);
 	dev_dbg(chip->dev, "chipset global capabilities = 0x%x\n", gcap);
@@ -1233,10 +1233,10 @@ static int azx_first_init(struct azx *chip)
 	azx_init_chip(chip, (probe_only & 2) == 0);
 
 	/* codec detection */
-	/*if (!chip->codec_mask) {
+	if (!chip->codec_mask && !chip->ppcap_offset) {
 		dev_err(chip->dev, "no codecs found!\n");
 		return -ENODEV;
-	}*/
+	}
 
 	return 0;
 }
