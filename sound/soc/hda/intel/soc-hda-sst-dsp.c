@@ -39,7 +39,6 @@
 #define DSP_CORE_SET_RESET_STATE_TIMEOUT	50
 #define DSP_CORE_UNSET_RESET_STATE_TIMEOUT	50
 
-#ifdef DEBUG
 u8 sst_readb_traced(struct sst_dsp_ctx *dsp, u32 offset)
 {
 	u8 val;
@@ -87,7 +86,6 @@ void sst_writel_traced(struct sst_dsp_ctx *dsp, u32 offset, u32 val)
 	dev_dbg(dsp->dev, "offset=%x val=%x\n", offset, val);
 	writel(val, (dsp)->mmio_base + offset);
 }
-#endif
 
 /* generic functions */
 static irqreturn_t sst_interrupt(int irq, void *dev_id);
