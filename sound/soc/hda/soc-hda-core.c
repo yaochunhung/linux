@@ -366,8 +366,15 @@ static void azx_clear_irq_pending(struct azx *chip)
 
 static int azx_acquire_irq(struct azx *chip, int do_disconnect)
 {
+	unsigned long flags;
+
+	if (chip->ppcap_offset)
+		flags = IRQF_SHARED;
+	else
+		flags = chip->msi ? 0 : IRQF_SHARED;
+
 	if (request_irq(chip->pci->irq, azx_interrupt,
-			chip->msi ? 0 : IRQF_SHARED,
+			flags,
 			KBUILD_MODNAME, chip)) {
 		dev_err(chip->dev,
 			"unable to grab IRQ %d, disabling device\n",
@@ -1162,6 +1169,8 @@ static int azx_first_init(struct azx *chip)
 	pci_set_master(pci);
 	synchronize_irq(chip->irq);
 
+	azx_parse_capabilities(chip);
+
 	gcap = azx_readw(chip, GCAP);
 	dev_dbg(chip->dev, "chipset global capabilities = 0x%x\n", gcap);
 
@@ -1224,10 +1233,10 @@ static int azx_first_init(struct azx *chip)
 	azx_init_chip(chip, (probe_only & 2) == 0);
 
 	/* codec detection */
-	if (!chip->codec_mask) {
+	/*if (!chip->codec_mask) {
 		dev_err(chip->dev, "no codecs found!\n");
 		return -ENODEV;
-	}
+	}*/
 
 	return 0;
 }
@@ -1398,10 +1407,25 @@ static int azx_probe_continue(struct azx *chip)
 	chip->beep_mode = beep_mode;
 #endif
 
+	pci_set_drvdata(pci, chip);
+
 	/*create new hda_bus */
 	err = azx_bus_create(chip);
 	if (err < 0)
 		goto out_free;
+
+	/* check if dsp is there */
+	if (chip->ppcap_offset) {
+		err = dsp_register(chip);
+		if (err < 0) {
+			dev_dbg(chip->dev, "error failed to register dsp\n");
+			goto out_free;
+		}
+		/*FIXME machine name need to be read from DSDT entry*/
+		err = azx_load_i2s_machine(chip);
+		if (err < 0)
+			goto out_free;
+	}
 
 	/*register platfrom dai and controls */
 	err = soc_hda_platform_register(&pci->dev);
@@ -1437,18 +1461,28 @@ out_free:
 
 static void azx_remove(struct pci_dev *pci)
 {
-	struct azx *chip = pci_get_drvdata(pci);
+	struct azx *chip  = pci_get_drvdata(pci);
+
+	if (chip->init_failed)
+		return;
+
+	chip = pci_get_drvdata(pci);
 	if (pci_dev_run_wake(pci))
 		pm_runtime_get_noresume(&pci->dev);
-	pci_dev_put(pci);
+
+	azx_i2s_machine_device_unregister(chip);
+	dev_dbg(chip->dev, "In %s machine device removed", __func__);
 	soc_hda_platform_unregister(&pci->dev);
+	dev_dbg(chip->dev, "In %s platform component removed", __func__);
 	snd_soc_hda_bus_release();
+	dev_dbg(chip->dev, "In %s bus unregistered", __func__);
+	azx_dsp_unregister(chip);
+	dev_dbg(chip->dev, "In %s dsp unrwgistered", __func__);
 	azx_free(chip);
+	dev_dbg(chip->dev, "In %s azx_free", __func__);
 	pci_set_drvdata(pci, NULL);
 }
 
-
-/* PCI IDs */
 /* PCI IDs */
 static DEFINE_PCI_DEVICE_TABLE(azx_ids) = {
 	/* CPT */

@@ -23,7 +23,14 @@ if  SND_SOC_HDA_INTEL
 
 	Note that the pre-allocation size can be changed dynamically
 	via a proc file (/proc/asound/card*/pcm*/sub*/prealloc), too.
+
 endif
+
+config SND_SOC_HDA_SST_DSP
+	tristate "Enable SST DSP Library"
+	default n
+	help
+	  Say Y here to enable the HD-audio SST dsp library.
 
 config SND_SOC_HDA_GENERIC_MACH
 	tristate "SOC Machine Audio driver for HDA"
