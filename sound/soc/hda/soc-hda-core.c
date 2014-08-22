@@ -1409,6 +1409,7 @@ static int azx_probe_continue(struct azx *chip)
 
 	pci_set_drvdata(pci, chip);
 
+	pci_set_drvdata(pci, chip);
 	/*create new hda_bus */
 	err = azx_bus_create(chip);
 	if (err < 0)

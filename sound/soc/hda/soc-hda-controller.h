@@ -17,22 +17,55 @@
 
 #include <sound/core.h>
 #include <sound/initval.h>
+#include <sound/soc.h>
 #include <sound/hda_bus.h>
 #include <sound/hda_controller.h>
 #include <sound/soc-hda-sst-dsp.h>
 #include <sound/soc-hda-bus.h>
+#include "soc-hda-controls.h"
+
+#define HDA_MONO 1
+#define HDA_STEREO 2
+
+struct hda_platform_info;
 
 struct snd_soc_azx {
 	struct azx hda_azx;
 	struct snd_soc_hda_bus *sbus;
+	struct hda_platform_info *pinfo;
 	struct sst_dsp_ctx *dsp;
 	struct platform_device *i2s_pdev;
+};
+
+struct fw_resource {
+	u32 max_mcps;
+	u32 max_mem;
+	u32 mcps;
+	u32 mem;
+};
+
+struct hda_platform_info {
+	struct azx *chip;
+	struct device *dev;
+	u32 *widget;
+	struct fw_resource resource;
+	struct list_head ppl_start_list;
 };
 
 unsigned int azx_get_position(struct azx *chip, struct azx_dev *azx_dev,
 				bool with_check);
 int soc_hda_platform_unregister(struct device *dev);
 int soc_hda_platform_register(struct device *dev);
+unsigned int soc_hda_soc_read(struct snd_soc_platform *platform,
+		 unsigned int reg);
+int soc_hda_soc_write(struct snd_soc_platform *platform,
+	unsigned int reg, unsigned int val);
+void hda_sst_set_copier_dma_id(struct snd_soc_dai *dai, int dma_id, int stream);
+int hda_sst_set_fe_pipeline_state(struct snd_soc_dai *dai,
+			 bool start, int stream);
+void hda_sst_set_copier_hw_params(struct snd_soc_dai *dai,
+	struct snd_pcm_hw_params *params, int stream);
+int hda_sst_dsp_control_init(struct snd_soc_platform *platform);
 
 int dsp_register(struct azx *chip);
 void azx_dsp_unregister(struct azx *chip);
