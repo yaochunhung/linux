@@ -2,6 +2,7 @@ config SND_SOC_HDA_INTEL
 	tristate "ASoC Intel HD Audio"
 	select SND_CORE_HDA
 	select SND_SOC_HDA_BUS
+	select SND_SOC_HDA_SST_DSP
 	help
 	Say Y here to include support for ASoC Intel "High Definition
 	Audio" (Azalia) and its compatible devices.
@@ -27,15 +28,31 @@ if  SND_SOC_HDA_INTEL
 config SND_HDA_INTEL_SKL_FPGA
 	tristate "Intel HD Audio SKL FPGA"
         help
-          Say Y here to enable the support for SKL/SPT audio FPGA Device.
-	  To compile this driver as a module, choose M here.
+	Say Y here to enable the support for SKL/SPT audio FPGA Device
+	To compile this driver as a module, choose M here.
 endif
 
 config SND_SOC_HDA_SST_DSP
 	tristate "Enable SST DSP Library"
-	default n
 	help
 	  Say Y here to enable the HD-audio SST dsp library.
+
+config SND_SOC_HDA_MRGFLD_MACH
+	tristate "SOC Machine Audio driver for MRGFLD HDA"
+	select SND_SOC_FLORIDA
+	select SND_SOC_WM_ADSP
+	select SND_SOC_ARIZONA
+	select MFD_ARIZONA
+	select MFD_FLORIDA
+	select REGULATOR_ARIZONA
+	select GPIO_ARIZONA
+	select SND_SOC_HDA_BUS
+	default n
+	help
+	This adds support for ASoC machine driver . This will create an alsa
+	sound card.
+	Say Y if you have such a device
+	If unsure select "N".
 
 config SND_SOC_HDA_GENERIC_MACH
 	tristate "SOC Machine Audio driver for HDA"

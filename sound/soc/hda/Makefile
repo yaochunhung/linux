@@ -7,6 +7,8 @@ snd-soc-hda-intel-objs := soc-hda-core.o soc-hda-pcm.o soc-hda-sst-pipe.o soc-hd
 
 snd-mach_hda_generic-objs := mach_hda_generic.o
 
+snd-mrgfld_dpcm_florida-objs := mrgfld_dpcm_florida.o
+
 # DSP library
 obj-$(CONFIG_SND_SOC_HDA_SST_DSP) += intel/
 
@@ -15,6 +17,8 @@ obj-$(CONFIG_SND_SOC_HDA_BUS) += snd-soc-hda-bus.o
 obj-$(CONFIG_SND_SOC_HDA_INTEL) += snd-soc-hda-intel.o
 
 obj-$(CONFIG_SND_SOC_HDA_GENERIC_MACH) += snd-mach_hda_generic.o
+
+obj-$(CONFIG_SND_SOC_HDA_MRGFLD_MACH) += snd-mrgfld_dpcm_florida.o
 
 # for intel skylake fpga device
 #snd-hda-intel-skl-fpga-objs := hda_intel_skl_fpga.o
