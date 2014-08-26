@@ -57,9 +57,13 @@
 #define CODEC_IN_MCLK1_RATE			19200000
 /* Input clock to codec at MCLK2 PIN */
 #define CODEC_IN_MCLK2_RATE			32768
+/* Input bit clock to codec */
+#define CODEC_IN_BCLK_RATE			4800000
+
 /*  define to select between MCLK1 and MCLK2 input to codec as its clock */
 #define CODEC_IN_MCLK1				1
 #define CODEC_IN_MCLK2				2
+#define CODEC_IN_BCLK				3
 
 /* TODO: check the OSC and PMIC stuff for Morganfield */
 /* Register address for OSC Clock */
@@ -132,9 +136,12 @@ static struct snd_soc_dai *morg_florida_get_codec_dai(struct snd_soc_card *card,
  * card	: Sound card structure
  * src	: Input clock source to codec
  */
+
 static int morg_florida_set_codec_clk(struct snd_soc_codec *florida_codec, int src)
 {
 	int ret;
+
+	pr_debug("morg_florida_set_codec_clk: source %d\n", src);
 
 	/*reset FLL1*/
 	snd_soc_codec_set_pll(florida_codec, FLORIDA_FLL1_REFCLK,
@@ -147,24 +154,36 @@ static int morg_florida_set_codec_clk(struct snd_soc_codec *florida_codec, int s
 		/* Turn ON the PLL to generate required sysclk rate
 		 * from MCLK1 */
 		ret = snd_soc_codec_set_pll(florida_codec, FLORIDA_FLL1,
-				ARIZONA_CLK_SRC_MCLK1,  CODEC_IN_MCLK1_RATE,
+				ARIZONA_CLK_SRC_MCLK1, CODEC_IN_MCLK1_RATE,
+				CODEC_SYSCLK_RATE);
+		if (ret != 0) {
+			dev_err(florida_codec->dev, "Failed to enable FLL1 with Ref(MCLK) Clock Loop: %d\n", ret);
+			return ret;
+		}
+		break;
+	case CODEC_IN_BCLK:
+		/* Turn ON the PLL to generate required sysclk rate
+		 * from BCLK */
+		ret = snd_soc_codec_set_pll(florida_codec, FLORIDA_FLL1,
+				ARIZONA_CLK_SRC_AIF1BCLK, CODEC_IN_BCLK_RATE,
 				CODEC_SYSCLK_RATE);
 		if (ret != 0) {
 			dev_err(florida_codec->dev, "Failed to enable FLL1 with Ref Clock Loop: %d\n", ret);
 			return ret;
 		}
 
-		/*Switch to PLL*/
-		ret = snd_soc_codec_set_sysclk(florida_codec,
-				ARIZONA_CLK_SYSCLK, ARIZONA_CLK_SRC_FLL1,
-				CODEC_SYSCLK_RATE, SND_SOC_CLOCK_IN);
-		if (ret != 0) {
-			dev_err(florida_codec->dev, "Failed to set SYSCLK to FLL1: %d\n", ret);
-			return ret;
-		}
 		break;
 	default:
 		return -EINVAL;
+	}
+
+	/*Switch to PLL*/
+	ret = snd_soc_codec_set_sysclk(florida_codec,
+			ARIZONA_CLK_SYSCLK, ARIZONA_CLK_SRC_FLL1,
+			CODEC_SYSCLK_RATE, SND_SOC_CLOCK_IN);
+	if (ret != 0) {
+		dev_err(florida_codec->dev, "Failed to set SYSCLK to FLL1: %d\n", ret);
+		return ret;
 	}
 
 	return 0;
@@ -184,7 +203,7 @@ static int morg_florida_set_clk_fmt(struct snd_soc_codec *codec)
 	 * dependency is clean.
 	 */
 	/* Switch to 19.2MHz MCLK1 input clock for codec */
-	ret = morg_florida_set_codec_clk(codec, CODEC_IN_MCLK1);
+	ret = morg_florida_set_codec_clk(codec, CODEC_IN_BCLK);
 
 	return ret;
 }
@@ -341,13 +360,15 @@ static const struct snd_soc_dapm_route morg_map[] = {
 	{ "IN1R", NULL, "AMIC" },
 
 	/* SWM map link the SWM outs to codec AIF */
-	{ "Dummy Playback", NULL, "Codec Tx"},
+	{ "AIF1 Playback", NULL, "Codec Tx"},
 	{ "Codec Tx", NULL, "codec1_out"},
 	{ "Codec Tx", NULL, "codec0_out"},
 
 	{ "codec0_in", NULL, "Codec Rx" },
+	{ "codec1_in", NULL, "Codec Rx" },
 	{ "dmic01_hifi", NULL, "Codec Rx" },
-	{ "Codec Rx", NULL, "Dummy Capture"},
+	{ "Codec Rx", NULL, "AIF1 Capture"},
+
 	/* TODO: map for rest of the ports */
 
 #ifdef OSC_PMIC
@@ -374,9 +395,17 @@ static int morg_florida_init(struct snd_soc_pcm_runtime *runtime)
 	struct snd_soc_dapm_context *dapm =  &(florida_codec->dapm);
 
 
-	pr_debug("Entry %s\n", __func__);
+	pr_info("Entry %s\n", __func__);
 
-	fmt =   SND_SOC_DAIFMT_DSP_A | SND_SOC_DAIFMT_IB_NF
+	ret = snd_soc_dai_set_tdm_slot(florida_dai, 0, 0, 4, 25);
+	/* slot width is set as 25, SNDRV_PCM_FORMAT_S32_LE */
+	if (ret < 0) {
+		pr_err("can't set codec pcm format %d\n", ret);
+		return ret;
+	}
+
+	/* bit clock inverse not required */
+	fmt =   SND_SOC_DAIFMT_DSP_A | SND_SOC_DAIFMT_NB_NF
 		| SND_SOC_DAIFMT_CBS_CFS;
 	ret = snd_soc_dai_set_fmt(florida_dai, fmt);
 	if (ret < 0) {
@@ -462,9 +491,10 @@ static int morg_florida_codec_fixup(struct snd_soc_pcm_runtime *rtd,
 	channels->min = channels->max = 4;
 
 	/* set SSP2 to 24-bit */
-	snd_mask_set(&params->masks[SNDRV_PCM_HW_PARAM_FORMAT -
-				    SNDRV_PCM_HW_PARAM_FIRST_MASK],
-				    SNDRV_PCM_FORMAT_S24_LE);
+	snd_mask_none(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT));
+	snd_mask_set(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT), SNDRV_PCM_FORMAT_S24_LE);
+
+	pr_debug("param width set to:0x%x\n", snd_pcm_format_width(params_format(params)));
 	return 0;
 }
 
@@ -493,7 +523,7 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 		.codec_name = "snd-soc-dummy",
 		.codec_dai_name = "snd-soc-dummy-dai",
 		.platform_name = "0000:02:18.0",
-	/*	.init = morg_florida_init, */
+		.init = morg_florida_init,
 		.ignore_suspend = 1,
 		.dynamic = 1,
 		.ops = &morg_florida_ops,
@@ -587,22 +617,7 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 		.dsp_loopback = true,
 	},
 #endif
-#if 1
 	/* back ends */
-	/* For testing with dummy ports */
-	{
-		.name = "SSP2-Codec",
-		.be_id = 1,
-		.cpu_dai_name = "Codec Pin",
-		.codec_name = "snd-soc-dummy",
-		.codec_dai_name = "snd-soc-dummy-dai",
-		.platform_name = "0000:02:18.0",
-		/*.be_hw_params_fixup = morg_florida_codec_fixup,*/
-		.ignore_suspend = 1,
-		.no_pcm = 1,
-		/*.ops = &morg_florida_be_ssp2_ops,*/
-	},
-#else
 	{
 		.name = "SSP2-Codec",
 		.be_id = 1,
@@ -615,7 +630,6 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 		.no_pcm = 1,
 		.ops = &morg_florida_be_ssp2_ops,
 	},
-#endif
 	{
 		.name = "SSP1-BTFM",
 		.be_id = 2,
@@ -783,7 +797,7 @@ static struct platform_driver snd_morg_florida_mc_driver = {
 
 static int snd_morg_florida_driver_init(void)
 {
-	pr_info("Morganfield Machine Driver morg_florida: wm8280 registerd:init\n");
+	pr_info("Morganfield Machine Driver morg_florida: wm8280 registerd\n");
 	return platform_driver_register(&snd_morg_florida_mc_driver);
 }
 module_init(snd_morg_florida_driver_init);
