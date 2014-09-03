@@ -1464,10 +1464,14 @@ static void azx_remove(struct pci_dev *pci)
 {
 	struct azx *chip  = pci_get_drvdata(pci);
 
-	if (chip->init_failed)
-		return;
+	printk("***********azx_remove=***********\n");
+	printk("****In %s", __func__);
 
 	chip = pci_get_drvdata(pci);
+	printk("chip->init_failed %d", chip->init_failed);
+
+	if (chip->init_failed)
+		return;
 	if (pci_dev_run_wake(pci))
 		pm_runtime_get_noresume(&pci->dev);
 
