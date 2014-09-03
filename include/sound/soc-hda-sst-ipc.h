@@ -74,7 +74,7 @@ struct bind_unbind_msg {
 	bool bind;
 };
 
-irqreturn_t ipc_irq_handler(struct sst_dsp_ctx *ctx);
+irqreturn_t sst_irq_thread_handler(int irq, void *context);
 
 int ipc_tx_message_wait(struct ipc *sst_ipc,
 	struct header header, void *tx_data, size_t tx_bytes, void *rx_data,

@@ -459,8 +459,9 @@ static void ipc_process_reply(struct ipc *ipc, struct header header)
 	ipc_tx_msg_reply_complete(ipc, msg);
 }
 
-irqreturn_t ipc_irq_handler(struct sst_dsp_ctx *dsp)
+irqreturn_t sst_irq_thread_handler(int irq, void *context)
 {
+	struct sst_dsp_ctx *dsp = (struct sst_dsp_ctx *)context;
 	struct ipc *ipc = dsp->ipc;
 	struct header header;
 	u32 hipcie, hipct, hipcte;
@@ -514,6 +515,7 @@ irqreturn_t ipc_irq_handler(struct sst_dsp_ctx *dsp)
 	if (ipc_irq == 0)
 		return IRQ_NONE;
 
+	ipc_int_enable(dsp);
 	/* continue to send any remaining messages... */
 	queue_kthread_work(&ipc->kworker, &ipc->kwork);
 	return IRQ_HANDLED;

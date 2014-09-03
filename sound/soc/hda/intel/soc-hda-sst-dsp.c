@@ -414,31 +414,27 @@ static irqreturn_t sst_interrupt(int irq, void *dev_id)
 {
 	struct sst_dsp_ctx *ctx = (struct sst_dsp_ctx *) dev_id;
 	u32 val;
-	irqreturn_t result;
+	irqreturn_t result = IRQ_NONE;
+
 	spin_lock(&ctx->reg_lock);
 
 	val = sst_readl(ctx, ADSPIS);
 
 	if (val & ADSPIS_IPC) {
 		ipc_int_disable(ctx);
-		result = ipc_irq_handler(ctx);
-		ipc_int_enable(ctx);
-		if (result == IRQ_HANDLED) {
-			spin_unlock(&ctx->reg_lock);
-			return IRQ_HANDLED;
-		}
+		result = IRQ_WAKE_THREAD;
 	}
 
 	spin_unlock(&ctx->reg_lock);
-	return IRQ_NONE;
+	return result;
 }
 
 static int sst_acquire_irq(struct sst_dsp_ctx *ctx)
 {
-	if (request_irq(ctx->irq, sst_interrupt,
-			IRQF_SHARED,
+	if (request_threaded_irq(ctx->irq, sst_interrupt,
+			sst_irq_thread_handler, IRQF_SHARED,
 			KBUILD_MODNAME, ctx)) {
-		dev_err(ctx->dev, "unable to grab IRQ %d, disabling device\n", ctx->irq);
+		dev_err(ctx->dev, "unable to grab threaded IRQ %d, disabling device\n", ctx->irq);
 		return -1;
 	}
 	return 0;
