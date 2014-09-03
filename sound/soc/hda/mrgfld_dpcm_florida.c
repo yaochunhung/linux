@@ -366,8 +366,10 @@ static const struct snd_soc_dapm_route morg_map[] = {
 
 	{ "codec0_in", NULL, "Codec Rx" },
 	{ "codec1_in", NULL, "Codec Rx" },
-	{ "dmic01_hifi", NULL, "Codec Rx" },
-	{ "Codec Rx", NULL, "AIF1 Capture"},
+	{ "dmic01_hifi", NULL, "DMIC Rx" },
+
+	{ "Codec Rx", NULL, "AIF1 Capture" },
+	{ "DMIC Rx", NULL, "Dummy Capture" },
 
 	/* TODO: map for rest of the ports */
 
