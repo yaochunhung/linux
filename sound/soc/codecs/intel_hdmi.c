@@ -2304,10 +2304,22 @@ static int hdmi_codec_remove(struct snd_soc_codec *codec)
 	return 0;
 }
 
+static struct snd_soc_dapm_widget hdmi_dapm_widgets[] = {
+	SND_SOC_DAPM_OUTPUT("hif1 Output"),
+};
+
+static struct snd_soc_dapm_route hdmi_dapm_route[] = {
+	{"hif1 Output", NULL, "hif1"},
+};
 static struct snd_soc_codec_driver hdmi_hda_codec = {
 	.probe		= hdmi_codec_probe,
 	.remove		= hdmi_codec_remove,
 	.idle_bias_off	= true,
+	.dapm_widgets = hdmi_dapm_widgets,
+	.num_dapm_widgets = ARRAY_SIZE(hdmi_dapm_widgets),
+	.dapm_routes = hdmi_dapm_route,
+	.num_dapm_routes = ARRAY_SIZE(hdmi_dapm_route),
+
 	/* dapm widgets and routes are added dynamically */
 };
 
@@ -2319,9 +2331,12 @@ static struct snd_soc_dai_ops hdmi_dai_ops = {
 	.hw_free = hdmi_playback_cleanup,
 };
 
+
+
 static struct snd_soc_dai_driver hdmi_dais[] = {
 	{	.name = "intel-hdmi-hif1",
 		.playback = {
+			.stream_name = "hif1",
 			.channels_min = 2,
 			.channels_max = 8,
 			.rates = SNDRV_PCM_RATE_32000 |
@@ -2337,6 +2352,7 @@ static struct snd_soc_dai_driver hdmi_dais[] = {
 
 	{	.name = "intel-hdmi-hif2",
 		.playback = {
+			.stream_name = "hif2",
 			.channels_min = 2,
 			.channels_max = 8,
 			.rates = SNDRV_PCM_RATE_32000 |
