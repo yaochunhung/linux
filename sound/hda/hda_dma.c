@@ -4,6 +4,16 @@
 #include <sound/hda_controller.h>
 #include <sound/hda_dma.h>
 
+void azx_set_dma_decouple_mode(struct azx *chip)
+{
+	int i = 0;
+
+	for (i = 0; i < chip->num_streams; i++) {
+		struct azx_dev *azx_dev = &chip->azx_dev[i];
+		azx_dma_decouple(chip, azx_dev, true);
+	}
+}
+EXPORT_SYMBOL_GPL(azx_set_dma_decouple_mode);
 
 void azx_host_dma_reset(struct azx *chip, struct azx_dev *azx_dev)
 {
@@ -205,40 +215,18 @@ int azx_dma_decouple(struct azx *chip, struct azx_dev *azx_dev,	bool decouple)
 }
 EXPORT_SYMBOL_GPL(azx_dma_decouple);
 
-int azx_link_dma_reset_decouple_locked(struct azx *chip, struct dma_desc *dma)
-{
-	int ret = 0;
-	struct azx_dev *azx_dev = get_azx_dev_by_dma(chip, dma);
-
-
-	if (NULL == azx_dev) {
-		dev_err(chip->dev, "The requested DMA does not exist");
-		return -EIO;
-	}
-
-	spin_lock_irq(&chip->reg_lock);
-
-	ret  = azx_link_dma_reset(chip, azx_dev);
-
-	if (ret)
-		dev_err(chip->dev, "Link DMA reset failed");
-
-	spin_unlock_irq(&chip->reg_lock);
-
-	return ret;
-}
-EXPORT_SYMBOL_GPL(azx_link_dma_reset_decouple_locked);
-
 int azx_link_dma_reset(struct azx *chip, struct azx_dev *azx_dev)
 {
+	unsigned int reg;
 	unsigned int cnt;
 
 	/* Run bit needs to be cleared before touching reset */
 	azx_pplc_writel_andor(chip, azx_dev, REG_PPLCCTL, ~PPLCCTL_RUN, 0);
 
 	/* Assert reset */
-	azx_pplc_writel_andor(chip, azx_dev, REG_PPLCCTL, ~PPLCCTL_STRST, PPLCCTL_STRST);
-
+	azx_pplc_writel_andor(chip, azx_dev, REG_PPLCCTL, ~PPLCCTL_STRST,
+PPLCCTL_STRST);
+	udelay(5);
 	for (cnt = LINK_STRST_TIMEOUT; cnt > 0; cnt--) {
 		if (azx_pplc_readl(chip, azx_dev, REG_PPLCCTL) & PPLCCTL_STRST)
 			break;
@@ -254,7 +242,7 @@ int azx_link_dma_reset(struct azx *chip, struct azx_dev *azx_dev)
 
 	/* Deassert reset */
 	azx_pplc_writel_andor(chip, azx_dev, REG_PPLCCTL, ~PPLCCTL_STRST, 0);
-
+	udelay(5);
 	for (cnt = LINK_STRST_TIMEOUT; cnt > 0; cnt--) {
 		if (!(azx_pplc_readl(chip, azx_dev, REG_PPLCCTL) & PPLCCTL_STRST))
 			break;
@@ -271,57 +259,18 @@ int azx_link_dma_reset(struct azx *chip, struct azx_dev *azx_dev)
 }
 EXPORT_SYMBOL_GPL(azx_link_dma_reset);
 
-int azx_link_dma_run_ctrl_locked(struct azx *chip,
-		struct dma_desc *dma, bool run)
-{
-	int ret = 0;
-	struct azx_dev *azx_dev = get_azx_dev_by_dma(chip, dma);
-
-	if (NULL == azx_dev) {
-		dev_err(chip->dev, "The requested DMA does not exist");
-		return -EIO;
-	}
-
-	dev_dbg(chip->dev, "dma id: 0x%x, fmt: 0x%x, play: 0x%x, started: 0x%x",
-			dma->id, dma->fmt, dma->playback, dma->started);
-
-	spin_lock_irq(&chip->reg_lock);
-
-	if (run) {
-		ret = azx_link_dma_set_stream_id(chip, azx_dev);
-		if (ret) {
-			dev_err(chip->dev, "Failed to set stream tag to link DMA");
-			goto unlock;
-		}
-		ret = azx_link_dma_set_format(chip, azx_dev, dma->fmt);
-		if (ret) {
-			dev_err(chip->dev, "Failed to set format to link DMA");
-			goto unlock;
-		}
-	}
-
-	ret = azx_link_dma_run_ctrl(chip, azx_dev, run);
-	if (ret)
-		dev_err(chip->dev, "Failed to %s link DMA", run ? "start" : "stop");
-
-unlock:
-	spin_unlock_irq(&chip->reg_lock);
-	return ret;
-}
-EXPORT_SYMBOL_GPL(azx_link_dma_run_ctrl_locked);
-
-int azx_link_dma_run_ctrl(struct azx *chip, struct azx_dev *azx_dev, bool run)
+int azx_link_dma_run_ctrl(struct azx *chip, struct azx_dev *azx_dev,
+		 bool run)
 {
 	unsigned int cnt;
 
 	/* Shall we call setup_controller instead */
 
-	azx_pplc_writel_andor(chip, azx_dev,
-		REG_PPLCCTL, ~PPLCCTL_RUN,
-		(run ? PPLCCTL_RUN : 0));
+	azx_pplc_writel_andor(chip, azx_dev, REG_PPLCCTL, ~PPLCCTL_RUN, run ? PPLCCTL_RUN : 0);
 
 	/* Need to check HW state in case of stopping */
 	if (!run) {
+		udelay(5);
 		for (cnt = LINK_STOP_TIMEOUT; cnt > 0; cnt--) {
 			if (!(azx_pplc_readl(chip, azx_dev, REG_PPLCCTL) & PPLCCTL_RUN))
 				break;
@@ -336,25 +285,30 @@ int azx_link_dma_run_ctrl(struct azx *chip, struct azx_dev *azx_dev, bool run)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(azx_link_dma_run_ctrl);
 
 int azx_link_dma_set_stream_id(struct azx *chip, struct azx_dev *azx_dev)
 {
 
 	if (azx_pplc_readl(chip, azx_dev, REG_PPLCCTL) & PPLCCTL_RUN) {
-		dev_err(chip->dev, "Failed to change stream id while the DMA is running");
+		dev_err(chip->dev,
+		 "Failed to change stream id while the DMA is running\n");
 		return -EBUSY;
 	}
 
 	azx_pplc_writel_andor(chip, azx_dev, REG_PPLCCTL, ~PPLCCTL_STRM_MASK,
-		(azx_dev->stream_tag << PPLCCTL_STRM_SHIFT) & PPLCCTL_STRM_MASK);
+		(azx_dev->stream_tag << PPLCCTL_STRM_SHIFT) &
+			PPLCCTL_STRM_MASK);
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(azx_link_dma_set_stream_id);
 
-int azx_link_dma_set_format(struct azx *chip, struct azx_dev *azx_dev, int fmt)
+int azx_link_dma_set_format(struct azx *chip,
+	struct azx_dev *azx_dev, int fmt)
 {
 
-	if (azx_pplc_readl(chip, azx_dev, REG_PPLCCTL) & (PPLCCTL_RUN)) {
+	if (azx_pplc_readl(chip, azx_dev, REG_PPLCCTL) & PPLCCTL_RUN) {
 		dev_err(chip->dev, "The requested DMA is running");
 		return -EBUSY;
 	}
@@ -364,7 +318,7 @@ int azx_link_dma_set_format(struct azx *chip, struct azx_dev *azx_dev, int fmt)
 
 	return 0;
 }
-
+EXPORT_SYMBOL_GPL(azx_link_dma_set_format);
 
 int azx_host_dma_reset_locked(struct azx *chip, struct dma_desc *dma)
 {

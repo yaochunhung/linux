@@ -1361,6 +1361,57 @@ static bool is_input_stream(struct azx *chip, unsigned char index)
 	return index < chip->playback_index_offset;
 }
 
+/*
+ * initialize link SD streams
+ */
+static int azx_init_link_stream(struct azx *chip)
+{
+	int i;
+	int in_stream_tag = 0;
+	int out_stream_tag = 0;
+
+	/* initialize each stream (aka device)
+	 * assign the starting bdl address to each stream (device)
+	 * and initialize
+	 */
+	for (i = 0; i < chip->num_streams; i++) {
+		struct azx_dev *link_dev = &chip->link_dev[i];
+		link_dev->posbuf = (u32 __iomem *)(chip->posbuf.area + i * 8);
+		/* offset: SDI0=0x80, SDI1=0xa0, ... SDO3=0x160 */
+		link_dev->sd_addr = chip->remap_addr + (0x20 * i + 0x80);
+		/* int mask: SDI0=0x01, SDI1=0x02, ... SDO3=0x80 */
+		link_dev->sd_int_sta_mask = 1 << i;
+		link_dev->index = i;
+
+		/* stream tag must be unique throughout
+		 * the stream direction group,
+		* valid values 1...15
+		*/
+		link_dev->stream_tag =
+			is_input_stream(chip, i) ?
+				++in_stream_tag :
+				 ++out_stream_tag;
+
+		if (chip->ppcap_offset) {
+			link_dev->pphc_addr = chip->remap_addr +
+						chip->ppcap_offset +
+						PPHC_BASE +
+						PPHC_INTERVAL *
+						link_dev->index;
+
+			link_dev->pplc_addr = chip->remap_addr +
+						chip->ppcap_offset +
+						PPLC_BASE +
+						PPLC_MULTI *
+						chip->num_streams +
+						PPLC_INTERVAL *
+						link_dev->index;
+		}
+	}
+
+	return 0;
+}
+
 /* initialize SD streams */
 int azx_init_stream(struct azx *chip)
 {
@@ -1418,6 +1469,8 @@ int azx_init_stream(struct azx *chip)
 			azx_dev->sd_addr,
 			azx_dev->posbuf);
 	}
+	if (chip->ppcap_offset)
+		azx_init_link_stream(chip);
 
 	return 0;
 }

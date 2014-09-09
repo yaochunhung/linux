@@ -26,6 +26,7 @@ struct dma_desc {
 	unsigned int padding:26;
 };
 
+void azx_set_dma_decouple_mode(struct azx *chip);
 int azx_link_dma_reset(struct azx *chip, struct azx_dev *azx_dev);
 void azx_host_dma_stop(struct azx *chip, struct azx_dev *azx_dev);
 void azx_host_dma_start(struct azx *chip, struct azx_dev *azx_dev);
@@ -35,8 +36,6 @@ int azx_release_dma_locked(struct azx *chip, struct dma_desc *dma);
 int azx_dma_decouple(struct azx *chip, struct azx_dev *azx_dev,
 			bool decouple);
 int azx_link_dma_reset_locked(struct azx *chip, struct dma_desc *dma);
-int azx_link_dma_run_ctrl_locked(struct azx *chip, struct dma_desc *dma,
-				bool run);
 int azx_link_dma_run_ctrl(struct azx *chip, struct azx_dev *azx_dev, bool run);
 int azx_link_dma_set_stream_id(struct azx *chip, struct azx_dev *azx_dev);
 int azx_link_dma_set_format(struct azx *chip, struct azx_dev *azx_dev, int fmt);

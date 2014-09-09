@@ -209,6 +209,8 @@ struct azx {
 	unsigned int ppcap_offset;
 	unsigned int spbcap_offset;
 	struct azx_dev saved_azx_dev;
+	/* link (x num_streams) */
+	struct azx_dev *link_dev;
 };
 
 static struct snd_pcm_hardware azx_pcm_hw = {
