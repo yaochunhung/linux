@@ -373,6 +373,8 @@ static const struct snd_soc_dapm_route morg_map[] = {
 
 	/* TODO: map for rest of the ports */
 
+	{ "hif1", NULL, "iDisp Tx"},
+	{ "iDisp Tx", NULL, "iDisp_out"},
 #ifdef OSC_PMIC
 	{ "Dummy Playback", NULL, "VFLEXCNT"},
 	{ "Dummy Capture", NULL, "VFLEXCNT"},
@@ -514,6 +516,7 @@ enum {
 	MORG_DPCM_LL,
 	MORG_DPCM_COMPR,
 	MORG_DPCM_VOIP,
+	MORG_DPCM_HDMI,
 	MORG_DPCM_PROBE,
 };
 
@@ -574,6 +577,19 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 /*		.ops = &morg_florida_8k_16k_ops,*/
 		.dynamic = 1,
 	},
+	[MORG_DPCM_HDMI] = {
+		.name = "Bxtn HDMI Port",
+		.stream_name = "Hdmi",
+		.cpu_dai_name = "System Pin",
+		.codec_name = "snd-soc-dummy",
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.platform_name = "0000:02:18.0",
+		.init = NULL,
+		.ignore_suspend = 1,
+		.dynamic = 1,
+	},
+
+
 #if 0
 	[MORG_DPCM_PROBE] = {
 		.name = "Bxtn Probe Port",
@@ -649,6 +665,16 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 		.codec_name = "snd-soc-dummy",
 		.codec_dai_name = "snd-soc-dummy-dai",
 		.platform_name = "snd-soc-dummy",
+		.ignore_suspend = 1,
+		.no_pcm = 1,
+	},
+	{
+		.name = "iDisp",
+		.be_id = 4,
+		.cpu_dai_name = "iDisp Pin",
+		.codec_name = "codec#001.1",
+		.codec_dai_name = "intel-hdmi-hif1",
+		.platform_name = "0000:02:18.0",
 		.ignore_suspend = 1,
 		.no_pcm = 1,
 	},
