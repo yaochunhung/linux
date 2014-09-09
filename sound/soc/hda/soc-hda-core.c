@@ -49,6 +49,7 @@
 #include <linux/vga_switcheroo.h>
 #include <sound/hda_register.h>
 #include <sound/hda_controller.h>
+#include <sound/hda_dma.h>
 #include <sound/hda_verbs.h>
 #include <sound/soc-hda-bus.h>
 #include "soc-hda-controller.h"
@@ -1225,8 +1226,21 @@ static int azx_first_init(struct azx *chip)
 	if (err < 0)
 		return err;
 
+	if (chip->ppcap_offset) {
+		chip->link_dev = kcalloc(chip->num_streams,
+					sizeof(*chip->link_dev),
+					GFP_KERNEL);
+		if (!chip->link_dev) {
+			dev_err(chip->dev, "cannot malloc azx_dev\n");
+			return -ENOMEM;
+		}
+	}
+
 	/* initialize streams */
 	azx_init_stream(chip);
+
+	if (chip->ppcap_offset)
+		azx_set_dma_decouple_mode(chip);
 
 	/* initialize chip */
 	azx_init_pci(chip);

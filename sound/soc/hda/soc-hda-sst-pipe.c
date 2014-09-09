@@ -212,6 +212,11 @@ static void hda_sst_setup_cpr_gateway_cfg(struct sst_dsp_ctx *ctx,
 			SLIMBUS_LINK_OUTPUT_CLASS : SLIMBUS_LINK_INPUT_CLASS;
 		node_id.node.dma_id = mconfig->dma_id;
 		break;
+	case DEVICE_HDALINK:
+		node_id.node.dma_type = (SOURCE == mconfig->hw_conn_type) ?
+			HDA_LINK_OUTPUT_CLASS : HDA_LINK_INPUT_CLASS;
+		node_id.node.dma_id = mconfig->dma_id;
+		break;
 	default:
 		node_id.node.dma_type = (SOURCE == mconfig->hw_conn_type) ?
 			HDA_HOST_OUTPUT_CLASS : HDA_HOST_INPUT_CLASS;

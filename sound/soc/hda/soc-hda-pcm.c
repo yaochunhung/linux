@@ -74,6 +74,39 @@ static inline void soc_azx_release_device(struct azx_dev *azx_dev)
 	azx_dev->opened = 0;
 }
 
+static inline struct azx_dev *
+soc_azx_assign_link_device(struct azx *chip, bool is_playback)
+{
+	int i, nums;
+	struct azx_dev *link_dev;
+
+	if (is_playback) {
+		nums = chip->playback_streams;
+		link_dev = &chip->link_dev[chip->playback_index_offset + nums - 1];
+	} else {
+		nums = chip->capture_streams;
+		link_dev = &chip->link_dev[chip->capture_index_offset + nums - 1];
+	}
+
+	for (i = 0; i < nums; i++, link_dev--) {
+		dsp_lock(link_dev);
+		if (!link_dev->opened && !dsp_is_locked(link_dev)) {
+			link_dev->opened = 1;
+			dsp_unlock(link_dev);
+			return link_dev;
+		}
+		dsp_unlock(link_dev);
+	}
+
+	return NULL;
+}
+
+/* release the assigned stream */
+static inline void azx_link_release_device(struct azx_dev *link_dev)
+{
+	link_dev->opened = 0;
+}
+
 /* Get DMA id seperate 0-based numeration
  * for playback and capture streams
  */
@@ -277,8 +310,112 @@ static int soc_hda_pcm_trigger(struct snd_pcm_substream *substream, int cmd,
 		hda_sst_set_fe_pipeline_state(dai, false, substream->stream);
 		break;
 	default:
-	return -EINVAL;
+		return -EINVAL;
 	}
+	return 0;
+}
+
+static int soc_hda_be_link_hw_params(struct snd_pcm_substream *substream,
+				struct snd_pcm_hw_params *params,
+				struct snd_soc_dai *dai)
+{
+	struct azx_dev *link_dev;
+	struct azx *chip = get_chip_ctx(substream);
+	int dma_id;
+
+	pr_debug("%s\n", __func__);
+	link_dev = soc_azx_assign_link_device(chip, substream);
+	if (link_dev == NULL) {
+		mutex_unlock(&chip->open_mutex);
+		return -EBUSY;
+	}
+	snd_soc_dai_set_dma_data(dai, substream, (void *)link_dev);
+	dma_id = azx_get_dma_id(chip, link_dev);
+	hda_sst_set_copier_dma_id(dai, dma_id, substream->stream);
+
+	return 0;
+}
+
+static int soc_hda_be_link_pcm_prepare(struct snd_pcm_substream *substream,
+		struct snd_soc_dai *dai)
+{
+	struct snd_soc_pcm_runtime *rtd = snd_pcm_substream_chip(substream);
+	struct azx *chip = get_chip_ctx(substream);
+	struct azx_dev *link_dev = snd_soc_dai_get_dma_data(dai, substream);
+	unsigned int format_val;
+	int ret = 0;
+	struct snd_soc_hda_dma_params *dma_params;
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+
+	dev_dbg(chip->dev, "%s: %s\n", __func__, dai->name);
+	if (link_dev->prepared) {
+		dev_dbg(chip->dev, "already stream is prepared - returning\n");
+		return 0;
+	}
+
+	dma_params  = (struct snd_soc_hda_dma_params *)
+			snd_soc_dai_get_dma_data(codec_dai, substream);
+	format_val = dma_params->format;
+	dma_params->stream_tag =  link_dev->stream_tag;
+	snd_soc_dai_set_dma_data(codec_dai, substream, (void *)dma_params);
+	dev_dbg(chip->dev, "stream_tag=%d formatvalue=%d\n",
+				link_dev->stream_tag, format_val);
+	azx_link_dma_reset(chip, link_dev);
+
+	ret = azx_link_dma_set_stream_id(chip, link_dev);
+	if (ret) {
+		dev_err(chip->dev, "Failed to set stream tag to link DMA");
+		return -EIO;
+	}
+	ret = azx_link_dma_set_format(chip, link_dev, format_val);
+	if (ret) {
+		dev_err(chip->dev, "Failed to set format to link DMA");
+		return -EIO;
+	}
+	/* FIXEME NEED to check if this required
+	azx_writel(chip, ML_LOSIDVX[link_dev->index],
+	azx_readl(chip, ML_LOSIDVX[link_dev->index]) |
+			(1 << link_dev->stream_tag)); */
+	if (!ret)
+		link_dev->prepared = 1;
+	return ret;
+}
+
+static int soc_hda_be_link_pcm_trigger(struct snd_pcm_substream *substream,
+	int cmd, struct snd_soc_dai *dai)
+{
+	struct azx *chip = get_chip_ctx(substream);
+	struct azx_dev *link_dev = snd_soc_dai_get_dma_data(dai, substream);
+
+	dev_dbg(chip->dev, "In %s cmd=%d\n", __func__, cmd);
+	switch (cmd) {
+	case SNDRV_PCM_TRIGGER_START:
+	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
+	case SNDRV_PCM_TRIGGER_RESUME:
+		azx_link_dma_run_ctrl(chip, link_dev, true);
+		break;
+	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
+	case SNDRV_PCM_TRIGGER_SUSPEND:
+	case SNDRV_PCM_TRIGGER_STOP:
+		azx_link_dma_run_ctrl(chip, link_dev, false);
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static int soc_hda_be_link_hw_free(struct snd_pcm_substream *substream,
+		struct snd_soc_dai *dai)
+{
+	struct azx *chip = get_chip_ctx(substream);
+	struct azx_dev *link_dev = snd_soc_dai_get_dma_data(dai, substream);
+
+	dev_dbg(chip->dev, "%s: %s\n", __func__, dai->name);
+
+	link_dev->stream_tag = 0;
+	link_dev->prepared = 0;
+	azx_link_release_device(link_dev);
 	return 0;
 }
 
@@ -295,6 +432,12 @@ static struct snd_soc_dai_ops hda_be_dai_ops = {
 	.hw_params = hda_be_hw_params,
 };
 
+static struct snd_soc_dai_ops hda_be_link_dai_ops = {
+	.prepare = soc_hda_be_link_pcm_prepare,
+	.hw_params = soc_hda_be_link_hw_params,
+	.hw_free = soc_hda_be_link_hw_free,
+	.trigger = soc_hda_be_link_pcm_trigger,
+};
 static struct snd_soc_dai_driver soc_hda_platform_dai[] = {
 {
 	.name = "System Pin",
@@ -426,7 +569,7 @@ static struct snd_soc_dai_driver soc_hda_platform_dai[] = {
 },
 {
 	.name = "iDisp Pin",
-	.ops = &hda_be_dai_ops,
+	.ops = &hda_be_link_dai_ops,
 	.playback = {
 		.stream_name = "iDisp Tx",
 		.channels_min = HDA_STEREO,
@@ -458,6 +601,24 @@ static struct snd_soc_dai_driver soc_hda_platform_dai[] = {
 	},
 	.capture = {
 		.stream_name = "Slimbus Rx",
+		.channels_min = HDA_STEREO,
+		.channels_max = HDA_STEREO,
+		.rates = SNDRV_PCM_RATE_48000,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE,
+	},
+},
+{
+	.name = "HD-Codec Pin",
+	.ops = &hda_be_link_dai_ops,
+	.playback = {
+		.stream_name = "HD-Codec Tx",
+		.channels_min = HDA_STEREO,
+		.channels_max = HDA_STEREO,
+		.rates = SNDRV_PCM_RATE_48000,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE,
+	},
+	.capture = {
+		.stream_name = "HD-Codec Rx",
 		.channels_min = HDA_STEREO,
 		.channels_max = HDA_STEREO,
 		.rates = SNDRV_PCM_RATE_48000,

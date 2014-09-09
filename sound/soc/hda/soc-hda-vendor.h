@@ -183,6 +183,7 @@ enum dev_type {
 	DEVICE_DMIC = 0x1,
 	DEVICE_I2S = 0x2,
 	DEVICE_SLIMBUS = 0x3,
+	DEVICE_HDALINK = 0x4,
 	DEVICE_NONE
 };
 
