@@ -227,9 +227,9 @@ static void hda_sst_setup_cpr_gateway_cfg(struct sst_dsp_ctx *ctx,
 	cpr_mconfig->gtw_cfg.node_id = node_id.val;
 
 	if (SOURCE == mconfig->hw_conn_type)
-		cpr_mconfig->gtw_cfg.dma_buffer_size = 2 * mconfig->ibs;
-	else
 		cpr_mconfig->gtw_cfg.dma_buffer_size = 2 * mconfig->obs;
+	else
+		cpr_mconfig->gtw_cfg.dma_buffer_size = 2 * mconfig->ibs;
 	cpr_mconfig->cpr_feature_mask = 0;
 	cpr_mconfig->gtw_cfg.config_length  = 0;
 
