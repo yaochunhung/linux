@@ -668,7 +668,7 @@ int ipc_set_pipeline_state(struct ipc *ipc, u8 instance_id,
 	header.primary |= IPC_PPL_STATE(state);
 
 	dev_dbg(ipc->dev, "In %s header=%d\n", __func__, header.primary);
-	ret = ipc_tx_message_nowait(ipc, header, NULL, 0);
+	ret = ipc_tx_message_wait(ipc, header, NULL, 0, NULL, 0);
 	if (ret < 0) {
 		dev_err(ipc->dev, "ipc: set pipeline state failed\n");
 		return ret;
