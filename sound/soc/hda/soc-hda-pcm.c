@@ -346,12 +346,27 @@ static int soc_hda_be_link_pcm_prepare(struct snd_pcm_substream *substream,
 	int ret = 0;
 	struct snd_soc_hda_dma_params *dma_params;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	struct snd_pcm_hw_params *params;
+	struct snd_interval *channels, *rate;
 
 	dev_dbg(chip->dev, "%s: %s\n", __func__, dai->name);
 	if (link_dev->prepared) {
 		dev_dbg(chip->dev, "already stream is prepared - returning\n");
 		return 0;
 	}
+	params  = devm_kzalloc(chip->dev, sizeof(*params), GFP_KERNEL);
+	if (params == NULL)
+		return -ENOMEM;
+
+	channels = hw_param_interval(params, SNDRV_PCM_HW_PARAM_CHANNELS);
+	channels->min = channels->max = substream->runtime->channels;
+	rate = hw_param_interval(params, SNDRV_PCM_HW_PARAM_RATE);
+	rate->min = rate->max = substream->runtime->rate;
+	snd_mask_set(&params->masks[SNDRV_PCM_HW_PARAM_FORMAT -
+					SNDRV_PCM_HW_PARAM_FIRST_MASK],
+					substream->runtime->format);
+
+	hda_sst_set_copier_hw_params(dai, params, substream->stream);
 
 	dma_params  = (struct snd_soc_hda_dma_params *)
 			snd_soc_dai_get_dma_data(codec_dai, substream);
