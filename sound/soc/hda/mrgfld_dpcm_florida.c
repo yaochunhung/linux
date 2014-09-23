@@ -401,7 +401,7 @@ static int morg_florida_init(struct snd_soc_pcm_runtime *runtime)
 
 	pr_info("Entry %s\n", __func__);
 
-	ret = snd_soc_dai_set_tdm_slot(florida_dai, 0, 0, 4, 25);
+	ret = snd_soc_dai_set_tdm_slot(florida_dai, 0, 0, 4, 24);
 	/* slot width is set as 25, SNDRV_PCM_FORMAT_S32_LE */
 	if (ret < 0) {
 		pr_err("can't set codec pcm format %d\n", ret);
@@ -409,7 +409,7 @@ static int morg_florida_init(struct snd_soc_pcm_runtime *runtime)
 	}
 
 	/* bit clock inverse not required */
-	fmt =   SND_SOC_DAIFMT_DSP_A | SND_SOC_DAIFMT_NB_NF
+	fmt =   SND_SOC_DAIFMT_DSP_A | SND_SOC_DAIFMT_IB_NF
 		| SND_SOC_DAIFMT_CBS_CFS;
 	ret = snd_soc_dai_set_fmt(florida_dai, fmt);
 	if (ret < 0) {
