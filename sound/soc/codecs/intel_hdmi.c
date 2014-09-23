@@ -1637,7 +1637,9 @@ static int hdmi_set_hw_params(struct snd_pcm_substream *substream,
 
 	if (map->nid) {
 		dd = kzalloc(sizeof(*dd), GFP_KERNEL);
-		dd->format = format;
+		dd->format = snd_hda_calc_stream_format(params_rate(hparams),
+			params_channels(hparams), params_format(hparams),
+			24, 0);
 		snd_soc_dai_set_dma_data(dai, substream, (void *)dd);
 	}
 	return 0;
