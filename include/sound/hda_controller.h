@@ -312,6 +312,7 @@ void azx_stop_chip(struct azx *chip);
 void azx_enter_link_reset(struct azx *chip);
 void azx_exit_link_reset(struct azx *chip);
 irqreturn_t azx_interrupt(int irq, void *dev_id);
+irqreturn_t azx_threaded_handler(int irq, void *dev_id);
 
 /* Codec interface */
 int azx_codec_configure(struct azx *chip);

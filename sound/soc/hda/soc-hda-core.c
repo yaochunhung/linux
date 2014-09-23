@@ -374,8 +374,8 @@ static int azx_acquire_irq(struct azx *chip, int do_disconnect)
 	else
 		flags = chip->msi ? 0 : IRQF_SHARED;
 
-	if (request_irq(chip->pci->irq, azx_interrupt,
-			flags,
+	if (request_threaded_irq(chip->pci->irq, azx_interrupt,
+			azx_threaded_handler, flags,
 			KBUILD_MODNAME, chip)) {
 		dev_err(chip->dev,
 			"unable to grab IRQ %d, disabling device\n",

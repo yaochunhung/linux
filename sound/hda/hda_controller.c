@@ -1296,10 +1296,7 @@ EXPORT_SYMBOL_GPL(azx_stop_chip);
 irqreturn_t azx_interrupt(int irq, void *dev_id)
 {
 	struct azx *chip = dev_id;
-	struct azx_dev *azx_dev;
 	u32 status;
-	u8 sd_status;
-	int i;
 
 #ifdef CONFIG_PM_RUNTIME
 	if (chip->driver_caps & AZX_DCAPS_PM_RUNTIME)
@@ -1315,11 +1312,29 @@ irqreturn_t azx_interrupt(int irq, void *dev_id)
 	}
 
 	status = azx_readl(chip, INTSTS);
-	if (status == 0) {
+
+	if (status == 0 || status == 0xffffffff) {
 		spin_unlock(&chip->reg_lock);
 		return IRQ_NONE;
 	}
+	spin_unlock(&chip->reg_lock);
 
+	return IRQ_WAKE_THREAD;
+}
+EXPORT_SYMBOL_GPL(azx_interrupt);
+
+
+irqreturn_t azx_threaded_handler(int irq, void *dev_id)
+{
+	struct azx *chip = dev_id;
+	struct azx_dev *azx_dev;
+	u32 status;
+	u8 sd_status;
+	int i;
+
+
+	status = azx_readl(chip, INTSTS);
+	spin_lock(&chip->reg_lock);
 	for (i = 0; i < chip->num_streams; i++) {
 		azx_dev = &chip->azx_dev[i];
 		if (status & azx_dev->sd_int_sta_mask) {
@@ -1348,12 +1363,10 @@ irqreturn_t azx_interrupt(int irq, void *dev_id)
 		}
 		azx_writeb(chip, RIRBSTS, RIRB_INT_MASK);
 	}
-
 	spin_unlock(&chip->reg_lock);
-
 	return IRQ_HANDLED;
 }
-EXPORT_SYMBOL_GPL(azx_interrupt);
+EXPORT_SYMBOL_GPL(azx_threaded_handler);
 
 static bool is_input_stream(struct azx *chip, unsigned char index)
 {
