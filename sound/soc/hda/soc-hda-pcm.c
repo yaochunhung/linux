@@ -77,28 +77,28 @@ static inline void soc_azx_release_device(struct azx_dev *azx_dev)
 static inline struct azx_dev *
 soc_azx_assign_link_device(struct azx *chip, bool is_playback)
 {
-	int i, nums;
-	struct azx_dev *link_dev;
+	int i, nums, dev;
+	struct azx_dev *link_dev = NULL;
 
 	if (is_playback) {
 		nums = chip->playback_streams;
-		link_dev = &chip->link_dev[chip->playback_index_offset + nums - 1];
+		dev = chip->playback_index_offset;
 	} else {
 		nums = chip->capture_streams;
-		link_dev = &chip->link_dev[chip->capture_index_offset + nums - 1];
+		dev = chip->capture_index_offset;
 	}
-
-	for (i = 0; i < nums; i++, link_dev--) {
-		dsp_lock(link_dev);
+	dsp_lock(link_dev);
+	for (i = 0; i < nums; i++, dev++) {
+		link_dev = &chip->link_dev[dev];
 		if (!link_dev->opened && !dsp_is_locked(link_dev)) {
 			link_dev->opened = 1;
 			dsp_unlock(link_dev);
 			return link_dev;
 		}
-		dsp_unlock(link_dev);
 	}
+	dsp_unlock(link_dev);
 
-	return NULL;
+	return link_dev;
 }
 
 /* release the assigned stream */
