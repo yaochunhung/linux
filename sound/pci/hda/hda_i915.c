@@ -30,7 +30,11 @@ void hda_display_power(bool enable)
 	if (!get_power || !put_power)
 		return;
 
+<<<<<<< HEAD
 	snd_printdd("HDA display power %s \n",
+=======
+	pr_debug("HDA display power %s \n",
+>>>>>>> Audio: Backport git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git
 			enable ? "Enable" : "Disable");
 	if (enable)
 		get_power();
@@ -44,7 +48,11 @@ int hda_i915_init(void)
 
 	get_power = symbol_request(i915_request_power_well);
 	if (!get_power) {
+<<<<<<< HEAD
 		snd_printk(KERN_WARNING "hda-i915: get_power symbol get fail\n");
+=======
+		pr_warn("hda-i915: get_power symbol get fail\n");
+>>>>>>> Audio: Backport git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git
 		return -ENODEV;
 	}
 
@@ -55,7 +63,11 @@ int hda_i915_init(void)
 		return -ENODEV;
 	}
 
+<<<<<<< HEAD
 	snd_printd("HDA driver get symbol successfully from i915 module\n");
+=======
+	pr_debug("HDA driver get symbol successfully from i915 module\n");
+>>>>>>> Audio: Backport git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git
 
 	return err;
 }

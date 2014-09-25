@@ -397,6 +397,8 @@ static int alc_auto_parse_customize_define(struct hda_codec *codec)
 		goto do_sku;
 	}
 
+	if (!codec->bus->pci)
+		return -1;
 	ass = codec->subsystem_id & 0xffff;
 	if (ass != codec->bus->pci->subsystem_device && (ass & 1))
 		goto do_sku;
@@ -407,8 +409,8 @@ static int alc_auto_parse_customize_define(struct hda_codec *codec)
 	ass = snd_hda_codec_get_pincfg(codec, nid);
 
 	if (!(ass & 1)) {
-		printk(KERN_INFO "hda_codec: %s: SKU not ready 0x%08x\n",
-		       codec->chip_name, ass);
+		codec_info(codec, "%s: SKU not ready 0x%08x\n",
+			   codec->chip_name, ass);
 		return -1;
 	}
 
@@ -432,17 +434,17 @@ do_sku:
 	spec->cdefine.swap = (ass & 0x2) >> 1;
 	spec->cdefine.override = ass & 0x1;
 
-	snd_printd("SKU: Nid=0x%x sku_cfg=0x%08x\n",
+	codec_dbg(codec, "SKU: Nid=0x%x sku_cfg=0x%08x\n",
 		   nid, spec->cdefine.sku_cfg);
-	snd_printd("SKU: port_connectivity=0x%x\n",
+	codec_dbg(codec, "SKU: port_connectivity=0x%x\n",
 		   spec->cdefine.port_connectivity);
-	snd_printd("SKU: enable_pcbeep=0x%x\n", spec->cdefine.enable_pcbeep);
-	snd_printd("SKU: check_sum=0x%08x\n", spec->cdefine.check_sum);
-	snd_printd("SKU: customization=0x%08x\n", spec->cdefine.customization);
-	snd_printd("SKU: external_amp=0x%x\n", spec->cdefine.external_amp);
-	snd_printd("SKU: platform_type=0x%x\n", spec->cdefine.platform_type);
-	snd_printd("SKU: swap=0x%x\n", spec->cdefine.swap);
-	snd_printd("SKU: override=0x%x\n", spec->cdefine.override);
+	codec_dbg(codec, "SKU: enable_pcbeep=0x%x\n", spec->cdefine.enable_pcbeep);
+	codec_dbg(codec, "SKU: check_sum=0x%08x\n", spec->cdefine.check_sum);
+	codec_dbg(codec, "SKU: customization=0x%08x\n", spec->cdefine.customization);
+	codec_dbg(codec, "SKU: external_amp=0x%x\n", spec->cdefine.external_amp);
+	codec_dbg(codec, "SKU: platform_type=0x%x\n", spec->cdefine.platform_type);
+	codec_dbg(codec, "SKU: swap=0x%x\n", spec->cdefine.swap);
+	codec_dbg(codec, "SKU: override=0x%x\n", spec->cdefine.override);
 
 	return 0;
 }
@@ -485,7 +487,8 @@ static int alc_subsystem_id(struct hda_codec *codec, const hda_nid_t *ports)
 	}
 
 	ass = codec->subsystem_id & 0xffff;
-	if ((ass != codec->bus->pci->subsystem_device) && (ass & 1))
+	if (codec->bus->pci &&
+	    ass != codec->bus->pci->subsystem_device && (ass & 1))
 		goto do_sku;
 
 	/* invalid SSID, check the special NID pin defcfg instead */
@@ -501,8 +504,8 @@ static int alc_subsystem_id(struct hda_codec *codec, const hda_nid_t *ports)
 	if (codec->vendor_id == 0x10ec0260)
 		nid = 0x17;
 	ass = snd_hda_codec_get_pincfg(codec, nid);
-	snd_printd("realtek: No valid SSID, "
-		   "checking pincfg 0x%08x for NID 0x%x\n",
+	codec_dbg(codec,
+		  "realtek: No valid SSID, checking pincfg 0x%08x for NID 0x%x\n",
 		   ass, nid);
 	if (!(ass & 1))
 		return 0;
@@ -518,7 +521,7 @@ static int alc_subsystem_id(struct hda_codec *codec, const hda_nid_t *ports)
 	if (((ass >> 16) & 0xf) != tmp)
 		return 0;
 do_sku:
-	snd_printd("realtek: Enabling init ASM_ID=0x%04x CODEC_ID=%08x\n",
+	codec_dbg(codec, "realtek: Enabling init ASM_ID=0x%04x CODEC_ID=%08x\n",
 		   ass & 0xffff, codec->vendor_id);
 	/*
 	 * 0 : override
@@ -576,8 +579,8 @@ static void alc_ssid_check(struct hda_codec *codec, const hda_nid_t *ports)
 {
 	if (!alc_subsystem_id(codec, ports)) {
 		struct alc_spec *spec = codec->spec;
-		snd_printd("realtek: "
-			   "Enable default setup for auto mode as fallback\n");
+		codec_dbg(codec,
+			  "realtek: Enable default setup for auto mode as fallback\n");
 		spec->init_amp = ALC_INIT_DEFAULT;
 	}
 }
@@ -972,6 +975,11 @@ static int alc_codec_rename_from_preset(struct hda_codec *codec)
 			return alc_codec_rename(codec, p->name);
 	}
 
+<<<<<<< HEAD
+=======
+	if (!codec->bus->pci)
+		return 0;
+>>>>>>> Audio: Backport git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git
 	for (q = rename_pci_tbl; q->codec_vendor_id; q++) {
 		if (q->codec_vendor_id != codec->vendor_id)
 			continue;
@@ -2789,6 +2797,157 @@ static void alc269_shutup(struct hda_codec *codec)
 	snd_hda_shutup_pins(codec);
 }
 
+<<<<<<< HEAD
+=======
+static void alc282_restore_default_value(struct hda_codec *codec)
+{
+	int val;
+
+	/* Power Down Control */
+	alc_write_coef_idx(codec, 0x03, 0x0002);
+	/* FIFO and filter clock */
+	alc_write_coef_idx(codec, 0x05, 0x0700);
+	/* DMIC control */
+	alc_write_coef_idx(codec, 0x07, 0x0200);
+	/* Analog clock */
+	val = alc_read_coef_idx(codec, 0x06);
+	alc_write_coef_idx(codec, 0x06, (val & ~0x00f0) | 0x0);
+	/* JD */
+	val = alc_read_coef_idx(codec, 0x08);
+	alc_write_coef_idx(codec, 0x08, (val & ~0xfffc) | 0x0c2c);
+	/* JD offset1 */
+	alc_write_coef_idx(codec, 0x0a, 0xcccc);
+	/* JD offset2 */
+	alc_write_coef_idx(codec, 0x0b, 0xcccc);
+	/* LDO1/2/3, DAC/ADC */
+	alc_write_coef_idx(codec, 0x0e, 0x6e00);
+	/* JD */
+	val = alc_read_coef_idx(codec, 0x0f);
+	alc_write_coef_idx(codec, 0x0f, (val & ~0xf800) | 0x1000);
+	/* Capless */
+	val = alc_read_coef_idx(codec, 0x10);
+	alc_write_coef_idx(codec, 0x10, (val & ~0xfc00) | 0x0c00);
+	/* Class D test 4 */
+	alc_write_coef_idx(codec, 0x6f, 0x0);
+	/* IO power down directly */
+	val = alc_read_coef_idx(codec, 0x0c);
+	alc_write_coef_idx(codec, 0x0c, (val & ~0xfe00) | 0x0);
+	/* ANC */
+	alc_write_coef_idx(codec, 0x34, 0xa0c0);
+	/* AGC MUX */
+	val = alc_read_coef_idx(codec, 0x16);
+	alc_write_coef_idx(codec, 0x16, (val & ~0x0008) | 0x0);
+	/* DAC simple content protection */
+	val = alc_read_coef_idx(codec, 0x1d);
+	alc_write_coef_idx(codec, 0x1d, (val & ~0x00e0) | 0x0);
+	/* ADC simple content protection */
+	val = alc_read_coef_idx(codec, 0x1f);
+	alc_write_coef_idx(codec, 0x1f, (val & ~0x00e0) | 0x0);
+	/* DAC ADC Zero Detection */
+	alc_write_coef_idx(codec, 0x21, 0x8804);
+	/* PLL */
+	alc_write_coef_idx(codec, 0x63, 0x2902);
+	/* capless control 2 */
+	alc_write_coef_idx(codec, 0x68, 0xa080);
+	/* capless control 3 */
+	alc_write_coef_idx(codec, 0x69, 0x3400);
+	/* capless control 4 */
+	alc_write_coef_idx(codec, 0x6a, 0x2f3e);
+	/* capless control 5 */
+	alc_write_coef_idx(codec, 0x6b, 0x0);
+	/* class D test 2 */
+	val = alc_read_coef_idx(codec, 0x6d);
+	alc_write_coef_idx(codec, 0x6d, (val & ~0x0fff) | 0x0900);
+	/* class D test 3 */
+	alc_write_coef_idx(codec, 0x6e, 0x110a);
+	/* class D test 5 */
+	val = alc_read_coef_idx(codec, 0x70);
+	alc_write_coef_idx(codec, 0x70, (val & ~0x00f8) | 0x00d8);
+	/* class D test 6 */
+	alc_write_coef_idx(codec, 0x71, 0x0014);
+	/* classD OCP */
+	alc_write_coef_idx(codec, 0x72, 0xc2ba);
+	/* classD pure DC test */
+	val = alc_read_coef_idx(codec, 0x77);
+	alc_write_coef_idx(codec, 0x77, (val & ~0x0f80) | 0x0);
+	/* Class D amp control */
+	alc_write_coef_idx(codec, 0x6c, 0xfc06);
+}
+
+static void alc282_init(struct hda_codec *codec)
+{
+	struct alc_spec *spec = codec->spec;
+	hda_nid_t hp_pin = spec->gen.autocfg.hp_pins[0];
+	bool hp_pin_sense;
+	int coef78;
+
+	alc282_restore_default_value(codec);
+
+	if (!hp_pin)
+		return;
+	hp_pin_sense = snd_hda_jack_detect(codec, hp_pin);
+	coef78 = alc_read_coef_idx(codec, 0x78);
+
+	/* Index 0x78 Direct Drive HP AMP LPM Control 1 */
+	/* Headphone capless set to high power mode */
+	alc_write_coef_idx(codec, 0x78, 0x9004);
+
+	if (hp_pin_sense)
+		msleep(2);
+
+	snd_hda_codec_write(codec, hp_pin, 0,
+			    AC_VERB_SET_AMP_GAIN_MUTE, AMP_OUT_MUTE);
+
+	if (hp_pin_sense)
+		msleep(85);
+
+	snd_hda_codec_write(codec, hp_pin, 0,
+			    AC_VERB_SET_PIN_WIDGET_CONTROL, PIN_OUT);
+
+	if (hp_pin_sense)
+		msleep(100);
+
+	/* Headphone capless set to normal mode */
+	alc_write_coef_idx(codec, 0x78, coef78);
+}
+
+static void alc282_shutup(struct hda_codec *codec)
+{
+	struct alc_spec *spec = codec->spec;
+	hda_nid_t hp_pin = spec->gen.autocfg.hp_pins[0];
+	bool hp_pin_sense;
+	int coef78;
+
+	if (!hp_pin) {
+		alc269_shutup(codec);
+		return;
+	}
+
+	hp_pin_sense = snd_hda_jack_detect(codec, hp_pin);
+	coef78 = alc_read_coef_idx(codec, 0x78);
+	alc_write_coef_idx(codec, 0x78, 0x9004);
+
+	if (hp_pin_sense)
+		msleep(2);
+
+	snd_hda_codec_write(codec, hp_pin, 0,
+			    AC_VERB_SET_AMP_GAIN_MUTE, AMP_OUT_MUTE);
+
+	if (hp_pin_sense)
+		msleep(85);
+
+	snd_hda_codec_write(codec, hp_pin, 0,
+			    AC_VERB_SET_PIN_WIDGET_CONTROL, 0x0);
+
+	if (hp_pin_sense)
+		msleep(100);
+
+	alc_auto_setup_eapd(codec, false);
+	snd_hda_shutup_pins(codec);
+	alc_write_coef_idx(codec, 0x78, coef78);
+}
+
+>>>>>>> Audio: Backport git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git
 static void alc283_restore_default_value(struct hda_codec *codec)
 {
 	int val;
@@ -2985,6 +3144,7 @@ static void alc5505_dsp_back_from_halt(struct hda_codec *codec)
 	alc5505_coef_set(codec, 0x6230, 0xf80d4011);
 	alc5505_coef_set(codec, 0x6220, 0x2002010f);
 	alc5505_coef_set(codec, 0x880c, 0x00000004);
+<<<<<<< HEAD
 }
 
 static void alc5505_dsp_init(struct hda_codec *codec)
@@ -3026,6 +3186,49 @@ static void alc5505_dsp_init(struct hda_codec *codec)
 #endif
 }
 
+=======
+}
+
+static void alc5505_dsp_init(struct hda_codec *codec)
+{
+	unsigned int val;
+
+	alc5505_dsp_halt(codec);
+	alc5505_dsp_back_from_halt(codec);
+	alc5505_coef_set(codec, 0x61b0, 0x5b14); /* PLL1 control */
+	alc5505_coef_set(codec, 0x61b0, 0x5b16);
+	alc5505_coef_set(codec, 0x61b4, 0x04132b00); /* PLL2 control */
+	alc5505_coef_set(codec, 0x61b4, 0x04132b02);
+	alc5505_coef_set(codec, 0x61b8, 0x041f3300); /* PLL3 control*/
+	alc5505_coef_set(codec, 0x61b8, 0x041f3302);
+	snd_hda_codec_write(codec, 0x51, 0, AC_VERB_SET_CODEC_RESET, 0); /* Function reset */
+	alc5505_coef_set(codec, 0x61b8, 0x041b3302);
+	alc5505_coef_set(codec, 0x61b8, 0x04173302);
+	alc5505_coef_set(codec, 0x61b8, 0x04163302);
+	alc5505_coef_set(codec, 0x8800, 0x348b328b); /* DRAM control */
+	alc5505_coef_set(codec, 0x8808, 0x00020022); /* DRAM control */
+	alc5505_coef_set(codec, 0x8818, 0x00000400); /* DRAM control */
+
+	val = alc5505_coef_get(codec, 0x6200) >> 16; /* Read revision ID */
+	if (val <= 3)
+		alc5505_coef_set(codec, 0x6220, 0x2002010f); /* I/O PAD Configuration */
+	else
+		alc5505_coef_set(codec, 0x6220, 0x6002018f);
+
+	alc5505_coef_set(codec, 0x61ac, 0x055525f0); /**/
+	alc5505_coef_set(codec, 0x61c0, 0x12230080); /* Clock control */
+	alc5505_coef_set(codec, 0x61b4, 0x040e2b02); /* PLL2 control */
+	alc5505_coef_set(codec, 0x61bc, 0x010234f8); /* OSC Control */
+	alc5505_coef_set(codec, 0x880c, 0x00000004); /* DRAM Function control */
+	alc5505_coef_set(codec, 0x880c, 0x00000003);
+	alc5505_coef_set(codec, 0x880c, 0x00000010);
+
+#ifdef HALT_REALTEK_ALC5505
+	alc5505_dsp_halt(codec);
+#endif
+}
+
+>>>>>>> Audio: Backport git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git
 #ifdef HALT_REALTEK_ALC5505
 #define alc5505_dsp_suspend(codec)	/* NOP */
 #define alc5505_dsp_resume(codec)	/* NOP */
@@ -3267,7 +3470,12 @@ static void alc269_fixup_hp_mute_led(struct hda_codec *codec,
 		spec->gen.vmaster_mute.hook = alc269_fixup_mic_mute_hook;
 		spec->gen.vmaster_mute_enum = 1;
 		codec->power_filter = led_power_filter;
+<<<<<<< HEAD
 		snd_printd("Detected mute LED for %x:%d\n", spec->mute_led_nid,
+=======
+		codec_dbg(codec,
+			  "Detected mute LED for %x:%d\n", spec->mute_led_nid,
+>>>>>>> Audio: Backport git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git
 			   spec->mute_led_polarity);
 		break;
 	}
@@ -3393,7 +3601,7 @@ static void alc_headset_mode_unplugged(struct hda_codec *codec)
 		alc_write_coef_idx(codec, 0xb7, 0x802b);
 		break;
 	}
-	snd_printdd("Headset jack set to unplugged mode.\n");
+	codec_dbg(codec, "Headset jack set to unplugged mode.\n");
 }
 
 
@@ -3436,7 +3644,7 @@ static void alc_headset_mode_mic_in(struct hda_codec *codec, hda_nid_t hp_pin,
 		snd_hda_set_pin_ctl_cache(codec, mic_pin, PIN_VREF50);
 		break;
 	}
-	snd_printdd("Headset jack set to mic-in mode.\n");
+	codec_dbg(codec, "Headset jack set to mic-in mode.\n");
 }
 
 static void alc_headset_mode_default(struct hda_codec *codec)
@@ -3464,7 +3672,7 @@ static void alc_headset_mode_default(struct hda_codec *codec)
 		alc_write_coef_idx(codec, 0xb7, 0x802b);
 		break;
 	}
-	snd_printdd("Headset jack set to headphone (default) mode.\n");
+	codec_dbg(codec, "Headset jack set to headphone (default) mode.\n");
 }
 
 /* Iphone type */
@@ -3493,7 +3701,7 @@ static void alc_headset_mode_ctia(struct hda_codec *codec)
 		alc_write_coef_idx(codec, 0xc3, 0x0000);
 		break;
 	}
-	snd_printdd("Headset jack set to iPhone-style headset mode.\n");
+	codec_dbg(codec, "Headset jack set to iPhone-style headset mode.\n");
 }
 
 /* Nokia type */
@@ -3522,7 +3730,7 @@ static void alc_headset_mode_omtp(struct hda_codec *codec)
 		alc_write_coef_idx(codec, 0xc3, 0x0000);
 		break;
 	}
-	snd_printdd("Headset jack set to Nokia-style headset mode.\n");
+	codec_dbg(codec, "Headset jack set to Nokia-style headset mode.\n");
 }
 
 static void alc_determine_headset_type(struct hda_codec *codec)
@@ -3564,7 +3772,7 @@ static void alc_determine_headset_type(struct hda_codec *codec)
 		break;
 	}
 
-	snd_printdd("Headset jack detected iPhone-style headset: %s\n",
+	codec_dbg(codec, "Headset jack detected iPhone-style headset: %s\n",
 		    is_ctia ? "yes" : "no");
 	spec->current_headset_type = is_ctia ? ALC_HEADSET_TYPE_CTIA : ALC_HEADSET_TYPE_OMTP;
 }
@@ -3690,10 +3898,25 @@ static void alc_fixup_headset_mode_no_hp_mic(struct hda_codec *codec,
 		alc_fixup_headset_mode(codec, fix, action);
 }
 
+<<<<<<< HEAD
+=======
+static void alc255_set_default_jack_type(struct hda_codec *codec)
+{
+	/* Set to iphone type */
+	alc_write_coef_idx(codec, 0x1b, 0x880b);
+	alc_write_coef_idx(codec, 0x45, 0xd089);
+	alc_write_coef_idx(codec, 0x1b, 0x080b);
+	alc_write_coef_idx(codec, 0x46, 0x0004);
+	alc_write_coef_idx(codec, 0x1b, 0x0c0b);
+	msleep(30);
+}
+
+>>>>>>> Audio: Backport git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git
 static void alc_fixup_headset_mode_alc255(struct hda_codec *codec,
 				const struct hda_fixup *fix, int action)
 {
 	if (action == HDA_FIXUP_ACT_PRE_PROBE) {
+<<<<<<< HEAD
 		/* Set to iphone type */
 		alc_write_coef_idx(codec, 0x1b, 0x880b);
 		alc_write_coef_idx(codec, 0x45, 0xd089);
@@ -3701,10 +3924,28 @@ static void alc_fixup_headset_mode_alc255(struct hda_codec *codec,
 		alc_write_coef_idx(codec, 0x46, 0x0004);
 		alc_write_coef_idx(codec, 0x1b, 0x0c0b);
 		msleep(30);
+=======
+		alc255_set_default_jack_type(codec);
+>>>>>>> Audio: Backport git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git
 	}
 	alc_fixup_headset_mode(codec, fix, action);
 }
 
+<<<<<<< HEAD
+=======
+static void alc_fixup_headset_mode_alc255_no_hp_mic(struct hda_codec *codec,
+				const struct hda_fixup *fix, int action)
+{
+	if (action == HDA_FIXUP_ACT_PRE_PROBE) {
+		struct alc_spec *spec = codec->spec;
+		spec->parse_flags |= HDA_PINCFG_HEADSET_MIC;
+		alc255_set_default_jack_type(codec);
+	} 
+	else
+		alc_fixup_headset_mode(codec, fix, action);
+}
+
+>>>>>>> Audio: Backport git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git
 static void alc_fixup_auto_mute_via_amp(struct hda_codec *codec,
 					const struct hda_fixup *fix, int action)
 {
@@ -3986,7 +4227,13 @@ enum {
 	ALC290_FIXUP_SUBWOOFER_HSJACK,
 	ALC269_FIXUP_THINKPAD_ACPI,
 	ALC255_FIXUP_DELL1_MIC_NO_PRESENCE,
+<<<<<<< HEAD
 	ALC255_FIXUP_HEADSET_MODE,
+=======
+	ALC255_FIXUP_DELL2_MIC_NO_PRESENCE,
+	ALC255_FIXUP_HEADSET_MODE,
+	ALC255_FIXUP_HEADSET_MODE_NO_HP_MIC,
+>>>>>>> Audio: Backport git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git
 };
 
 static const struct hda_fixup alc269_fixups[] = {
@@ -4370,10 +4617,29 @@ static const struct hda_fixup alc269_fixups[] = {
 		.chained = true,
 		.chain_id = ALC255_FIXUP_HEADSET_MODE
 	},
+<<<<<<< HEAD
+=======
+	[ALC255_FIXUP_DELL2_MIC_NO_PRESENCE] = {
+		.type = HDA_FIXUP_PINS,
+		.v.pins = (const struct hda_pintbl[]) {
+			{ 0x19, 0x01a1913c }, /* use as headset mic, without its own jack detect */
+			{ }
+		},
+		.chained = true,
+		.chain_id = ALC255_FIXUP_HEADSET_MODE_NO_HP_MIC
+	},
+>>>>>>> Audio: Backport git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git
 	[ALC255_FIXUP_HEADSET_MODE] = {
 		.type = HDA_FIXUP_FUNC,
 		.v.func = alc_fixup_headset_mode_alc255,
 	},
+<<<<<<< HEAD
+=======
+	[ALC255_FIXUP_HEADSET_MODE_NO_HP_MIC] = {
+		.type = HDA_FIXUP_FUNC,
+		.v.func = alc_fixup_headset_mode_alc255_no_hp_mic,
+	},
+>>>>>>> Audio: Backport git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git
 };
 
 static const struct snd_pci_quirk alc269_fixup_tbl[] = {
@@ -4440,6 +4706,11 @@ static const struct snd_pci_quirk alc269_fixup_tbl[] = {
 	SND_PCI_QUIRK(0x1028, 0x0658, "Dell", ALC269_FIXUP_DELL1_MIC_NO_PRESENCE),
 	SND_PCI_QUIRK(0x1028, 0x065f, "Dell", ALC255_FIXUP_DELL1_MIC_NO_PRESENCE),
 	SND_PCI_QUIRK(0x1028, 0x0662, "Dell", ALC255_FIXUP_DELL1_MIC_NO_PRESENCE),
+<<<<<<< HEAD
+=======
+	SND_PCI_QUIRK(0x1028, 0x0668, "Dell", ALC255_FIXUP_DELL2_MIC_NO_PRESENCE),
+	SND_PCI_QUIRK(0x1028, 0x0669, "Dell", ALC255_FIXUP_DELL2_MIC_NO_PRESENCE),
+>>>>>>> Audio: Backport git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git
 	SND_PCI_QUIRK(0x1028, 0x15cc, "Dell X5 Precision", ALC269_FIXUP_DELL2_MIC_NO_PRESENCE),
 	SND_PCI_QUIRK(0x1028, 0x15cd, "Dell X5 Precision", ALC269_FIXUP_DELL2_MIC_NO_PRESENCE),
 	SND_PCI_QUIRK(0x103c, 0x1586, "HP", ALC269_FIXUP_HP_MUTE_LED_MIC2),
@@ -4702,13 +4973,15 @@ static int patch_alc269(struct hda_codec *codec)
 		spec->codec_variant = ALC269_TYPE_ALC269VA;
 		switch (alc_get_coef0(codec) & 0x00f0) {
 		case 0x0010:
-			if (codec->bus->pci->subsystem_vendor == 0x1025 &&
+			if (codec->bus->pci &&
+			    codec->bus->pci->subsystem_vendor == 0x1025 &&
 			    spec->cdefine.platform_type == 1)
 				err = alc_codec_rename(codec, "ALC271X");
 			spec->codec_variant = ALC269_TYPE_ALC269VB;
 			break;
 		case 0x0020:
-			if (codec->bus->pci->subsystem_vendor == 0x17aa &&
+			if (codec->bus->pci &&
+			    codec->bus->pci->subsystem_vendor == 0x17aa &&
 			    codec->bus->pci->subsystem_device == 0x21f3)
 				err = alc_codec_rename(codec, "ALC3202");
 			spec->codec_variant = ALC269_TYPE_ALC269VC;
@@ -4731,6 +5004,14 @@ static int patch_alc269(struct hda_codec *codec)
 		break;
 	case 0x10ec0282:
 		spec->codec_variant = ALC269_TYPE_ALC282;
+		spec->shutup = alc282_shutup;
+		spec->init_hook = alc282_init;
+		break;
+	case 0x10ec0233:
+	case 0x10ec0283:
+		spec->codec_variant = ALC269_TYPE_ALC283;
+		spec->shutup = alc283_shutup;
+		spec->init_hook = alc283_init;
 		break;
 	case 0x10ec0233:
 	case 0x10ec0283:
@@ -5049,8 +5330,71 @@ static void alc272_fixup_mario(struct hda_codec *codec,
 				      (0x3b << AC_AMPCAP_NUM_STEPS_SHIFT) |
 				      (0x03 << AC_AMPCAP_STEP_SIZE_SHIFT) |
 				      (0 << AC_AMPCAP_MUTE_SHIFT)))
-		printk(KERN_WARNING
-		       "hda_codec: failed to override amp caps for NID 0x2\n");
+		codec_warn(codec, "failed to override amp caps for NID 0x2\n");
+}
+
+static const struct snd_pcm_chmap_elem asus_pcm_2_1_chmaps[] = {
+	{ .channels = 2,
+	  .map = { SNDRV_CHMAP_FL, SNDRV_CHMAP_FR } },
+	{ .channels = 4,
+	  .map = { SNDRV_CHMAP_FL, SNDRV_CHMAP_FR,
+		   SNDRV_CHMAP_NA, SNDRV_CHMAP_LFE } }, /* LFE only on right */
+	{ }
+};
+
+/* override the 2.1 chmap */
+static void alc_fixup_bass_chmap(struct hda_codec *codec,
+				    const struct hda_fixup *fix, int action)
+{
+	if (action == HDA_FIXUP_ACT_BUILD) {
+		struct alc_spec *spec = codec->spec;
+		spec->gen.pcm_rec[0].stream[0].chmap = asus_pcm_2_1_chmaps;
+	}
+}
+
+/* turn on/off mute LED per vmaster hook */
+static void alc662_led_gpio1_mute_hook(void *private_data, int enabled)
+{
+	struct hda_codec *codec = private_data;
+	struct alc_spec *spec = codec->spec;
+	unsigned int oldval = spec->gpio_led;
+
+	if (enabled)
+		spec->gpio_led &= ~0x01;
+	else
+		spec->gpio_led |= 0x01;
+	if (spec->gpio_led != oldval)
+		snd_hda_codec_write(codec, 0x01, 0, AC_VERB_SET_GPIO_DATA,
+				    spec->gpio_led);
+}
+
+/* avoid D3 for keeping GPIO up */
+static unsigned int gpio_led_power_filter(struct hda_codec *codec,
+					  hda_nid_t nid,
+					  unsigned int power_state)
+{
+	struct alc_spec *spec = codec->spec;
+	if (nid == codec->afg && power_state == AC_PWRST_D3 && spec->gpio_led)
+		return AC_PWRST_D0;
+	return power_state;
+}
+
+static void alc662_fixup_led_gpio1(struct hda_codec *codec,
+				   const struct hda_fixup *fix, int action)
+{
+	struct alc_spec *spec = codec->spec;
+	static const struct hda_verb gpio_init[] = {
+		{ 0x01, AC_VERB_SET_GPIO_MASK, 0x01 },
+		{ 0x01, AC_VERB_SET_GPIO_DIRECTION, 0x01 },
+		{}
+	};
+
+	if (action == HDA_FIXUP_ACT_PRE_PROBE) {
+		spec->gen.vmaster_mute.hook = alc662_led_gpio1_mute_hook;
+		spec->gpio_led = 0;
+		snd_hda_add_verbs(codec, gpio_init);
+		codec->power_filter = gpio_led_power_filter;
+	}
 }
 
 static const struct snd_pcm_chmap_elem asus_pcm_2_1_chmaps[] = {
@@ -5074,6 +5418,7 @@ static void alc_fixup_bass_chmap(struct hda_codec *codec,
 
 enum {
 	ALC662_FIXUP_ASPIRE,
+	ALC662_FIXUP_LED_GPIO1,
 	ALC662_FIXUP_IDEAPAD,
 	ALC272_FIXUP_MARIO,
 	ALC662_FIXUP_CZC_P10T,
@@ -5092,9 +5437,16 @@ enum {
 	ALC662_FIXUP_INV_DMIC,
 	ALC668_FIXUP_DELL_MIC_NO_PRESENCE,
 	ALC668_FIXUP_HEADSET_MODE,
+<<<<<<< HEAD
 	ALC662_FIXUP_BASS_CHMAP,
 	ALC662_FIXUP_BASS_1A,
 	ALC662_FIXUP_BASS_1A_CHMAP,
+=======
+	ALC662_FIXUP_BASS_MODE4_CHMAP,
+	ALC662_FIXUP_BASS_16,
+	ALC662_FIXUP_BASS_1A,
+	ALC662_FIXUP_BASS_CHMAP,
+>>>>>>> Audio: Backport git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git
 	ALC668_FIXUP_AUTO_MUTE,
 };
 
@@ -5106,12 +5458,18 @@ static const struct hda_fixup alc662_fixups[] = {
 			{ }
 		}
 	},
+	[ALC662_FIXUP_LED_GPIO1] = {
+		.type = HDA_FIXUP_FUNC,
+		.v.func = alc662_fixup_led_gpio1,
+	},
 	[ALC662_FIXUP_IDEAPAD] = {
 		.type = HDA_FIXUP_PINS,
 		.v.pins = (const struct hda_pintbl[]) {
 			{ 0x17, 0x99130112 }, /* subwoofer */
 			{ }
-		}
+		},
+		.chained = true,
+		.chain_id = ALC662_FIXUP_LED_GPIO1,
 	},
 	[ALC272_FIXUP_MARIO] = {
 		.type = HDA_FIXUP_FUNC,
@@ -5276,24 +5634,49 @@ static const struct hda_fixup alc662_fixups[] = {
 		.type = HDA_FIXUP_FUNC,
 		.v.func = alc_fixup_headset_mode_alc668,
 	},
+<<<<<<< HEAD
 	[ALC662_FIXUP_BASS_CHMAP] = {
+=======
+	[ALC662_FIXUP_BASS_MODE4_CHMAP] = {
+>>>>>>> Audio: Backport git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git
 		.type = HDA_FIXUP_FUNC,
 		.v.func = alc_fixup_bass_chmap,
 		.chained = true,
 		.chain_id = ALC662_FIXUP_ASUS_MODE4
 	},
+<<<<<<< HEAD
+=======
+	[ALC662_FIXUP_BASS_16] = {
+		.type = HDA_FIXUP_PINS,
+		.v.pins = (const struct hda_pintbl[]) {
+			{0x16, 0x80106111}, /* bass speaker */
+			{}
+		},
+		.chained = true,
+		.chain_id = ALC662_FIXUP_BASS_CHMAP,
+	},
+>>>>>>> Audio: Backport git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git
 	[ALC662_FIXUP_BASS_1A] = {
 		.type = HDA_FIXUP_PINS,
 		.v.pins = (const struct hda_pintbl[]) {
 			{0x1a, 0x80106111}, /* bass speaker */
 			{}
 		},
+<<<<<<< HEAD
 	},
 	[ALC662_FIXUP_BASS_1A_CHMAP] = {
 		.type = HDA_FIXUP_FUNC,
 		.v.func = alc_fixup_bass_chmap,
 		.chained = true,
 		.chain_id = ALC662_FIXUP_BASS_1A,
+=======
+		.chained = true,
+		.chain_id = ALC662_FIXUP_BASS_CHMAP,
+	},
+	[ALC662_FIXUP_BASS_CHMAP] = {
+		.type = HDA_FIXUP_FUNC,
+		.v.func = alc_fixup_bass_chmap,
+>>>>>>> Audio: Backport git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git
 	},
 };
 
@@ -5314,12 +5697,21 @@ static const struct snd_pci_quirk alc662_fixup_tbl[] = {
 	SND_PCI_QUIRK(0x1028, 0x0626, "Dell", ALC668_FIXUP_DELL_MIC_NO_PRESENCE),
 	SND_PCI_QUIRK(0x1028, 0x0628, "Dell", ALC668_FIXUP_AUTO_MUTE),
 	SND_PCI_QUIRK(0x1028, 0x064e, "Dell", ALC668_FIXUP_AUTO_MUTE),
+<<<<<<< HEAD
 	SND_PCI_QUIRK(0x1028, 0x0696, "Dell", ALC668_FIXUP_DELL_MIC_NO_PRESENCE),
 	SND_PCI_QUIRK(0x1028, 0x0698, "Dell", ALC668_FIXUP_DELL_MIC_NO_PRESENCE),
 	SND_PCI_QUIRK(0x103c, 0x1632, "HP RP5800", ALC662_FIXUP_HP_RP5800),
 	SND_PCI_QUIRK(0x1043, 0x11cd, "Asus N550", ALC662_FIXUP_BASS_1A_CHMAP),
 	SND_PCI_QUIRK(0x1043, 0x1477, "ASUS N56VZ", ALC662_FIXUP_BASS_CHMAP),
 	SND_PCI_QUIRK(0x1043, 0x1bf3, "ASUS N76VZ", ALC662_FIXUP_BASS_CHMAP),
+=======
+	SND_PCI_QUIRK(0x103c, 0x1632, "HP RP5800", ALC662_FIXUP_HP_RP5800),
+	SND_PCI_QUIRK(0x1043, 0x11cd, "Asus N550", ALC662_FIXUP_BASS_1A),
+	SND_PCI_QUIRK(0x1043, 0x1477, "ASUS N56VZ", ALC662_FIXUP_BASS_MODE4_CHMAP),
+	SND_PCI_QUIRK(0x1043, 0x15a7, "ASUS UX51VZH", ALC662_FIXUP_BASS_16),
+	SND_PCI_QUIRK(0x1043, 0x1b73, "ASUS N55SF", ALC662_FIXUP_BASS_16),
+	SND_PCI_QUIRK(0x1043, 0x1bf3, "ASUS N76VZ", ALC662_FIXUP_BASS_MODE4_CHMAP),
+>>>>>>> Audio: Backport git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git
 	SND_PCI_QUIRK(0x1043, 0x8469, "ASUS mobo", ALC662_FIXUP_NO_JACK_DETECT),
 	SND_PCI_QUIRK(0x105b, 0x0cd6, "Foxconn", ALC662_FIXUP_ASUS_MODE2),
 	SND_PCI_QUIRK(0x144d, 0xc051, "Samsung R720", ALC662_FIXUP_IDEAPAD),
@@ -5460,7 +5852,7 @@ static int patch_alc662(struct hda_codec *codec)
 		spec->gen.beep_nid = 0x01;
 
 	if ((alc_get_coef0(codec) & (1 << 14)) &&
-	    codec->bus->pci->subsystem_vendor == 0x1025 &&
+	    codec->bus->pci && codec->bus->pci->subsystem_vendor == 0x1025 &&
 	    spec->cdefine.platform_type == 1) {
 		err = alc_codec_rename(codec, "ALC272X");
 		if (err < 0)

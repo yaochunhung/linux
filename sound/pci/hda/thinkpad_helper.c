@@ -63,7 +63,12 @@ static void hda_fixup_thinkpad_acpi(struct hda_codec *codec,
 		if (!led_set_func)
 			led_set_func = symbol_request(tpacpi_led_set);
 		if (!led_set_func) {
+<<<<<<< HEAD
 			snd_printk(KERN_WARNING "Failed to find thinkpad-acpi symbol tpacpi_led_set\n");
+=======
+			codec_warn(codec,
+				   "Failed to find thinkpad-acpi symbol tpacpi_led_set\n");
+>>>>>>> Audio: Backport git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git
 			return;
 		}
 
@@ -75,7 +80,12 @@ static void hda_fixup_thinkpad_acpi(struct hda_codec *codec,
 		}
 		if (led_set_func(TPACPI_LED_MICMUTE, false) >= 0) {
 			if (spec->num_adc_nids > 1)
+<<<<<<< HEAD
 				snd_printdd("Skipping micmute LED control due to several ADCs");
+=======
+				codec_dbg(codec,
+					  "Skipping micmute LED control due to several ADCs");
+>>>>>>> Audio: Backport git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git
 			else {
 				spec->cap_sync_hook = update_tpacpi_micmute_led;
 				removefunc = false;

@@ -1,138 +1,36 @@
 /*
- * HWDEP Interface for HD-audio codec
+ * sysfs interface for HD-audio codec
  *
- * Copyright (c) 2007 Takashi Iwai <tiwai@suse.de>
+ * Copyright (c) 2014 Takashi Iwai <tiwai@suse.de>
  *
- *  This driver is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *
- *  This driver is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
+ * split from hda_hwdep.c
  */
 
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/compat.h>
+#include <linux/mutex.h>
+#include <linux/ctype.h>
+#include <linux/string.h>
+#include <linux/export.h>
 #include <sound/core.h>
 #include "hda_codec.h"
 #include "hda_local.h"
 #include <sound/hda_hwdep.h>
 #include <sound/minors.h>
 
-/*
- * write/read an out-of-bound verb
- */
-static int verb_write_ioctl(struct hda_codec *codec,
-			    struct hda_verb_ioctl __user *arg)
-{
-	u32 verb, res;
-
-	if (get_user(verb, &arg->verb))
-		return -EFAULT;
-	res = snd_hda_codec_read(codec, verb >> 24, 0,
-				 (verb >> 8) & 0xffff, verb & 0xff);
-	if (put_user(res, &arg->res))
-		return -EFAULT;
-	return 0;
-}
-
-static int get_wcap_ioctl(struct hda_codec *codec,
-			  struct hda_verb_ioctl __user *arg)
-{
-	u32 verb, res;
-	
-	if (get_user(verb, &arg->verb))
-		return -EFAULT;
-	res = get_wcaps(codec, verb >> 24);
-	if (put_user(res, &arg->res))
-		return -EFAULT;
-	return 0;
-}
-
-
-/*
- */
-static int hda_hwdep_ioctl(struct snd_hwdep *hw, struct file *file,
-			   unsigned int cmd, unsigned long arg)
-{
-	struct hda_codec *codec = hw->private_data;
-	void __user *argp = (void __user *)arg;
-
-	switch (cmd) {
-	case HDA_IOCTL_PVERSION:
-		return put_user(HDA_HWDEP_VERSION, (int __user *)argp);
-	case HDA_IOCTL_VERB_WRITE:
-		return verb_write_ioctl(codec, argp);
-	case HDA_IOCTL_GET_WCAP:
-		return get_wcap_ioctl(codec, argp);
-	}
-	return -ENOIOCTLCMD;
-}
-
-#ifdef CONFIG_COMPAT
-static int hda_hwdep_ioctl_compat(struct snd_hwdep *hw, struct file *file,
-				  unsigned int cmd, unsigned long arg)
-{
-	return hda_hwdep_ioctl(hw, file, cmd, (unsigned long)compat_ptr(arg));
-}
-#endif
-
-static int hda_hwdep_open(struct snd_hwdep *hw, struct file *file)
-{
-#ifndef CONFIG_SND_DEBUG_VERBOSE
-	if (!capable(CAP_SYS_RAWIO))
-		return -EACCES;
-#endif
-	return 0;
-}
-
-int snd_hda_create_hwdep(struct hda_codec *codec)
-{
-	char hwname[16];
-	struct snd_hwdep *hwdep;
-	int err;
-
-	sprintf(hwname, "HDA Codec %d", codec->addr);
-	err = snd_hwdep_new(codec->bus->card, hwname, codec->addr, &hwdep);
-	if (err < 0)
-		return err;
-	codec->hwdep = hwdep;
-	sprintf(hwdep->name, "HDA Codec %d", codec->addr);
-	hwdep->iface = SNDRV_HWDEP_IFACE_HDA;
-	hwdep->private_data = codec;
-	hwdep->exclusive = 1;
-	hwdep->groups = snd_hda_dev_attr_groups;
-
-	hwdep->ops.open = hda_hwdep_open;
-	hwdep->ops.ioctl = hda_hwdep_ioctl;
-#ifdef CONFIG_COMPAT
-	hwdep->ops.ioctl_compat = hda_hwdep_ioctl_compat;
-#endif
-
-<<<<<<< HEAD
-	mutex_init(&codec->user_mutex);
-	snd_array_init(&codec->init_verbs, sizeof(struct hda_verb), 32);
-	snd_array_init(&codec->hints, sizeof(struct hda_hint), 32);
-	snd_array_init(&codec->user_pins, sizeof(struct hda_pincfg), 16);
-
-	return 0;
-}
+/* hint string pair */
+struct hda_hint {
+	const char *key;
+	const char *val;	/* contained in the same alloc as key */
+};
 
 #ifdef CONFIG_PM
 static ssize_t power_on_acct_show(struct device *dev,
 				  struct device_attribute *attr,
 				  char *buf)
 {
-	struct snd_hwdep *hwdep = dev_get_drvdata(dev);
-	struct hda_codec *codec = hwdep->private_data;
+	struct hda_codec *codec = dev_get_drvdata(dev);
 	snd_hda_update_power_acct(codec);
 	return sprintf(buf, "%u\n", jiffies_to_msecs(codec->power_on_acct));
 }
@@ -141,28 +39,73 @@ static ssize_t power_off_acct_show(struct device *dev,
 				   struct device_attribute *attr,
 				   char *buf)
 {
-	struct snd_hwdep *hwdep = dev_get_drvdata(dev);
-	struct hda_codec *codec = hwdep->private_data;
+	struct hda_codec *codec = dev_get_drvdata(dev);
 	snd_hda_update_power_acct(codec);
 	return sprintf(buf, "%u\n", jiffies_to_msecs(codec->power_off_acct));
 }
 
-static struct device_attribute power_attrs[] = {
-	__ATTR_RO(power_on_acct),
-	__ATTR_RO(power_off_acct),
-};
-
-int snd_hda_hwdep_add_power_sysfs(struct hda_codec *codec)
-{
-	struct snd_hwdep *hwdep = codec->hwdep;
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(power_attrs); i++)
-		snd_add_device_sysfs_file(SNDRV_DEVICE_TYPE_HWDEP, hwdep->card,
-					  hwdep->device, &power_attrs[i]);
-	return 0;
-}
+static DEVICE_ATTR_RO(power_on_acct);
+static DEVICE_ATTR_RO(power_off_acct);
 #endif /* CONFIG_PM */
+
+#define CODEC_INFO_SHOW(type)					\
+static ssize_t type##_show(struct device *dev,			\
+			   struct device_attribute *attr,	\
+			   char *buf)				\
+{								\
+	struct hda_codec *codec = dev_get_drvdata(dev);		\
+	return sprintf(buf, "0x%x\n", codec->type);		\
+}
+
+#define CODEC_INFO_STR_SHOW(type)				\
+static ssize_t type##_show(struct device *dev,			\
+			     struct device_attribute *attr,	\
+					char *buf)		\
+{								\
+	struct hda_codec *codec = dev_get_drvdata(dev);		\
+	return sprintf(buf, "%s\n",				\
+		       codec->type ? codec->type : "");		\
+}
+
+CODEC_INFO_SHOW(vendor_id);
+CODEC_INFO_SHOW(subsystem_id);
+CODEC_INFO_SHOW(revision_id);
+CODEC_INFO_SHOW(afg);
+CODEC_INFO_SHOW(mfg);
+CODEC_INFO_STR_SHOW(vendor_name);
+CODEC_INFO_STR_SHOW(chip_name);
+CODEC_INFO_STR_SHOW(modelname);
+
+static ssize_t pin_configs_show(struct hda_codec *codec,
+				struct snd_array *list,
+				char *buf)
+{
+	int i, len = 0;
+	mutex_lock(&codec->user_mutex);
+	for (i = 0; i < list->used; i++) {
+		struct hda_pincfg *pin = snd_array_elem(list, i);
+		len += sprintf(buf + len, "0x%02x 0x%08x\n",
+			       pin->nid, pin->cfg);
+	}
+	mutex_unlock(&codec->user_mutex);
+	return len;
+}
+
+static ssize_t init_pin_configs_show(struct device *dev,
+				     struct device_attribute *attr,
+				     char *buf)
+{
+	struct hda_codec *codec = dev_get_drvdata(dev);
+	return pin_configs_show(codec, &codec->init_pins, buf);
+}
+
+static ssize_t driver_pin_configs_show(struct device *dev,
+				       struct device_attribute *attr,
+				       char *buf)
+{
+	struct hda_codec *codec = dev_get_drvdata(dev);
+	return pin_configs_show(codec, &codec->driver_pins, buf);
+}
 
 #ifdef CONFIG_SND_HDA_RECONFIG
 
@@ -176,10 +119,10 @@ static int clear_codec(struct hda_codec *codec)
 
 	err = snd_hda_codec_reset(codec);
 	if (err < 0) {
-		snd_printk(KERN_ERR "The codec is being used, can't free.\n");
+		codec_err(codec, "The codec is being used, can't free.\n");
 		return err;
 	}
-	clear_hwdep_elements(codec);
+	snd_hda_sysfs_clear(codec);
 	return 0;
 }
 
@@ -188,10 +131,10 @@ static int reconfig_codec(struct hda_codec *codec)
 	int err;
 
 	snd_hda_power_up(codec);
-	snd_printk(KERN_INFO "hda-codec: reconfiguring\n");
+	codec_info(codec, "hda-codec: reconfiguring\n");
 	err = snd_hda_codec_reset(codec);
 	if (err < 0) {
-		snd_printk(KERN_ERR
+		codec_err(codec,
 			   "The codec is being used, can't reconfigure.\n");
 		goto error;
 	}
@@ -227,43 +170,12 @@ static char *kstrndup_noeol(const char *src, size_t len)
 	return s;
 }
 
-#define CODEC_INFO_SHOW(type)					\
-static ssize_t type##_show(struct device *dev,			\
-			   struct device_attribute *attr,	\
-			   char *buf)				\
-{								\
-	struct snd_hwdep *hwdep = dev_get_drvdata(dev);		\
-	struct hda_codec *codec = hwdep->private_data;		\
-	return sprintf(buf, "0x%x\n", codec->type);		\
-}
-
-#define CODEC_INFO_STR_SHOW(type)				\
-static ssize_t type##_show(struct device *dev,			\
-			     struct device_attribute *attr,	\
-					char *buf)		\
-{								\
-	struct snd_hwdep *hwdep = dev_get_drvdata(dev);		\
-	struct hda_codec *codec = hwdep->private_data;		\
-	return sprintf(buf, "%s\n",				\
-		       codec->type ? codec->type : "");		\
-}
-
-CODEC_INFO_SHOW(vendor_id);
-CODEC_INFO_SHOW(subsystem_id);
-CODEC_INFO_SHOW(revision_id);
-CODEC_INFO_SHOW(afg);
-CODEC_INFO_SHOW(mfg);
-CODEC_INFO_STR_SHOW(vendor_name);
-CODEC_INFO_STR_SHOW(chip_name);
-CODEC_INFO_STR_SHOW(modelname);
-
 #define CODEC_INFO_STORE(type)					\
 static ssize_t type##_store(struct device *dev,			\
 			    struct device_attribute *attr,	\
 			    const char *buf, size_t count)	\
 {								\
-	struct snd_hwdep *hwdep = dev_get_drvdata(dev);		\
-	struct hda_codec *codec = hwdep->private_data;		\
+	struct hda_codec *codec = dev_get_drvdata(dev);		\
 	unsigned long val;					\
 	int err = kstrtoul(buf, 0, &val);			\
 	if (err < 0)						\
@@ -277,8 +189,7 @@ static ssize_t type##_store(struct device *dev,			\
 			    struct device_attribute *attr,	\
 			    const char *buf, size_t count)	\
 {								\
-	struct snd_hwdep *hwdep = dev_get_drvdata(dev);		\
-	struct hda_codec *codec = hwdep->private_data;		\
+	struct hda_codec *codec = dev_get_drvdata(dev);		\
 	char *s = kstrndup_noeol(buf, 64);			\
 	if (!s)							\
 		return -ENOMEM;					\
@@ -299,8 +210,7 @@ static ssize_t type##_store(struct device *dev,			\
 			    struct device_attribute *attr,	\
 			    const char *buf, size_t count)	\
 {								\
-	struct snd_hwdep *hwdep = dev_get_drvdata(dev);		\
-	struct hda_codec *codec = hwdep->private_data;		\
+	struct hda_codec *codec = dev_get_drvdata(dev);		\
 	int err = 0;						\
 	if (*buf)						\
 		err = type##_codec(codec);			\
@@ -314,8 +224,7 @@ static ssize_t init_verbs_show(struct device *dev,
 			       struct device_attribute *attr,
 			       char *buf)
 {
-	struct snd_hwdep *hwdep = dev_get_drvdata(dev);
-	struct hda_codec *codec = hwdep->private_data;
+	struct hda_codec *codec = dev_get_drvdata(dev);
 	int i, len = 0;
 	mutex_lock(&codec->user_mutex);
 	for (i = 0; i < codec->init_verbs.used; i++) {
@@ -354,8 +263,7 @@ static ssize_t init_verbs_store(struct device *dev,
 				struct device_attribute *attr,
 				const char *buf, size_t count)
 {
-	struct snd_hwdep *hwdep = dev_get_drvdata(dev);
-	struct hda_codec *codec = hwdep->private_data;
+	struct hda_codec *codec = dev_get_drvdata(dev);
 	int err = parse_init_verbs(codec, buf);
 	if (err < 0)
 		return err;
@@ -366,8 +274,7 @@ static ssize_t hints_show(struct device *dev,
 			  struct device_attribute *attr,
 			  char *buf)
 {
-	struct snd_hwdep *hwdep = dev_get_drvdata(dev);
-	struct hda_codec *codec = hwdep->private_data;
+	struct hda_codec *codec = dev_get_drvdata(dev);
 	int i, len = 0;
 	mutex_lock(&codec->user_mutex);
 	for (i = 0; i < codec->hints.used; i++) {
@@ -461,54 +368,19 @@ static ssize_t hints_store(struct device *dev,
 			   struct device_attribute *attr,
 			   const char *buf, size_t count)
 {
-	struct snd_hwdep *hwdep = dev_get_drvdata(dev);
-	struct hda_codec *codec = hwdep->private_data;
+	struct hda_codec *codec = dev_get_drvdata(dev);
 	int err = parse_hints(codec, buf);
 	if (err < 0)
 		return err;
 	return count;
 }
 
-static ssize_t pin_configs_show(struct hda_codec *codec,
-				struct snd_array *list,
-				char *buf)
-{
-	int i, len = 0;
-	mutex_lock(&codec->user_mutex);
-	for (i = 0; i < list->used; i++) {
-		struct hda_pincfg *pin = snd_array_elem(list, i);
-		len += sprintf(buf + len, "0x%02x 0x%08x\n",
-			       pin->nid, pin->cfg);
-	}
-	mutex_unlock(&codec->user_mutex);
-	return len;
-}
-
-static ssize_t init_pin_configs_show(struct device *dev,
-				     struct device_attribute *attr,
-				     char *buf)
-{
-	struct snd_hwdep *hwdep = dev_get_drvdata(dev);
-	struct hda_codec *codec = hwdep->private_data;
-	return pin_configs_show(codec, &codec->init_pins, buf);
-}
-
 static ssize_t user_pin_configs_show(struct device *dev,
 				     struct device_attribute *attr,
 				     char *buf)
 {
-	struct snd_hwdep *hwdep = dev_get_drvdata(dev);
-	struct hda_codec *codec = hwdep->private_data;
+	struct hda_codec *codec = dev_get_drvdata(dev);
 	return pin_configs_show(codec, &codec->user_pins, buf);
-}
-
-static ssize_t driver_pin_configs_show(struct device *dev,
-				       struct device_attribute *attr,
-				       char *buf)
-{
-	struct snd_hwdep *hwdep = dev_get_drvdata(dev);
-	struct hda_codec *codec = hwdep->private_data;
-	return pin_configs_show(codec, &codec->driver_pins, buf);
 }
 
 #define MAX_PIN_CONFIGS		32
@@ -531,52 +403,19 @@ static ssize_t user_pin_configs_store(struct device *dev,
 				      struct device_attribute *attr,
 				      const char *buf, size_t count)
 {
-	struct snd_hwdep *hwdep = dev_get_drvdata(dev);
-	struct hda_codec *codec = hwdep->private_data;
+	struct hda_codec *codec = dev_get_drvdata(dev);
 	int err = parse_user_pin_configs(codec, buf);
 	if (err < 0)
 		return err;
 	return count;
 }
 
-#define CODEC_ATTR_RW(type) \
-	__ATTR(type, 0644, type##_show, type##_store)
-#define CODEC_ATTR_RO(type) \
-	__ATTR_RO(type)
-#define CODEC_ATTR_WO(type) \
-	__ATTR(type, 0200, NULL, type##_store)
-
-static struct device_attribute codec_attrs[] = {
-	CODEC_ATTR_RW(vendor_id),
-	CODEC_ATTR_RW(subsystem_id),
-	CODEC_ATTR_RW(revision_id),
-	CODEC_ATTR_RO(afg),
-	CODEC_ATTR_RO(mfg),
-	CODEC_ATTR_RW(vendor_name),
-	CODEC_ATTR_RW(chip_name),
-	CODEC_ATTR_RW(modelname),
-	CODEC_ATTR_RW(init_verbs),
-	CODEC_ATTR_RW(hints),
-	CODEC_ATTR_RO(init_pin_configs),
-	CODEC_ATTR_RW(user_pin_configs),
-	CODEC_ATTR_RO(driver_pin_configs),
-	CODEC_ATTR_WO(reconfig),
-	CODEC_ATTR_WO(clear),
-};
-
-/*
- * create sysfs files on hwdep directory
- */
-int snd_hda_hwdep_add_sysfs(struct hda_codec *codec)
-{
-	struct snd_hwdep *hwdep = codec->hwdep;
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(codec_attrs); i++)
-		snd_add_device_sysfs_file(SNDRV_DEVICE_TYPE_HWDEP, hwdep->card,
-					  hwdep->device, &codec_attrs[i]);
-	return 0;
-}
+/* sysfs attributes exposed only when CONFIG_SND_HDA_RECONFIG=y */
+static DEVICE_ATTR_RW(init_verbs);
+static DEVICE_ATTR_RW(hints);
+static DEVICE_ATTR_RW(user_pin_configs);
+static DEVICE_ATTR_WO(reconfig);
+static DEVICE_ATTR_WO(clear);
 
 /*
  * Look for hint string
@@ -635,6 +474,26 @@ int snd_hda_get_int_hint(struct hda_codec *codec, const char *key, int *valp)
 }
 EXPORT_SYMBOL_GPL(snd_hda_get_int_hint);
 #endif /* CONFIG_SND_HDA_RECONFIG */
+
+/*
+ * common sysfs attributes
+ */
+#ifdef CONFIG_SND_HDA_RECONFIG
+#define RECONFIG_DEVICE_ATTR(name)	DEVICE_ATTR_RW(name)
+#else
+#define RECONFIG_DEVICE_ATTR(name)	DEVICE_ATTR_RO(name)
+#endif
+static RECONFIG_DEVICE_ATTR(vendor_id);
+static RECONFIG_DEVICE_ATTR(subsystem_id);
+static RECONFIG_DEVICE_ATTR(revision_id);
+static DEVICE_ATTR_RO(afg);
+static DEVICE_ATTR_RO(mfg);
+static RECONFIG_DEVICE_ATTR(vendor_name);
+static RECONFIG_DEVICE_ATTR(chip_name);
+static RECONFIG_DEVICE_ATTR(modelname);
+static DEVICE_ATTR_RO(init_pin_configs);
+static DEVICE_ATTR_RO(driver_pin_configs);
+
 
 #ifdef CONFIG_SND_HDA_PATCH_LOADER
 
@@ -855,10 +714,67 @@ int snd_hda_load_patch(struct hda_bus *bus, size_t fw_size, const void *fw_buf)
 }
 EXPORT_SYMBOL_GPL(snd_hda_load_patch);
 #endif /* CONFIG_SND_HDA_PATCH_LOADER */
-=======
-	/* link to codec */
-	hwdep->dev = &codec->dev;
 
-	return 0;
+/*
+ * sysfs entries
+ */
+static struct attribute *hda_dev_attrs[] = {
+	&dev_attr_vendor_id.attr,
+	&dev_attr_subsystem_id.attr,
+	&dev_attr_revision_id.attr,
+	&dev_attr_afg.attr,
+	&dev_attr_mfg.attr,
+	&dev_attr_vendor_name.attr,
+	&dev_attr_chip_name.attr,
+	&dev_attr_modelname.attr,
+	&dev_attr_init_pin_configs.attr,
+	&dev_attr_driver_pin_configs.attr,
+#ifdef CONFIG_PM
+	&dev_attr_power_on_acct.attr,
+	&dev_attr_power_off_acct.attr,
+#endif
+#ifdef CONFIG_SND_HDA_RECONFIG
+	&dev_attr_init_verbs.attr,
+	&dev_attr_hints.attr,
+	&dev_attr_user_pin_configs.attr,
+	&dev_attr_reconfig.attr,
+	&dev_attr_clear.attr,
+#endif
+	NULL
+};
+
+static struct attribute_group hda_dev_attr_group = {
+	.attrs	= hda_dev_attrs,
+};
+
+const struct attribute_group *snd_hda_dev_attr_groups[] = {
+	&hda_dev_attr_group,
+	NULL
+};
+
+void snd_hda_sysfs_init(struct hda_codec *codec)
+{
+	mutex_init(&codec->user_mutex);
+#ifdef CONFIG_SND_HDA_RECONFIG
+	snd_array_init(&codec->init_verbs, sizeof(struct hda_verb), 32);
+	snd_array_init(&codec->hints, sizeof(struct hda_hint), 32);
+	snd_array_init(&codec->user_pins, sizeof(struct hda_pincfg), 16);
+#endif
 }
->>>>>>> Audio: Backport git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git
+
+void snd_hda_sysfs_clear(struct hda_codec *codec)
+{
+#ifdef CONFIG_SND_HDA_RECONFIG
+	int i;
+
+	/* clear init verbs */
+	snd_array_free(&codec->init_verbs);
+	/* clear hints */
+	for (i = 0; i < codec->hints.used; i++) {
+		struct hda_hint *hint = snd_array_elem(&codec->hints, i);
+		kfree(hint->key); /* we don't need to free hint->val */
+	}
+	snd_array_free(&codec->hints);
+	snd_array_free(&codec->user_pins);
+#endif
+}
