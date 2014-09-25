@@ -353,9 +353,13 @@ static const struct snd_soc_dapm_route morg_map[] = {
 	/*On Board DMIC*/
 	{"IN2L", NULL, "DMIC"},
 	{"IN2R", NULL, "DMIC"},
+	/* TODO: Currently MICBIAS is set according to WM8281 AOB for MOFD */
+	{"DMIC", NULL, "MICBIAS3"},
 
-	/*Support dual polarity for Headset Mic*/
+
+	/* TODO: Currently MICBIAS is set according to WM8281 AOB for MOFD */
 	{ "AMIC", NULL, "MICBIAS2" },
+	{ "AMIC", NULL, "MICBIAS1" },
 	{ "IN1L", NULL, "AMIC" },
 	{ "IN1R", NULL, "AMIC" },
 
