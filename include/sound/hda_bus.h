@@ -1,40 +1,24 @@
+/*
+ *  Common defnition for for HD Audio bus struct used in ASoC and ALSA driver
+ *
+ *  This program is free software; you can redistribute it and/or modify it
+ *  under the terms of the GNU General Public License as published by the Free
+ *  Software Foundation; either version 2 of the License, or (at your option)
+ *  any later version.
+ *
+ *  This program is distributed in the hope that it will be useful, but WITHOUT
+ *  ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ *  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ *  more details.
+ */
 
-#ifndef _HDA_BUS_H_
-#define _HDA_BUS_H_
+#ifndef _SOUND_HDA_BUS_H_
+#define _SOUND_HDA_BUS_H_
 
 /*FIXME move to common header file
 #define HDA_RW_NO_RESPONSE_FALLBACK (1 << 0)
 */
-
-/* bus operators */
-struct hda_bus_ops {
-	/* send a single command */
-	int (*command)(struct hda_bus *bus, unsigned int cmd);
-	/* get a response from the last command */
-	unsigned int (*get_response)(struct hda_bus *bus, unsigned int addr);
-	/* free the private data */
-	void (*private_free)(struct hda_bus *);
-	/* attach a PCM stream */
-	int (*attach_pcm)(struct hda_bus *bus, struct hda_codec *codec,
-	struct hda_pcm *pcm);
-	/* reset bus for retry verb */
-	void (*bus_reset)(struct hda_bus *bus);
-#ifdef CONFIG_PM
-	/* notify power-up/down from codec to controller */
-	void (*pm_notify)(struct hda_bus *bus, bool power_up);
-#endif
-#ifdef CONFIG_SND_HDA_DSP_LOADER
-	/* prepare DSP transfer */
-	int (*load_dsp_prepare)(struct hda_bus *bus, unsigned int format,
-					unsigned int byte_size,
-	struct snd_dma_buffer *bufp);
-	/* start/stop DSP transfer */
-	void (*load_dsp_trigger)(struct hda_bus *bus, bool start);
-	/* clean up DSP transfer */
-	void (*load_dsp_cleanup)(struct hda_bus *bus,
-					struct snd_dma_buffer *dmab);
-#endif
-};
+struct hda_bus;
 
 /* template to pass to the bus constructor */
 struct hda_bus_template {
@@ -42,7 +26,6 @@ struct hda_bus_template {
 	struct pci_dev *pci;
 	const char *modelname;
 	int *power_save;
-	struct hda_bus_ops ops;
 };
 
 /*
@@ -94,4 +77,4 @@ struct hda_bus_unsolicited {
 	struct hda_bus *bus;
 };
 
-#endif /* _HDA_BUS_H_ */
+#endif /* _SOUND_HDA_BUS_H_ */
