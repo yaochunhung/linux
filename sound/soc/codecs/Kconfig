@@ -43,6 +43,7 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_DA7213 if I2C
 	select SND_SOC_DA732X if I2C
 	select SND_SOC_DA9055 if I2C
+	select SND_SOC_HDMI
 	select SND_SOC_BT_SCO
 	select SND_SOC_ISABELLE if I2C
 	select SND_SOC_JZ4740_CODEC
@@ -298,6 +299,14 @@ config SND_SOC_HDA_CODEC
 
 config SND_SOC_ISABELLE
         tristate
+
+config SND_SOC_HDMI
+        tristate
+        select SND_SOC_HDA_CODEC
+        default n
+        help
+          This adds support for ASoC Intel HDA HDMI Codec driver.
+          If unsure select "N".
 
 config SND_SOC_LM49453
 	tristate
