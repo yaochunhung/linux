@@ -409,7 +409,7 @@ static int morg_florida_init(struct snd_soc_pcm_runtime *runtime)
 	}
 
 	/* bit clock inverse not required */
-	fmt =   SND_SOC_DAIFMT_DSP_A | SND_SOC_DAIFMT_IB_NF
+	fmt =   SND_SOC_DAIFMT_DSP_A | SND_SOC_DAIFMT_NB_NF
 		| SND_SOC_DAIFMT_CBS_CFS;
 	ret = snd_soc_dai_set_fmt(florida_dai, fmt);
 	if (ret < 0) {
