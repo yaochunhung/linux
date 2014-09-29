@@ -117,7 +117,7 @@ static struct arizona_pdata florida_pdata  = {
 	.reset = 0, /*No Reset GPIO from AP, use SW reset*/
 	.ldoena = 0, /*TODO: Add actual GPIO for LDOEN, use SW Control for now*/
 	.irq_flags = IRQF_TRIGGER_LOW | IRQF_ONESHOT,
-	.clk32k_src = ARIZONA_32KZ_MCLK2, /*Onboard OSC provides 32K on MCLK2*/
+	.clk32k_src = ARIZONA_32KZ_NONE, /*Onboard OSC provides 32K on MCLK2*/
 	/*IN1 uses both MICBIAS1 and MICBIAS2 based on jack polarity,
 	the below values in dmic_ref only has meaning for DMIC's and not AMIC's*/
 	.dmic_ref = {ARIZONA_DMIC_MICBIAS1, ARIZONA_DMIC_MICBIAS3, 0, 0},
