@@ -1466,6 +1466,8 @@ int arizona_dev_init(struct arizona *arizona)
 	arizona_request_irq(arizona, ARIZONA_IRQ_UNDERCLOCKED, "Underclocked",
 			    arizona_underclocked, arizona);
 
+	regmap_update_bits(arizona->regmap, ARIZONA_ACCESSORY_DETECT_MODE_1,
+		ARIZONA_ACCDET_SRC,  ARIZONA_ACCDET_SRC);
 	/**
 	 * Give us a sane default for the headphone impedance in case the
 	 * extcon driver is not used
