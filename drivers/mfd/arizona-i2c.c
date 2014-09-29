@@ -121,7 +121,7 @@ static struct arizona_pdata florida_pdata  = {
 	/*IN1 uses both MICBIAS1 and MICBIAS2 based on jack polarity,
 	the below values in dmic_ref only has meaning for DMIC's and not AMIC's*/
 	.dmic_ref = {ARIZONA_DMIC_MICBIAS1, ARIZONA_DMIC_MICBIAS3, 0, 0},
-	.inmode = {ARIZONA_INMODE_SE, ARIZONA_INMODE_DMIC, 0, 0},
+	.inmode = {ARIZONA_INMODE_DIFF, ARIZONA_INMODE_DMIC, 0, 0},
 	.gpio_base = 0, /* Base allocated by gpio core*/
 	.micd_pol_gpio = 2, /* GPIO3 (offset 2 from gpio_base) of the codec*/
 	.micd_configs = micd_modes,
