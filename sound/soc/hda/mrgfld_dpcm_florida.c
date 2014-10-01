@@ -583,6 +583,17 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 		.ignore_suspend = 1,
 		.dynamic = 1,
 	},
+	{
+		.name = "Bxtn Audio Refrence cap",
+		.stream_name = "refcap",
+		.cpu_dai_name = "Refrence Pin",
+		.codec_name = "snd-soc-dummy",
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.platform_name = "0000:02:18.0",
+		.init = NULL,
+		.ignore_suspend = 1,
+		.dynamic = 1,
+	},
 
 	/* back ends */
 	{
