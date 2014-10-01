@@ -691,6 +691,9 @@ int ipc_init_instance(struct ipc *ipc, struct init_instance_msg *msg,
 	for (i = 0; i < param_block_size; ++i)
 		dev_dbg(ipc->dev, "%x\n ", buffer[i]);
 
+	if (param_block_size > 0x1FF)
+		param_block_size = 0x1FF;
+
 	header.primary = IPC_MSG_TARGET(IPC_MODULE_MSG);
 	header.primary |= IPC_MSG_DIR(IPC_MSG_REQUEST);
 	header.primary |= IPC_GLB_TYPE(IPC_MODULE_INIT_INSTANCE);
@@ -708,6 +711,7 @@ int ipc_init_instance(struct ipc *ipc, struct init_instance_msg *msg,
 
 	if (ret < 0) {
 		dev_err(ipc->dev, "ipc: init instance failed\n");
+		BUG_ON(ret < 0);
 		return ret;
 	}
 	return ret;
