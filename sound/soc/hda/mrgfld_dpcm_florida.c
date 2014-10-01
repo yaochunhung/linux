@@ -370,10 +370,12 @@ static const struct snd_soc_dapm_route morg_map[] = {
 
 	{ "codec0_in", NULL, "Codec Rx" },
 	{ "codec1_in", NULL, "Codec Rx" },
-	{ "dmic01_hifi", NULL, "DMIC Rx" },
+	{ "dmic01_hifi", NULL, "DMIC01 Rx" },
+	{ "dmic23_hifi", NULL, "DMIC23 Rx" },
 
 	{ "Codec Rx", NULL, "AIF1 Capture" },
-	{ "DMIC Rx", NULL, "Dummy Capture" },
+	{ "DMIC01 Rx", NULL, "Dummy Capture" },
+	{ "DMIC23 Rx", NULL, "Dummy Capture" },
 
 	/* TODO: map for rest of the ports */
 
@@ -430,7 +432,6 @@ static int morg_florida_init(struct snd_soc_pcm_runtime *runtime)
 		pr_err("unable to add card controls\n");
 		return ret;
 	}
-
 	return 0;
 }
 
@@ -514,18 +515,8 @@ static const struct snd_soc_pcm_stream morg_florida_dai_params = {
 	.channels_max = 4,
 };
 
-enum {
-	MORG_DPCM_AUDIO = 0,
-	MORG_DPCM_DB,
-	MORG_DPCM_LL,
-	MORG_DPCM_COMPR,
-	MORG_DPCM_VOIP,
-	MORG_DPCM_HDMI,
-	MORG_DPCM_PROBE,
-};
-
 struct snd_soc_dai_link morg_florida_msic_dailink[] = {
-	[MORG_DPCM_AUDIO] = {
+	{
 		.name = "Bxtn Audio Port",
 		.stream_name = "Audio",
 		.cpu_dai_name = "System Pin",
@@ -537,7 +528,7 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 		.dynamic = 1,
 		.ops = &morg_florida_ops,
 	},
-	[MORG_DPCM_DB] = {
+	{
 		.name = "Bxtn DB Audio Port",
 		.stream_name = "Deep Buffer Audio",
 		.cpu_dai_name = "Deepbuffer Pin",
@@ -548,7 +539,7 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 		.dynamic = 1,
 		.ops = &morg_florida_ops,
 	},
-	[MORG_DPCM_LL] = {
+	{
 		.name = "Bxtn LL Audio Port",
 		.stream_name = "Low Latency Audio",
 		.cpu_dai_name = "LowLatency Pin",
@@ -559,7 +550,7 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 		.dynamic = 1,
 		.ops = &morg_florida_ops,
 	},
-	[MORG_DPCM_COMPR] = {
+	{
 		.name = "Bxtn Compress Port",
 		.stream_name = "Compress Audio",
 		.cpu_dai_name = "Compress Pin",
@@ -569,7 +560,7 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 		.dynamic = 1,
 		.compr_ops = &morg_compr_ops,
 	},
-	[MORG_DPCM_VOIP] = {
+	{
 		.name = "Bxtn VOIP Port",
 		.stream_name = "Voip",
 		.cpu_dai_name = "VOIP Pin",
@@ -581,7 +572,7 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 /*		.ops = &morg_florida_8k_16k_ops,*/
 		.dynamic = 1,
 	},
-	[MORG_DPCM_HDMI] = {
+	{
 		.name = "Bxtn HDMI Port",
 		.stream_name = "Hdmi",
 		.cpu_dai_name = "System Pin",
@@ -593,52 +584,6 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 		.dynamic = 1,
 	},
 
-
-#if 0
-	[MORG_DPCM_PROBE] = {
-		.name = "Bxtn Probe Port",
-		.stream_name = "Probe",
-		.cpu_dai_name = "Probe-cpu-dai",
-		.codec_name = "snd-soc-dummy",
-		.codec_dai_name = "snd-soc-dummy-dai",
-		.platform_name = "0000:02:18.0",
-		.playback_count = 8,
-		.capture_count = 8,
-	},
-	/* CODEC<->CODEC link */
-	{
-		.name = "Bxtn Codec-Loop Port",
-		.stream_name = "Codec-Loop",
-		.cpu_dai_name = "Codec Pin",
-		.codec_name = "florida-codec",
-		.codec_dai_name = "florida-aif1",
-		.platform_name = "0000:02:18.0",
-		.dai_fmt = SND_SOC_DAIFMT_DSP_A | SND_SOC_DAIFMT_IB_NF
-						| SND_SOC_DAIFMT_CBS_CFS,
-		.params = &morg_florida_dai_params,
-		.dsp_loopback = true,
-	},
-	{
-		.name = "Bxtn Modem-Loop Port",
-		.stream_name = "Modem-Loop",
-		.cpu_dai_name = "ssp0-port",
-		.codec_name = "snd-soc-dummy",
-		.codec_dai_name = "snd-soc-dummy-dai",
-		.platform_name = "0000:02:18.0",
-		.params = &morg_florida_dai_params,
-		.dsp_loopback = true,
-	},
-	{
-		.name = "Bxtn BTFM-Loop Port",
-		.stream_name = "BTFM-Loop",
-		.cpu_dai_name = "ssp1-port",
-		.codec_name = "snd-soc-dummy",
-		.codec_dai_name = "snd-soc-dummy-dai",
-		.platform_name = "0000:02:18.0",
-		.params = &morg_florida_dai_params,
-		.dsp_loopback = true,
-	},
-#endif
 	/* back ends */
 	{
 		.name = "SSP2-Codec",
@@ -678,6 +623,26 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 		.cpu_dai_name = "iDisp Pin",
 		.codec_name = "codec#001.1",
 		.codec_dai_name = "intel-hdmi-hif1",
+		.platform_name = "0000:02:18.0",
+		.ignore_suspend = 1,
+		.no_pcm = 1,
+	},
+	{
+		.name = "dmic01",
+		.be_id = 5,
+		.cpu_dai_name = "DMIC01 Pin",
+		.codec_name = "snd-soc-dummy",
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.platform_name = "0000:02:18.0",
+		.ignore_suspend = 1,
+		.no_pcm = 1,
+	},
+	{
+		.name = "dmic23",
+		.be_id = 6,
+		.cpu_dai_name = "DMIC23 Pin",
+		.codec_name = "snd-soc-dummy",
+		.codec_dai_name = "snd-soc-dummy-dai",
 		.platform_name = "0000:02:18.0",
 		.ignore_suspend = 1,
 		.no_pcm = 1,
