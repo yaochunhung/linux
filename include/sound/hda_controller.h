@@ -224,7 +224,8 @@ static struct snd_pcm_hardware azx_pcm_hw = {
 				 SNDRV_PCM_INFO_SYNC_START |
 				 SNDRV_PCM_INFO_HAS_WALL_CLOCK |
 				 SNDRV_PCM_INFO_NO_PERIOD_WAKEUP),
-	.formats =		SNDRV_PCM_FMTBIT_S16_LE,
+	.formats =		SNDRV_PCM_FMTBIT_S16_LE |
+				SNDRV_PCM_FMTBIT_S24_LE,
 	.rates =		SNDRV_PCM_RATE_48000,
 	.rate_min =		48000,
 	.rate_max =		48000,

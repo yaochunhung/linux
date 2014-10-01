@@ -467,9 +467,9 @@ static struct snd_soc_dai_driver soc_hda_platform_dai[] = {
 	.capture = {
 		.stream_name = "System Capture",
 		.channels_min = HDA_MONO,
-		.channels_max = 2,
-		.rates = SNDRV_PCM_RATE_48000,
-		.formats = SNDRV_PCM_FMTBIT_S16_LE,
+		.channels_max = HDA_STEREO,
+		.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_16000,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE,
 	},
 },
 {
@@ -479,8 +479,8 @@ static struct snd_soc_dai_driver soc_hda_platform_dai[] = {
 		.stream_name = "Refrence Capture",
 		.channels_min = HDA_MONO,
 		.channels_max = HDA_STEREO,
-		.rates = SNDRV_PCM_RATE_48000,
-		.formats = SNDRV_PCM_FMTBIT_S16_LE,
+		.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_16000,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE,
 	},
 },
 {
@@ -594,14 +594,25 @@ static struct snd_soc_dai_driver soc_hda_platform_dai[] = {
 	},
 },
 {
-	.name = "DMIC Pin",
+	.name = "DMIC01 Pin",
 	.ops = &hda_be_dai_ops,
 	.capture = {
-		.stream_name = "DMIC Rx",
+		.stream_name = "DMIC01 Rx",
 		.channels_min = HDA_STEREO,
 		.channels_max = HDA_STEREO,
-		.rates = SNDRV_PCM_RATE_48000,
-		.formats = SNDRV_PCM_FMTBIT_S16_LE,
+		.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_16000,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE,
+	},
+},
+{
+	.name = "DMIC23 Pin",
+	.ops = &hda_be_dai_ops,
+	.capture = {
+		.stream_name = "DMIC23 Rx",
+		.channels_min = HDA_STEREO,
+		.channels_max = HDA_STEREO,
+		.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_16000,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE,
 	},
 },
 {
