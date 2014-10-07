@@ -205,7 +205,8 @@ static void hda_sst_setup_cpr_gateway_cfg(struct sst_dsp_ctx *ctx,
 		break;
 	case DEVICE_DMIC:
 		node_id.node.dma_type = DMIC_LINK_INPUT_CLASS;
-		node_id.node.dma_id = mconfig->dma_id;
+		node_id.node.dma_id = mconfig->dma_id +
+					 (mconfig->time_slot);
 		break;
 	case DEVICE_SLIMBUS:
 		node_id.node.dma_type = (SOURCE == mconfig->hw_conn_type) ?

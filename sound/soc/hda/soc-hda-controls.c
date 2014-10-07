@@ -891,6 +891,13 @@ void hda_sst_set_be_dmic_config(struct snd_soc_dai *dai,
 		mconfig->formats_config.caps[1] = outctrl;
 		dev_dbg(platform->dev, "%s: outctrl =%x\n", __func__, outctrl);
 		hda_set_module_params(mconfig, params, true);
+
+		/*FIXME need to fix based on the FW dmic interface struct.
+		the parameter to set here should to set the DMIC mode.
+		currenlt;y using timeslot */
+		if (strncmp(dai->name, "DMIC23 Pin", strlen(dai->name)) == 0)
+			mconfig->time_slot = 1;
+
 	}
 }
 
