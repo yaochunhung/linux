@@ -25,6 +25,7 @@
 #include <sound/soc.h>
 #include <sound/tlv.h>
 #include <sound/pcm.h>
+#include <sound/pcm_params.h>
 #include <linux/firmware.h>
 #include <sound/soc-fw.h>
 #include <sound/hda_controller.h>
@@ -805,9 +806,12 @@ static void hda_set_module_params(struct module_config *mconfig,
 		format = &mconfig->out_fmt;
 	/*set the hw_params */
 	format->sampling_freq = params_rate(params);
-	format->bit_depth = hda_sst_get_bit_depth(params);
 	format->channels = params_channels(params);
-	format->valid_bit_depth = format->bit_depth;
+	format->valid_bit_depth = hda_sst_get_bit_depth(params);
+	if (format->valid_bit_depth == DEPTH_16BIT)
+		format->bit_depth = format->valid_bit_depth;
+	else if (format->valid_bit_depth == DEPTH_24BIT)
+		format->bit_depth = DEPTH_32BIT;;
 	if (is_in_fmt) {
 		mconfig->ibs = (format->sampling_freq / 1000) *
 				(format->channels) *
@@ -817,7 +821,6 @@ static void hda_set_module_params(struct module_config *mconfig,
 				(format->channels) *
 				(format->bit_depth >> 3);
 	}
-
 }
 
 void hda_sst_set_copier_hw_params(struct snd_soc_dai *dai,
