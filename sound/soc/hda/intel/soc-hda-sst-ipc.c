@@ -589,6 +589,9 @@ struct ipc *ipc_init(struct device *dev,
 	/* enable IPC DONE interrupt */
 	sst_updatel_bits(dsp, HDA_ADSP_REG_HIPCCTL,
 		HDA_ADSP_REG_HIPCCTL_DONE, HDA_ADSP_REG_HIPCCTL_DONE);
+	/* Enable IPC BUSY interrupt */
+	sst_updatel_bits(dsp, HDA_ADSP_REG_HIPCCTL,
+		HDA_ADSP_REG_HIPCCTL_BUSY, HDA_ADSP_REG_HIPCCTL_BUSY);
 
 	return ipc;
 

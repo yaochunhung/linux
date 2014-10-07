@@ -82,6 +82,7 @@
 
 /* HIPCCTL */
 #define HDA_ADSP_REG_HIPCCTL_DONE	(0x1 << 1)
+#define HDA_ADSP_REG_HIPCCTL_BUSY       (0x1 << 0)
 
 /* HIPCT */
 #define HDA_ADSP_REG_HIPCT_BUSY		(0x1 << 31)
