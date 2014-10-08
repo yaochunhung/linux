@@ -206,7 +206,7 @@ static bool is_last_pipeline(struct snd_soc_dapm_widget *w,
 
 			if (p->connect && p->source->power) {
 				module = p->source->priv;
-				if (module->pipe.conn_type == CONN_TYPE_BE)
+				if (module->pipe->conn_type == CONN_TYPE_BE)
 					return true;
 				else
 					return false;
@@ -221,7 +221,7 @@ static bool is_last_pipeline(struct snd_soc_dapm_widget *w,
 				continue;
 			if (p->connect && p->sink->power) {
 				module = p->sink->priv;
-				if (module->pipe.conn_type == CONN_TYPE_BE)
+				if (module->pipe->conn_type == CONN_TYPE_BE)
 					return true;
 				else
 					return false;
@@ -264,7 +264,7 @@ static int hda_sst_src_bind_unbind_modules(struct snd_soc_dapm_widget *w,
 			dev_dbg(ctx->dev, "%s: SINK for  sink  widget id  = %d src_id=%d\n", __func__, w->id , p->source->id);
 			dev_dbg(ctx->dev, "%s: SINK widget = %s\n", __func__, p->source->name);
 			dev_dbg(ctx->dev, "%s: wirgdet source =%s\n", __func__, p->sink->name);
-			if (!is_pipe && (sink_module->pipe.ppl_id == src_module->pipe.ppl_id)) {
+			if (!is_pipe && (sink_module->pipe->ppl_id == src_module->pipe->ppl_id)) {
 				dev_dbg(ctx->dev, "%s: wirgdet source id =%s\n", __func__, p->sink->name);
 				if (p->source->id == snd_soc_dapm_mixer) {
 					if (sink_module->hw_conn_type == SINK)
@@ -275,8 +275,9 @@ static int hda_sst_src_bind_unbind_modules(struct snd_soc_dapm_widget *w,
 					if (sink_module->hw_conn_type == SINK)
 						ret = hda_sst_bind_unbind_modules(ctx, src_module, sink_module, bind);
 				}
-			} else if (is_pipe && (sink_module->pipe.ppl_id != src_module->pipe.ppl_id)) {
-				dev_dbg(ctx->dev, "%s: wirgdet source id =%s sink=%s sink_pipe=%d src_pipe=%d\n", __func__, p->sink->name, w->name, src_module->pipe.ppl_id, sink_module->pipe.ppl_id);
+			} else if (is_pipe && (sink_module->pipe->ppl_id != src_module->pipe->ppl_id)) {
+				dev_dbg(ctx->dev, "%s: wirgdet source id =%s sink=%s sink_pipe=%d src_pipe=%d\n", __func__, p->sink->name,
+					w->name, src_module->pipe->ppl_id, sink_module->pipe->ppl_id);
 				if (sink_module->hw_conn_type == SINK)
 					ret = hda_sst_bind_unbind_modules(ctx, src_module, sink_module, bind);
 				else
@@ -299,7 +300,7 @@ static int hda_sst_src_bind_unbind_modules(struct snd_soc_dapm_widget *w,
 			dev_dbg(ctx->dev, "%s: SRC for  sink  widget id  = %d src_id=%d\n", __func__, w->id , p->sink->id);
 			dev_dbg(ctx->dev, "%s: SRC wirgdet source id = %s\n", __func__, p->source->name);
 			dev_dbg(ctx->dev, "%s: wirgdet sink = %s\n", __func__, p->sink->name);
-			if (!is_pipe && (sink_module->pipe.ppl_id == src_module->pipe.ppl_id)) {
+			if (!is_pipe && (sink_module->pipe->ppl_id == src_module->pipe->ppl_id)) {
 				dev_dbg(ctx->dev, "%s: wirgdet sink id = %s\n", __func__, p->sink->name);
 				if (p->sink->id == snd_soc_dapm_mixer) {
 					if (sink_module->hw_conn_type == SOURCE)
@@ -310,7 +311,7 @@ static int hda_sst_src_bind_unbind_modules(struct snd_soc_dapm_widget *w,
 					if (sink_module->hw_conn_type == SOURCE)
 						ret = hda_sst_bind_unbind_modules(ctx, sink_module, src_module, bind);
 				}
-			} else if (is_pipe && (sink_module->pipe.ppl_id != src_module->pipe.ppl_id)) {
+			} else if (is_pipe && (sink_module->pipe->ppl_id != src_module->pipe->ppl_id)) {
 				if (sink_module->hw_conn_type == SOURCE)
 					ret = hda_sst_bind_unbind_modules(ctx, sink_module, src_module, bind);
 				else
@@ -326,12 +327,12 @@ static bool hda_sst_is_pipe_mem_available(struct hda_platform_info *pinfo,
 	struct sst_dsp_ctx *ctx, struct module_config *mconfig)
 {
 	dev_dbg(ctx->dev, "%s: module_id =%d instance=%d\n", __func__, mconfig->id.module_id, mconfig->id.instance_id);
-	pinfo->resource.mem += mconfig->pipe.memory_pages;
+	pinfo->resource.mem += mconfig->pipe->memory_pages;
 
 	if (pinfo->resource.mem > pinfo->resource.max_mem) {
 		dev_err(ctx->dev, "exceeds ppl memory available=%d > mem=%d\n",
 				pinfo->resource.max_mem, pinfo->resource.mem);
-		/* FIXME pinfo->resource.mem -= mconfig->pipe.memory_pages;
+		/* FIXME pinfo->resource.mem -= mconfig->pipe->memory_pages;
 		return false;*/
 	}
 	return true;
@@ -371,10 +372,9 @@ static int hda_sst_dapm_pre_pmu_event(struct snd_soc_dapm_widget *w,
 		if (!hda_sst_is_pipe_mem_available(pinfo, ctx, mconfig))
 			return -ENOMEM;
 
-		ret = hda_sst_create_pipeline(ctx, &mconfig->pipe);
+		ret = hda_sst_create_pipeline(ctx, mconfig->pipe);
 		if (ret < 0)
 			return ret;
-
 		ret = hda_sst_init_module(ctx, mconfig, NULL);
 		if (ret < 0)
 			return ret;
@@ -431,13 +431,13 @@ static int hda_sst_dapm_post_pmu_event(struct snd_soc_dapm_widget *w,
 				dev_err(ctx->dev, "kzalloc block failed\n");
 					return -ENOMEM;
 			}
-			ppl->pipe = &mconfig->pipe;
+			ppl->pipe = mconfig->pipe;
 			list_add(&ppl->node, &pinfo->ppl_start_list);
 		}
 	}
 
 	if ((w_type == HDA_SST_WIDGET_PGA)
-	&& (mconfig->pipe.conn_type == CONN_TYPE_FE)) {
+	&& (mconfig->pipe->conn_type == CONN_TYPE_FE)) {
 		list_for_each_entry_safe(ppl, __ppl, &pinfo->ppl_start_list, node) {
 			list_del(&ppl->node);
 
@@ -462,7 +462,7 @@ static int hda_sst_dapm_pre_pmd_event(struct snd_soc_dapm_widget *w,
 
 	if (w_type == HDA_SST_WIDGET_PGA) {
 		if (mconfig->conn_type != CONN_TYPE_FE) {
-			ret = hda_sst_stop_pipe(ctx, &mconfig->pipe);
+			ret = hda_sst_stop_pipe(ctx, mconfig->pipe);
 			if (ret < 0)
 				return ret;
 		}
@@ -493,8 +493,8 @@ static int hda_sst_dapm_post_pmd_event(struct snd_soc_dapm_widget *w,
 
 	if (w_type == HDA_SST_WIDGET_VMIXER ||
 		w_type == HDA_SST_WIDGET_MIXER) {
-		ret = hda_sst_delete_pipe(ctx, &mconfig->pipe);
-		pinfo->resource.mem -= mconfig->pipe.memory_pages;
+		ret = hda_sst_delete_pipe(ctx, mconfig->pipe);
+		pinfo->resource.mem -= mconfig->pipe->memory_pages;
 	}
 	return ret;
 }
@@ -624,6 +624,40 @@ int hda_sst_fw_kcontrol_find_io(struct snd_soc_platform *platform,
 	return 0;
 }
 
+static struct sst_pipe *hda_sst_add_pipe(struct device *dev,
+	struct hda_platform_info *pinfo, struct hda_dfw_pipe *dfw_pipe)
+{
+	struct sst_pipeline  *ppl;
+	struct sst_pipe *pipe;
+
+	list_for_each_entry(ppl, &pinfo->ppl_list, node) {
+		if (ppl->pipe->ppl_id == dfw_pipe->pipe_id)
+			return ppl->pipe;
+	}
+	ppl = devm_kzalloc(dev, sizeof(*ppl), GFP_KERNEL);
+	if (!ppl) {
+		dev_err(dev, "kzalloc block failed\n");
+		return NULL;
+	}
+
+	pipe  = devm_kzalloc(dev, sizeof(*pipe), GFP_KERNEL);
+	if (!ppl) {
+		dev_err(dev, "kzalloc block failed\n");
+		return NULL;
+	}
+
+	pipe->ppl_id = dfw_pipe->pipe_id;
+	pipe->memory_pages = dfw_pipe->memory_pages;
+	pipe->pipe_type = dfw_pipe->pipe_type;
+	pipe->conn_type = dfw_pipe->conn_type;
+	pipe->state = INVALID;
+
+	ppl->pipe = pipe;
+	list_add(&ppl->node, &pinfo->ppl_list);
+
+	return ppl->pipe;
+}
+
 static int hda_sst_widget_load(struct snd_soc_platform *platform,
 		struct snd_soc_dapm_widget *w, struct snd_soc_fw_dapm_widget *fw_w)
 {
@@ -633,6 +667,7 @@ static int hda_sst_widget_load(struct snd_soc_platform *platform,
 		container_of(chip, struct snd_soc_azx, hda_azx);
 	struct hda_platform_info *pinfo = schip->pinfo;
 	struct module_config *mconfig;
+	struct sst_pipe *pipe;
 	struct hda_dfw_module *dfw_config = (struct hda_dfw_module *)fw_w->pvt_data;
 
 	dev_dbg(chip->dev,
@@ -676,10 +711,9 @@ static int hda_sst_widget_load(struct snd_soc_platform *platform,
 	mconfig->out_fmt.bit_depth = dfw_config->out_fmt.bit_depth;
 	mconfig->out_fmt.valid_bit_depth = dfw_config->out_fmt.valid_bit_depth;
 	mconfig->out_fmt.channel_config = dfw_config->out_fmt.ch_cfg;
-	mconfig->pipe.ppl_id = dfw_config->pipe.pipe_id;
-	mconfig->pipe.memory_pages = dfw_config->pipe.memory_pages;
-	mconfig->pipe.pipe_type = dfw_config->pipe.pipe_type;
-	mconfig->pipe.conn_type = dfw_config->pipe.conn_type;
+	pipe =  hda_sst_add_pipe(platform->dev, pinfo, &dfw_config->pipe);
+	if (pipe)
+		mconfig->pipe = pipe;
 	mconfig->dev_type =  dfw_config->dev_type;
 	mconfig->hw_conn_type =  dfw_config->hw_conn_type;
 	mconfig->time_slot =  dfw_config->time_slot;
@@ -698,7 +732,7 @@ static int hda_sst_widget_load(struct snd_soc_platform *platform,
 		memcpy(mconfig->formats_config.caps, dfw_config->caps.caps,
 						 dfw_config->caps.caps_size);
 	pinfo->resource.max_mcps += mconfig->mcps;
-	pinfo->resource.max_mem += mconfig->pipe.memory_pages;
+	pinfo->resource.max_mem += mconfig->pipe->memory_pages;
 
 bind_event:
 	ret = snd_soc_fw_widget_bind_event(fw_w->event_type, w,
@@ -931,9 +965,9 @@ int hda_sst_set_fe_pipeline_state(struct snd_soc_dai *dai, bool start,
 	mconfig = hda_sst_get_module(dai, stream, true, "cpr");
 	if (mconfig != NULL) {
 		if (start)
-			ret = hda_sst_run_pipe(ctx, &mconfig->pipe);
+			ret = hda_sst_run_pipe(ctx, mconfig->pipe);
 		else
-			ret = hda_sst_stop_pipe(ctx, &mconfig->pipe);
+			ret = hda_sst_stop_pipe(ctx, mconfig->pipe);
 	}
 
 	return ret;

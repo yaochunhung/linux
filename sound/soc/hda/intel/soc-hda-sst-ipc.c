@@ -474,15 +474,7 @@ irqreturn_t sst_irq_thread_handler(int irq, void *context)
 	if (hipcie & HDA_ADSP_REG_HIPCIE_DONE) {
 		sst_updatel_bits(dsp, HDA_ADSP_REG_HIPCCTL,
 			HDA_ADSP_REG_HIPCCTL_DONE, 0);
-#if 0
-		dev_dbg(dsp->dev, "IPC irq: Firmware respond");
-		hipcte = sst_readl(dsp, HIPCTE);
-		header.primary = hipct;
-		header.extension = hipcte;
-		/* Handle Immediate reply from DSP Core */
-		ipc_process_reply(ipc, header);
-
-#endif		/* clear DONE bit - tell DSP we have completed the operation */
+		/* clear DONE bit - tell DSP we have completed the operation */
 
 		sst_updatel_bits(dsp, HDA_ADSP_REG_HIPCIE,
 			HDA_ADSP_REG_HIPCIE_DONE, HDA_ADSP_REG_HIPCIE_DONE);
@@ -711,7 +703,6 @@ int ipc_init_instance(struct ipc *ipc, struct init_instance_msg *msg,
 
 	if (ret < 0) {
 		dev_err(ipc->dev, "ipc: init instance failed\n");
-		BUG_ON(ret < 0);
 		return ret;
 	}
 	return ret;

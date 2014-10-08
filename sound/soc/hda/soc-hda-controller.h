@@ -49,6 +49,7 @@ struct hda_platform_info {
 	struct device *dev;
 	u32 *widget;
 	struct fw_resource resource;
+	struct list_head ppl_list;
 	struct list_head ppl_start_list;
 };
 

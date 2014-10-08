@@ -1052,6 +1052,7 @@ int soc_hda_platform_register(struct device *dev)
 	}
 
 	pinfo->dev = dev;
+	INIT_LIST_HEAD(&pinfo->ppl_list);
 	INIT_LIST_HEAD(&pinfo->ppl_start_list);
 
 	if (sazx == NULL)

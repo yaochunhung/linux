@@ -185,6 +185,15 @@ struct sst_pipe {
 	enum pipe_state state;
 };
 
+
+enum sst_module_state {
+	UNINIT = 0,
+	INIT_DONE = 1,
+	LOADED = 2,
+	UNLOADED = 3,
+	BIND_DONE = 4
+};
+
 struct module_config {
 	struct module_instance_id id;
 	struct module_format in_fmt;
@@ -205,7 +214,8 @@ struct module_config {
 	u16 dma_id;
 	u8 time_slot;
 	enum hw_connection_type hw_conn_type;
-	struct sst_pipe pipe;
+	enum sst_module_state m_state;
+	struct sst_pipe *pipe;
 	struct specific_config formats_config;
 };
 

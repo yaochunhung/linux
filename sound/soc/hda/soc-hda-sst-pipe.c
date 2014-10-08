@@ -361,7 +361,6 @@ int hda_sst_init_module(struct sst_dsp_ctx *ctx, struct module_config *mconfig,
 	u16 module_config_size = 0;
 	void *param_data = NULL;
 	int ret = 0;
-	int i = 0;
 	struct init_instance_msg msg;
 
 	dev_dbg(ctx->dev, "%s: module_id = %d instance=%d\n", __func__,
@@ -370,21 +369,28 @@ int hda_sst_init_module(struct sst_dsp_ctx *ctx, struct module_config *mconfig,
 	ret = hda_sst_set_module_format(ctx, mconfig,
 			&module_config_size, &param_data);
 	if (ret < 0) {
-		dev_err(ctx->dev, "Failed to set module %d format\n", i);
+		dev_err(ctx->dev, "Failed to set module format ret=%d\n", ret);
 		goto exit;
 	}
 
 	msg.module_id = mconfig->id.module_id;
 	msg.instance_id = mconfig->id.instance_id;
-	msg.ppl_instance_id = mconfig->pipe.ppl_id;
+	msg.ppl_instance_id = mconfig->pipe->ppl_id;
 	msg.param_data_size = module_config_size;
 	msg.core_id = mconfig->core_id;
 
+	if (mconfig->pipe->state != CREATED) {
+		dev_err(ctx->dev, "Pipe not created for Module state= %d pipe_id= %d\n",
+				 mconfig->pipe->state, mconfig->pipe->ppl_id);
+		return -EIO;
+	}
+
 	ret = ipc_init_instance(ctx->ipc, &msg, param_data);
 	if (ret < 0) {
-		dev_err(ctx->dev, "Failed to init instance %d\n", i);
+		dev_err(ctx->dev, "Failed to init instance ret=%d\n", ret);
 		goto exit;
 	}
+	mconfig->m_state = INIT_DONE;
 	/*FIXME need to check on msg extension for passing algo data in init */
 
 exit:
@@ -405,6 +411,22 @@ int hda_sst_bind_unbind_modules(struct sst_dsp_ctx *ctx, struct module_config
 		dst_instacne=%d\n", __func__, src_module->id.module_id,
 		src_module->id.instance_id, dst_module->id.module_id,
 		dst_module->id.instance_id);
+
+	dev_dbg(ctx->dev, "src_module state = %d dst module state = %d\n",
+		src_module->m_state, dst_module->m_state);
+	/*if module is not bind, then don't send unbind */
+	if (!bind) {
+		if (src_module->m_state != BIND_DONE)
+			return ret;
+		/* if intra module unbind, check if both modules are BIND,
+		then send unbind */
+		if ((src_module->pipe->ppl_id != dst_module->pipe->ppl_id) &&
+			dst_module->m_state != BIND_DONE)
+			return ret;
+	} else if (src_module->m_state != INIT_DONE &&
+			 dst_module->m_state != INIT_DONE)
+		return ret;
+
 	msg.module_id = src_module->id.module_id;
 	msg.instance_id = src_module->id.instance_id;
 	msg.dst_module_id = dst_module->id.module_id;
@@ -426,6 +448,13 @@ int hda_sst_bind_unbind_modules(struct sst_dsp_ctx *ctx, struct module_config
 	msg.bind = bind;
 
 	ret = ipc_bind_unbind(ctx->ipc, &msg);
+
+	if (!ret) {
+		if (bind)
+			src_module->m_state = BIND_DONE;
+		else
+			src_module->m_state = UNINIT;
+	}
 	return ret;
 }
 
@@ -466,6 +495,10 @@ int hda_sst_run_pipe(struct sst_dsp_ctx *ctx, struct sst_pipe *pipe)
 	int ret = 0;
 
 	dev_dbg(ctx->dev, "%s: pipe = %d\n", __func__, pipe->ppl_id);
+
+	/* If pipe was not created in FW, do not try to pause or delete */
+	if (pipe->state < CREATED)
+		return ret;
 
 	/* Pipe has to be paused before it is started */
 	ret = hda_sst_set_pipe_state(ctx, pipe, PPL_PAUSED);
@@ -521,6 +554,10 @@ int hda_sst_stop_pipe(struct sst_dsp_ctx *ctx, struct sst_pipe *pipe)
 	int ret = 0;
 
 	dev_dbg(ctx->dev, "In %s pipe=%d\n", __func__, pipe->ppl_id);
+
+	/* If pipe was not created in FW, do not try to pause or delete */
+	if (pipe->state < CREATED)
+		return ret;
 	ret = hda_sst_set_pipe_state(ctx, pipe, PPL_PAUSED);
 	if (ret < 0) {
 		dev_dbg(ctx->dev, "Failed to stop pipe\n");
