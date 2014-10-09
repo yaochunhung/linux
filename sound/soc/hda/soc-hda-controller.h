@@ -60,10 +60,13 @@ unsigned int soc_hda_soc_read(struct snd_soc_platform *platform,
 		 unsigned int reg);
 int soc_hda_soc_write(struct snd_soc_platform *platform,
 	unsigned int reg, unsigned int val);
-void hda_sst_set_copier_dma_id(struct snd_soc_dai *dai, int dma_id, int stream);
+void hda_sst_set_copier_dma_id(struct snd_soc_dai *dai, int dma_id, int stream,
+		bool is_fe);
 int hda_sst_set_fe_pipeline_state(struct snd_soc_dai *dai,
 			 bool start, int stream);
 void hda_sst_set_copier_hw_params(struct snd_soc_dai *dai,
+	struct snd_pcm_hw_params *params, int stream, bool is_fe);
+void hda_sst_set_be_dmic_config(struct snd_soc_dai *dai,
 	struct snd_pcm_hw_params *params, int stream);
 int hda_sst_dsp_control_init(struct snd_soc_platform *platform);
 

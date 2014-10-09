@@ -236,8 +236,9 @@ static int soc_hda_pcm_hw_params(struct snd_pcm_substream *substream,
 	dev_dbg(chip->dev, "dma_id=%d\n", dma_id);
 
 	if (chip->ppcap_offset) {
-		hda_sst_set_copier_hw_params(dai, params, substream->stream);
-		hda_sst_set_copier_dma_id(dai, dma_id, substream->stream);
+		hda_sst_set_copier_hw_params(dai, params,
+			 substream->stream, true);
+		hda_sst_set_copier_dma_id(dai, dma_id, substream->stream, true);
 	}
 
 	return ret;
@@ -331,7 +332,7 @@ static int soc_hda_be_link_hw_params(struct snd_pcm_substream *substream,
 	}
 	snd_soc_dai_set_dma_data(dai, substream, (void *)link_dev);
 	dma_id = azx_get_dma_id(chip, link_dev);
-	hda_sst_set_copier_dma_id(dai, dma_id, substream->stream);
+	hda_sst_set_copier_dma_id(dai, dma_id, substream->stream, false);
 
 	return 0;
 }
@@ -366,7 +367,7 @@ static int soc_hda_be_link_pcm_prepare(struct snd_pcm_substream *substream,
 					SNDRV_PCM_HW_PARAM_FIRST_MASK],
 					substream->runtime->format);
 
-	hda_sst_set_copier_hw_params(dai, params, substream->stream);
+	hda_sst_set_copier_hw_params(dai, params, substream->stream, false);
 
 	dma_params  = (struct snd_soc_hda_dma_params *)
 			snd_soc_dai_get_dma_data(codec_dai, substream);

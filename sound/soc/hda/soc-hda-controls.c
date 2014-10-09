@@ -235,6 +235,8 @@ static int is_hda_widget_type(struct snd_soc_dapm_widget *w)
 {
 	return ((w->id == snd_soc_dapm_dai_link) ||
 		(w->id == snd_soc_dapm_dai_in) ||
+		(w->id == snd_soc_dapm_aif_in) ||
+		(w->id == snd_soc_dapm_aif_out) ||
 		(w->id == snd_soc_dapm_dai_out)) ? 1 : 0;
 
 }
@@ -716,8 +718,58 @@ static int hda_sst_pvt_load(struct snd_soc_platform *platform,
 			control_ops, ARRAY_SIZE(control_ops), sm, mc);
 }
 
-static 	struct module_config *hda_sst_get_module(struct snd_soc_dai *dai,
-		int stream)
+
+static struct module_config *hda_sst_get_module_by_dir(
+	struct snd_soc_dapm_widget *w, struct sst_dsp_ctx *ctx,
+	int dir, char *m_type)
+{
+	struct snd_soc_dapm_widget *w1 = NULL;
+	struct snd_soc_dapm_path *p = NULL;
+	struct module_config *mconfig = NULL;
+
+	/* get the source modules  dir = 0 source module, dir = 1 sink modules*/
+	if (dir == 0) {
+		dev_dbg(ctx->dev, "Stream name=%s\n", w->name);
+		if (list_empty(&w->sources))
+			return mconfig;
+
+		list_for_each_entry(p, &w->sources, list_sink) {
+			if (p->connected && !p->connected(w, p->source) &&
+				!is_hda_widget_type(p->source) &&
+				(strstr(p->source->name, m_type) == NULL))
+				continue;
+
+			if (p->connect && p->source->priv) {
+				dev_dbg(ctx->dev, "module widget=%s\n", p->source->name);
+				return p->source->priv;
+			}
+			w1 = p->source;
+		}
+	} else {
+		dev_dbg(ctx->dev, "Stream name=%s\n", w->name);
+		if (list_empty(&w->sinks))
+			return mconfig;
+
+		list_for_each_entry(p, &w->sinks, list_source) {
+			if (p->connected && !p->connected(w, p->sink) &&
+				!is_hda_widget_type(p->sink) &&
+				(strstr(p->sink->name, m_type) == NULL))
+				continue;
+
+			if (p->connect && p->sink->priv) {
+				dev_dbg(ctx->dev, "module widget=%s\n", p->sink->name);
+				return p->sink->priv;
+			}
+			w1 = p->sink;
+		}
+	}
+	if (w1 != NULL)
+		mconfig = hda_sst_get_module_by_dir(w1, ctx, dir, m_type);
+	return mconfig;
+}
+
+static struct module_config *hda_sst_get_module(struct snd_soc_dai *dai,
+	int stream, bool is_fe, char *m_type)
 {
 	struct snd_soc_platform *platform = dai->platform;
 	struct azx *chip = snd_soc_platform_get_drvdata(platform);
@@ -725,77 +777,70 @@ static 	struct module_config *hda_sst_get_module(struct snd_soc_dai *dai,
 			container_of(chip, struct snd_soc_azx, hda_azx);
 	struct sst_dsp_ctx *ctx = schip->dsp;
 	struct snd_soc_dapm_widget *w;
-	struct snd_soc_dapm_path *p = NULL;
-	struct module_config *mconfig = NULL;
+	int dir = 0;
 
 	dev_dbg(ctx->dev, "%s: enter, dai-name=%s dir=%d\n", __func__, dai->name, stream);
 
+	/*if FE - Playback, then parse sink list , Capture then source list
+	if BE - Playback, then parse source list , Capture then sink list */
 	if (stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		dev_dbg(ctx->dev, "Stream name=%s\n", dai->playback_widget->name);
 		w = dai->playback_widget;
-		list_for_each_entry(p, &w->sinks, list_source) {
-			if (p->connected && !p->connected(w, p->sink))
-				continue;
-
-			if (p->connect && p->sink->priv) {
-				dev_dbg(ctx->dev, "module widget=%s\n", p->sink->name);
-				return p->sink->priv;
-			}
-
-		}
+		(is_fe) ? (dir = 1) : (dir = 0);
 	} else {
-		dev_dbg(ctx->dev, "Stream name=%s\n", dai->capture_widget->name);
 		w = dai->capture_widget;
-		list_for_each_entry(p, &w->sources, list_sink) {
-			if (p->connected && !p->connected(w, p->sink))
-				continue;
-
-			if (p->connect && p->source->priv) {
-				dev_dbg(ctx->dev, "module widget=%s\n", p->source->name);
-				return p->source->priv;
-			}
-		}
+		(is_fe) ? (dir = 0) : (dir = 1);
 	}
-	return mconfig;
+	return hda_sst_get_module_by_dir(w, ctx, dir, m_type);
+}
+
+static void hda_set_module_params(struct module_config *mconfig,
+	struct snd_pcm_hw_params *params, bool is_in_fmt)
+{
+
+	struct module_format *format = NULL;
+
+	if (is_in_fmt)
+		format = &mconfig->in_fmt;
+	else
+		format = &mconfig->out_fmt;
+	/*set the hw_params */
+	format->sampling_freq = params_rate(params);
+	format->bit_depth = hda_sst_get_bit_depth(params);
+	format->channels = params_channels(params);
+	format->valid_bit_depth = format->bit_depth;
+	if (is_in_fmt) {
+		mconfig->ibs = (format->sampling_freq / 1000) *
+				(format->channels) *
+				(format->bit_depth >> 3);
+	} else {
+		mconfig->obs = (format->sampling_freq / 1000) *
+				(format->channels) *
+				(format->bit_depth >> 3);
+	}
+
 }
 
 void hda_sst_set_copier_hw_params(struct snd_soc_dai *dai,
-	struct snd_pcm_hw_params *params, int stream)
+	struct snd_pcm_hw_params *params, int stream, bool is_fe)
 {
 	struct snd_soc_platform *platform = dai->platform;
 	struct module_config *mconfig = NULL;
-	struct module_format *format = NULL;
+	bool in_fmt;
 
 	dev_dbg(platform->dev,
 		"%s: enter, dai-name=%s dir=%d\n", __func__, dai->name, stream);
-	mconfig = hda_sst_get_module(dai, stream);
-	if (mconfig != NULL) {
-		if (stream == SNDRV_PCM_STREAM_PLAYBACK)
-			format = &mconfig->in_fmt;
-		else
-			format = &mconfig->out_fmt;
-		/*set the hw_params */
-		format->sampling_freq = params_rate(params);
-		format->bit_depth = hda_sst_get_bit_depth(params);
-		format->channels = params_channels(params);
-		format->valid_bit_depth = format->bit_depth;
-		dev_dbg(platform->dev, "FE freq=%d bit=%d channels=%d\n",
-			format->sampling_freq, format->bit_depth,
-			format->channels);
-		if (stream == SNDRV_PCM_STREAM_PLAYBACK) {
-			mconfig->ibs = (format->sampling_freq / 1000) *
-					(format->channels) *
-					(format->bit_depth >> 3);
-		} else {
-			mconfig->obs = (format->sampling_freq / 1000) *
-					(format->channels) *
-					(format->bit_depth >> 3);
-		}
-	}
+	if (stream == SNDRV_PCM_STREAM_PLAYBACK)
+		in_fmt = true;
+	else
+		in_fmt = false;
+	mconfig = hda_sst_get_module(dai, stream, is_fe, "cpr");
+	if (mconfig != NULL)
+		hda_set_module_params(mconfig, params, in_fmt);
 	return;
 }
 
-void hda_sst_set_copier_dma_id(struct snd_soc_dai *dai, int dma_id, int stream)
+void hda_sst_set_copier_dma_id(struct snd_soc_dai *dai, int dma_id, int stream,
+		bool is_fe)
 {
 	struct snd_soc_platform *platform = dai->platform;
 	struct module_config *mconfig = NULL;
@@ -803,7 +848,7 @@ void hda_sst_set_copier_dma_id(struct snd_soc_dai *dai, int dma_id, int stream)
 	dev_dbg(platform->dev,
 		 "%s: enter, dai-name=%s dir=%d\n", __func__,
 		dai->name, stream);
-	mconfig = hda_sst_get_module(dai, stream);
+	mconfig = hda_sst_get_module(dai, stream, is_fe, "cpr");
 	if (mconfig != NULL)
 		mconfig->dma_id = dma_id;
 	return;
@@ -817,7 +862,7 @@ void hda_sst_set_be_copier_caps(struct snd_soc_dai *dai,
 	struct module_config *mconfig = NULL;
 
 	dev_dbg(platform->dev, "%s: enter, dai-name=%s\n", __func__, dai->name);
-	mconfig = hda_sst_get_module(dai, stream);
+	mconfig = hda_sst_get_module(dai, stream, false, "cpr");
 	if (mconfig != NULL && configs->caps_size != 0) {
 		memcpy(mconfig->formats_config.caps,
 		configs->caps,
@@ -828,7 +873,29 @@ void hda_sst_set_be_copier_caps(struct snd_soc_dai *dai,
 	return;
 }
 
-int hda_sst_set_fe_pipeline_state(struct snd_soc_dai *dai, bool start, int stream)
+void hda_sst_set_be_dmic_config(struct snd_soc_dai *dai,
+	struct snd_pcm_hw_params *params, int stream)
+{
+	struct snd_soc_platform *platform = dai->platform;
+	struct module_config *mconfig = NULL;
+	u32 outctrl;
+
+	dev_dbg(platform->dev, "%s: enter, dai-name=%s\n", __func__, dai->name);
+	mconfig = hda_sst_get_module(dai, stream, false, "cpr");
+	if (mconfig != NULL && mconfig->formats_config.caps_size != 0) {
+		outctrl = mconfig->formats_config.caps[1];
+		if (hda_sst_get_bit_depth(params)  == DEPTH_16BIT)
+			outctrl &= ~BIT(19);
+		else if (hda_sst_get_bit_depth(params) == DEPTH_24BIT)
+			outctrl |= BIT(19);
+		mconfig->formats_config.caps[1] = outctrl;
+		dev_dbg(platform->dev, "%s: outctrl =%x\n", __func__, outctrl);
+		hda_set_module_params(mconfig, params, true);
+	}
+}
+
+int hda_sst_set_fe_pipeline_state(struct snd_soc_dai *dai, bool start,
+		 int stream)
 {
 	struct snd_soc_platform *platform = dai->platform;
 	struct azx *chip = snd_soc_platform_get_drvdata(platform);
@@ -840,7 +907,7 @@ int hda_sst_set_fe_pipeline_state(struct snd_soc_dai *dai, bool start, int strea
 
 	dev_dbg(ctx->dev, "%s: enter, dai-name=%s dir=%d\n", __func__,
 		 dai->name, stream);
-	mconfig = hda_sst_get_module(dai, stream);
+	mconfig = hda_sst_get_module(dai, stream, true, "cpr");
 	if (mconfig != NULL) {
 		if (start)
 			ret = hda_sst_run_pipe(ctx, &mconfig->pipe);
