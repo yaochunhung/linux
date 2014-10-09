@@ -285,13 +285,33 @@ static int hda_be_hw_params(struct snd_pcm_substream *substream,
 				struct snd_pcm_hw_params *params,
 				struct snd_soc_dai *dai)
 {
-	pr_debug("%s\n", __func__);
+	struct azx *chip = get_chip_ctx(substream);
+
+	dev_dbg(chip->dev, "%s: %s\n", __func__, dai->name);
 	/*will set the be copier spefic config here
 	now the default values will be taken from DFW */
-
 	return 0;
 }
 
+static int hda_be_dmic_prepare(struct snd_pcm_substream *substream,
+				struct snd_soc_dai *dai)
+{
+	struct snd_pcm_hw_params params;
+	struct snd_interval *channels, *rate;
+	struct azx *chip = get_chip_ctx(substream);
+
+	dev_dbg(chip->dev, "%s: %s\n", __func__, dai->name);
+
+	channels = hw_param_interval(&params, SNDRV_PCM_HW_PARAM_CHANNELS);
+	channels->min = channels->max = substream->runtime->channels;
+	rate = hw_param_interval(&params, SNDRV_PCM_HW_PARAM_RATE);
+	rate->min = rate->max = substream->runtime->rate;
+	snd_mask_set(&params.masks[SNDRV_PCM_HW_PARAM_FORMAT -
+					SNDRV_PCM_HW_PARAM_FIRST_MASK],
+					substream->runtime->format);
+	hda_sst_set_be_dmic_config(dai, &params, substream->stream);
+	return 0;
+}
 
 static int soc_hda_pcm_trigger(struct snd_pcm_substream *substream, int cmd,
 		struct snd_soc_dai *dai)
@@ -442,6 +462,10 @@ static struct snd_soc_dai_ops hda_pcm_dai_ops = {
 	.hw_params = soc_hda_pcm_hw_params,
 	.hw_free = soc_hda_pcm_hw_free,
 	.trigger = soc_hda_pcm_trigger,
+};
+
+static struct snd_soc_dai_ops hda_be_dmic_dai_ops = {
+	.prepare = hda_be_dmic_prepare,
 };
 
 static struct snd_soc_dai_ops hda_be_dai_ops = {
@@ -596,7 +620,7 @@ static struct snd_soc_dai_driver soc_hda_platform_dai[] = {
 },
 {
 	.name = "DMIC01 Pin",
-	.ops = &hda_be_dai_ops,
+	.ops = &hda_be_dmic_dai_ops,
 	.capture = {
 		.stream_name = "DMIC01 Rx",
 		.channels_min = HDA_STEREO,
@@ -607,7 +631,7 @@ static struct snd_soc_dai_driver soc_hda_platform_dai[] = {
 },
 {
 	.name = "DMIC23 Pin",
-	.ops = &hda_be_dai_ops,
+	.ops = &hda_be_dmic_dai_ops,
 	.capture = {
 		.stream_name = "DMIC23 Rx",
 		.channels_min = HDA_STEREO,
