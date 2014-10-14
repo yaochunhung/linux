@@ -320,6 +320,7 @@ static void azx_irq_pending_work(struct work_struct *work)
 {
 	struct azx *chip = container_of(work, struct azx, irq_pending_work);
 	int i, pending, ok;
+	unsigned long cookie;
 
 	if (!chip->irq_pending_warned) {
 		dev_info(chip->dev,
@@ -329,7 +330,7 @@ static void azx_irq_pending_work(struct work_struct *work)
 
 	for (;;) {
 		pending = 0;
-		spin_lock_irq(&chip->reg_lock);
+		spin_lock_irqsave(&chip->reg_lock, cookie);
 		for (i = 0; i < chip->num_streams; i++) {
 			struct azx_dev *azx_dev = &chip->azx_dev[i];
 			if (!azx_dev->irq_pending ||
@@ -339,15 +340,15 @@ static void azx_irq_pending_work(struct work_struct *work)
 			ok = azx_position_ok(chip, azx_dev);
 			if (ok > 0) {
 				azx_dev->irq_pending = 0;
-				spin_unlock(&chip->reg_lock);
+				spin_unlock_irqrestore(&chip->reg_lock, cookie);
 				snd_pcm_period_elapsed(azx_dev->substream);
-				spin_lock(&chip->reg_lock);
+				spin_lock_irqsave(&chip->reg_lock, cookie);
 			} else if (ok < 0) {
 				pending = 0;	/* too early */
 			} else
 				pending++;
 		}
-		spin_unlock_irq(&chip->reg_lock);
+		spin_unlock_irqrestore(&chip->reg_lock, cookie);
 		if (!pending)
 			return;
 		msleep(1);
@@ -358,11 +359,12 @@ static void azx_irq_pending_work(struct work_struct *work)
 static void azx_clear_irq_pending(struct azx *chip)
 {
 	int i;
+	unsigned long cookie;
 
-	spin_lock_irq(&chip->reg_lock);
+	spin_lock_irqsave(&chip->reg_lock, cookie);
 	for (i = 0; i < chip->num_streams; i++)
 		chip->azx_dev[i].irq_pending = 0;
-	spin_unlock_irq(&chip->reg_lock);
+	spin_unlock_irqrestore(&chip->reg_lock, cookie);
 }
 
 static int azx_acquire_irq(struct azx *chip, int do_disconnect)

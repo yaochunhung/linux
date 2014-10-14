@@ -401,7 +401,7 @@ int sst_dsp_free(struct sst_dsp_ctx *dsp)
 	ipc_int_disable(dsp);
 
 	free_irq(dsp->irq, dsp);
-
+	ipc_free(dsp->ipc);
 	kfree(dsp);
 	return ret;
 }

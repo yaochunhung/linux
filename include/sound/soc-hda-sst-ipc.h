@@ -98,5 +98,6 @@ void ipc_int_enable(struct sst_dsp_ctx *dsp);
 void ipc_int_disable(struct sst_dsp_ctx *dsp);
 
 bool ipc_int_status(struct sst_dsp_ctx *dsp);
+void ipc_free(struct ipc *ipc);
 
 #endif /* __HDA_SST_IPC_H */

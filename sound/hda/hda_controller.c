@@ -1331,10 +1331,10 @@ irqreturn_t azx_threaded_handler(int irq, void *dev_id)
 	u32 status;
 	u8 sd_status;
 	int i;
-
+	unsigned long cookie;
 
 	status = azx_readl(chip, INTSTS);
-	spin_lock(&chip->reg_lock);
+	spin_lock_irqsave(&chip->reg_lock, cookie);
 	for (i = 0; i < chip->num_streams; i++) {
 		azx_dev = &chip->azx_dev[i];
 		if (status & azx_dev->sd_int_sta_mask) {
@@ -1346,9 +1346,9 @@ irqreturn_t azx_threaded_handler(int irq, void *dev_id)
 			/* check whether this IRQ is really acceptable */
 			if (!chip->ops->position_check ||
 			    chip->ops->position_check(chip, azx_dev)) {
-				spin_unlock(&chip->reg_lock);
+				spin_unlock_irqrestore(&chip->reg_lock, cookie);
 				snd_pcm_period_elapsed(azx_dev->substream);
-				spin_lock(&chip->reg_lock);
+				spin_lock_irqsave(&chip->reg_lock, cookie);
 			}
 		}
 	}
@@ -1363,7 +1363,7 @@ irqreturn_t azx_threaded_handler(int irq, void *dev_id)
 		}
 		azx_writeb(chip, RIRBSTS, RIRB_INT_MASK);
 	}
-	spin_unlock(&chip->reg_lock);
+	spin_unlock_irqrestore(&chip->reg_lock, cookie);
 	return IRQ_HANDLED;
 }
 EXPORT_SYMBOL_GPL(azx_threaded_handler);

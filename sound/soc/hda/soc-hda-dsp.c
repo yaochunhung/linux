@@ -123,6 +123,7 @@ int azx_load_dsp_prepare(struct device *dev, unsigned int format,
 	u32 *bdl;
 	struct azx_dev *azx_dev;
 	int ret;
+	unsigned long cookie;
 
 
 	dev_dbg(chip->dev, "format: %x, byte_size: %x, bufp:%p", format, byte_size, bufp);
@@ -130,16 +131,16 @@ int azx_load_dsp_prepare(struct device *dev, unsigned int format,
 	azx_dev = azx_get_dsp_loader_dev(chip);
 
 	dsp_lock(azx_dev);
-	spin_lock_irq(&chip->reg_lock);
+	spin_lock_irqsave(&chip->reg_lock, cookie);
 	if (azx_dev->running || azx_dev->locked) {
-		spin_unlock_irq(&chip->reg_lock);
+		spin_unlock_irqrestore(&chip->reg_lock, cookie);
 		ret = -EBUSY;
 		goto unlock;
 	}
 	azx_dev->prepared = 0;
 	chip->saved_azx_dev = *azx_dev;
 	azx_dev->locked = 1;
-	spin_unlock_irq(&chip->reg_lock);
+	spin_unlock_irqrestore(&chip->reg_lock, cookie);
 
 	ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV_SG,
 				snd_dma_pci_data(chip->pci),
@@ -186,11 +187,11 @@ int azx_load_dsp_prepare(struct device *dev, unsigned int format,
 	mark_pages_wc(chip, bufp, false);
 	snd_dma_free_pages(bufp);
  err_alloc:
-	spin_lock_irq(&chip->reg_lock);
+	spin_lock_irqsave(&chip->reg_lock, cookie);
 	if (azx_dev->opened)
 		*azx_dev = chip->saved_azx_dev;
 	azx_dev->locked = 0;
-	spin_unlock_irq(&chip->reg_lock);
+	spin_unlock_irqrestore(&chip->reg_lock, cookie);
  unlock:
 	dsp_unlock(azx_dev);
 	return ret;
@@ -269,6 +270,7 @@ void azx_load_dsp_cleanup(struct device *dev,
 {
 	struct azx *chip = dev_get_drvdata(dev);
 	struct azx_dev *azx_dev = azx_get_dsp_loader_dev(chip);
+	unsigned long cookie;
 
 	if (!dmab->area || !azx_dev->locked)
 		return;
@@ -288,7 +290,7 @@ void azx_load_dsp_cleanup(struct device *dev,
 	snd_dma_free_pages(dmab);
 	dmab->area = NULL;
 
-	spin_lock_irq(&chip->reg_lock);
+	spin_lock_irqsave(&chip->reg_lock, cookie);
 	if (chip->ppcap_offset)
 		azx_writel_andor(
 			chip,
@@ -299,7 +301,7 @@ void azx_load_dsp_cleanup(struct device *dev,
 	if (azx_dev->opened)
 		*azx_dev = chip->saved_azx_dev;
 	azx_dev->locked = 0;
-	spin_unlock_irq(&chip->reg_lock);
+	spin_unlock_irqrestore(&chip->reg_lock, cookie);
 	dsp_unlock(azx_dev);
 }
 

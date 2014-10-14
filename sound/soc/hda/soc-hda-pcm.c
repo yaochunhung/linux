@@ -755,6 +755,7 @@ static int soc_hda_platform_pcm_trigger(struct snd_pcm_substream *substream,
 	struct snd_pcm_substream *s;
 	int rstart = 0, start, nsync = 0, sbits = 0;
 	int nwait, timeout;
+	unsigned long cookie;
 
 	azx_dev = get_azx_dev(substream);
 	/*FIXME trace_azx_pcm_trigger(chip, azx_dev, cmd);*/
@@ -786,7 +787,7 @@ static int soc_hda_platform_pcm_trigger(struct snd_pcm_substream *substream,
 		snd_pcm_trigger_done(s, substream);
 	}
 
-	spin_lock(&chip->reg_lock);
+	spin_lock_irqsave(&chip->reg_lock, cookie);
 
 	/* first, set SYNC bits of corresponding streams */
 	if (chip->driver_caps & AZX_DCAPS_OLD_SSYNC)
@@ -810,7 +811,7 @@ static int soc_hda_platform_pcm_trigger(struct snd_pcm_substream *substream,
 		}
 		azx_dev->running = start;
 	}
-	spin_unlock(&chip->reg_lock);
+	spin_unlock_irqrestore(&chip->reg_lock, cookie);
 	if (start) {
 		/* wait until all FIFOs get ready */
 		for (timeout = 5000; timeout; timeout--) {
@@ -844,7 +845,7 @@ static int soc_hda_platform_pcm_trigger(struct snd_pcm_substream *substream,
 			cpu_relax();
 		}
 	}
-	spin_lock(&chip->reg_lock);
+	spin_lock_irqsave(&chip->reg_lock, cookie);
 	/* reset SYNC bits */
 	if (chip->driver_caps & AZX_DCAPS_OLD_SSYNC)
 		azx_writel(chip, OLD_SSYNC,
@@ -867,7 +868,7 @@ static int soc_hda_platform_pcm_trigger(struct snd_pcm_substream *substream,
 			}
 		}
 	}
-	spin_unlock(&chip->reg_lock);
+	spin_unlock_irqrestore(&chip->reg_lock, cookie);
 	return 0;
 }
 
@@ -877,6 +878,7 @@ static int soc_hda_platform_pcm_dsp_trigger(struct snd_pcm_substream *substream,
 	struct azx *chip = get_chip_ctx(substream);
 	struct azx_dev *azx_dev = get_azx_dev(substream);
 	int rstart = 0, start;
+	unsigned long cookie;
 
 	dev_dbg(chip->dev, "In %s cmd=%d\n", __func__, cmd);
 	if (!azx_dev->prepared)
@@ -897,7 +899,7 @@ static int soc_hda_platform_pcm_dsp_trigger(struct snd_pcm_substream *substream,
 	return -EINVAL;
 	}
 
-	spin_lock(&chip->reg_lock);
+	spin_lock_irqsave(&chip->reg_lock, cookie);
 
 	if (start) {
 		azx_dev->start_wallclk = azx_readl(chip, WALLCLK);
@@ -911,7 +913,7 @@ static int soc_hda_platform_pcm_dsp_trigger(struct snd_pcm_substream *substream,
 
 	if (start)
 		azx_timecounter_init(substream, 0, 0);
-	spin_unlock(&chip->reg_lock);
+	spin_unlock_irqrestore(&chip->reg_lock, cookie);
 	return 0;
 }
 

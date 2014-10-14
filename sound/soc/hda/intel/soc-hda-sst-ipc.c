@@ -602,6 +602,13 @@ list_err:
 
 void ipc_free(struct ipc *ipc)
 {
+	/* Disable  IPC DONE interrupt */
+	sst_updatel_bits(ipc->dsp, HDA_ADSP_REG_HIPCCTL,
+		HDA_ADSP_REG_HIPCCTL_DONE, 0);
+	/* Disable IPC BUSY interrupt */
+	sst_updatel_bits(ipc->dsp, HDA_ADSP_REG_HIPCCTL,
+		HDA_ADSP_REG_HIPCCTL_BUSY, 0);
+
 	kfree(ipc);
 }
 
