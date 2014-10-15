@@ -352,7 +352,7 @@ static u8 hda_sst_alloc_queue(u8 *queue_mask, u8 max_queue)
 
 static void hda_sst_free_queue(u8 *queue_mask, u8 queue_index)
 {
-	*queue_mask &= ~(1llu << queue_index);
+	*queue_mask &= 0;
 }
 
 int hda_sst_init_module(struct sst_dsp_ctx *ctx, struct module_config *mconfig,
@@ -434,17 +434,17 @@ int hda_sst_bind_unbind_modules(struct sst_dsp_ctx *ctx, struct module_config
 	if (bind) {
 		src_module->out_queue = hda_sst_alloc_queue(&src_module->out_queue_mask,
 				 src_module->max_out_queue);
-		src_module->in_queue = hda_sst_alloc_queue(&src_module->in_queue_mask,
-				 src_module->max_in_queue);
+		dst_module->in_queue = hda_sst_alloc_queue(&dst_module->in_queue_mask,
+				 dst_module->max_in_queue);
 	} else {
 
-		hda_sst_free_queue(&src_module->out_queue_mask, src_module->out_queue);
-		hda_sst_free_queue(&src_module->in_queue_mask, src_module->in_queue);
+		src_module->out_queue_mask = 0;
+		src_module->in_queue_mask = 0;
 	}
 	dev_dbg(ctx->dev, "in quque = %d out_queue =%d\n",
 		 src_module->out_queue, src_module->in_queue);
 	msg.src_queue = src_module->out_queue;
-	msg.dst_queue = src_module->in_queue;
+	msg.dst_queue = dst_module->in_queue;
 	msg.bind = bind;
 
 	ret = ipc_bind_unbind(ctx->ipc, &msg);
