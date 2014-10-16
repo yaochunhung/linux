@@ -907,6 +907,24 @@ void hda_sst_set_be_copier_caps(struct snd_soc_dai *dai,
 	return;
 }
 
+void hda_sst_set_be_ssp_config(struct snd_soc_dai *dai, int stream)
+{
+	struct snd_soc_platform *platform = dai->platform;
+	struct module_config *mconfig = NULL;
+	union ssp_dma_node dma_id;
+
+	dev_dbg(platform->dev, "%s: enter, dai-name=%s\n", __func__, dai->name);
+	mconfig = hda_sst_get_module(dai, stream, false, "cpr");
+
+	if (mconfig != NULL) {
+		dma_id.val = mconfig->dma_id;
+		if (strncmp(dai->name, "SSP0 Pin", strlen(dai->name)) == 0)
+			dma_id.dma_node.i2s_instance = 0;
+		mconfig->dma_id = dma_id.val;
+	}
+}
+
+
 void hda_sst_set_be_dmic_config(struct snd_soc_dai *dai,
 	struct snd_pcm_hw_params *params, int stream)
 {

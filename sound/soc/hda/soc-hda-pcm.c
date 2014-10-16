@@ -293,6 +293,18 @@ static int hda_be_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
+
+static int hda_be_ssp_hw_params(struct snd_pcm_substream *substream,
+				struct snd_pcm_hw_params *params,
+				struct snd_soc_dai *dai)
+{
+	struct azx *chip = get_chip_ctx(substream);
+
+	dev_dbg(chip->dev, "%s: %s\n", __func__, dai->name);
+
+	hda_sst_set_be_ssp_config(dai, substream->stream);
+}
+
 static int hda_be_dmic_prepare(struct snd_pcm_substream *substream,
 				struct snd_soc_dai *dai)
 {
@@ -472,6 +484,10 @@ static struct snd_soc_dai_ops hda_be_dai_ops = {
 	.hw_params = hda_be_hw_params,
 };
 
+static struct snd_soc_dai_ops hda_be_ssp_dai_ops = {
+	.hw_params = hda_be_ssp_hw_params,
+};
+
 static struct snd_soc_dai_ops hda_be_link_dai_ops = {
 	.prepare = soc_hda_be_link_pcm_prepare,
 	.hw_params = soc_hda_be_link_hw_params,
@@ -572,17 +588,17 @@ static struct snd_soc_dai_driver soc_hda_platform_dai[] = {
 },
 /*BE CPU  Dais */
 {
-	.name = "Codec Pin",
-	.ops = &hda_be_dai_ops,
+	.name = "SSP0 Pin",
+	.ops = &hda_be_ssp_dai_ops,
 	.playback = {
-		.stream_name = "Codec Tx",
+		.stream_name = "ssp0 Tx",
 		.channels_min = HDA_STEREO,
 		.channels_max = HDA_STEREO,
 		.rates = SNDRV_PCM_RATE_48000,
 		.formats = SNDRV_PCM_FMTBIT_S16_LE,
 	},
 	.capture = {
-		.stream_name = "Codec Rx",
+		.stream_name = "ssp0 Rx",
 		.channels_min = HDA_STEREO,
 		.channels_max = HDA_STEREO,
 		.rates = SNDRV_PCM_RATE_48000,
@@ -688,7 +704,7 @@ static int soc_hda_platform_open(struct snd_pcm_substream *substream)
 					dai_link->cpu_dai_name);
 
 	runtime = substream->runtime;
-	runtime->hw = azx_pcm_hw;
+	snd_soc_set_runtime_hwparams(substream, &azx_pcm_hw);
 	return 0;
 }
 

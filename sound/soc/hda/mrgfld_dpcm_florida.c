@@ -364,16 +364,16 @@ static const struct snd_soc_dapm_route morg_map[] = {
 	{ "IN1R", NULL, "AMIC" },
 
 	/* SWM map link the SWM outs to codec AIF */
-	{ "AIF1 Playback", NULL, "Codec Tx"},
-	{ "Codec Tx", NULL, "codec1_out"},
-	{ "Codec Tx", NULL, "codec0_out"},
+	{ "AIF1 Playback", NULL, "ssp0 Tx"},
+	{ "ssp0 Tx", NULL, "codec1_out"},
+	{ "ssp0 Tx", NULL, "codec0_out"},
 
-	{ "codec0_in", NULL, "Codec Rx" },
-	{ "codec1_in", NULL, "Codec Rx" },
+	{ "codec0_in", NULL, "ssp0 Rx" },
+	{ "codec1_in", NULL, "ssp0 Rx" },
 	{ "dmic01_hifi", NULL, "DMIC01 Rx" },
 	{ "dmic23_hifi", NULL, "DMIC23 Rx" },
 
-	{ "Codec Rx", NULL, "AIF1 Capture" },
+	{ "ssp0 Rx", NULL, "AIF1 Capture" },
 	{ "DMIC01 Rx", NULL, "Dummy Capture" },
 	{ "DMIC23 Rx", NULL, "Dummy Capture" },
 
@@ -597,9 +597,9 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 
 	/* back ends */
 	{
-		.name = "SSP2-Codec",
+		.name = "SSP0-Codec",
 		.be_id = 1,
-		.cpu_dai_name = "Codec Pin",
+		.cpu_dai_name = "SSP0 Pin",
 		.codec_name = "florida-codec",
 		.codec_dai_name = "florida-aif1",
 		.platform_name = "0000:02:18.0",

@@ -124,6 +124,15 @@ enum dma_type {
 	SLIMBUS_LINK_INPUT_CLASS = 0xF
 };
 
+union ssp_dma_node {
+	u8 val;
+	struct {
+		u8 dual_mono:1;
+		u8 time_slot:3;
+		u8 i2s_instance:4;
+	} dma_node;
+};
+
 union connector_node_id {
 	u32 val;
 	struct {
@@ -211,7 +220,7 @@ struct module_config {
 	u8 core_id;
 	u8 conn_type;
 	u8 dev_type;
-	u16 dma_id;
+	u8 dma_id;
 	u8 time_slot;
 	enum hw_connection_type hw_conn_type;
 	enum sst_module_state m_state;
