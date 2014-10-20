@@ -1974,7 +1974,7 @@ int snd_pcm_hw_constraints_complete(struct snd_pcm_substream *substream)
 					   hw->channels_min, hw->channels_max);
 	if (err < 0)
 		return err;
-
+        hw->rate_max = 48000;
 	err = snd_pcm_hw_constraint_minmax(runtime, SNDRV_PCM_HW_PARAM_RATE,
 					   hw->rate_min, hw->rate_max);
 	if (err < 0)
