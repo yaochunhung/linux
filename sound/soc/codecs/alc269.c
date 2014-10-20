@@ -1371,7 +1371,7 @@ static int alc_codec_probe(struct snd_soc_codec *codec)
 	snd_soc_dapm_new_controls(&codec->dapm, alc_dapm_mixers, ARRAY_SIZE(alc_dapm_mixers));
 	snd_soc_dapm_new_controls(&codec->dapm, alc_dapm_muxers, ARRAY_SIZE(alc_dapm_muxers));
 	snd_soc_dapm_add_routes(&codec->dapm, alc_intercon, ARRAY_SIZE(alc_intercon));
-	snd_soc_dapm_new_widgets(&codec->dapm);
+	snd_soc_dapm_new_widgets(codec->card);
 
 	pm_runtime_enable(&hdac->hdev->dev);
 	pm_runtime_set_suspended(&hdac->hdev->dev);
