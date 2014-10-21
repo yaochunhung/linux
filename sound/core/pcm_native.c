@@ -616,13 +616,13 @@ int snd_pcm_status(struct snd_pcm_substream *substream,
 		if (runtime->status->state == SNDRV_PCM_STATE_RUNNING ||
 		    runtime->status->state == SNDRV_PCM_STATE_DRAINING) {
 			status->delay = runtime->buffer_size - status->avail;
-			status->delay += runtime->delay;
+			status->delay += runtime->delay + runtime->soc_delay;
 		} else
 			status->delay = 0;
 	} else {
 		status->avail = snd_pcm_capture_avail(runtime);
 		if (runtime->status->state == SNDRV_PCM_STATE_RUNNING)
-			status->delay = status->avail + runtime->delay;
+			status->delay = status->avail + runtime->delay + runtime->soc_delay;
 		else
 			status->delay = 0;
 	}
@@ -855,6 +855,7 @@ static int snd_pcm_pre_start(struct snd_pcm_substream *substream, int state)
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK &&
 	    !snd_pcm_playback_data(substream))
 		return -EPIPE;
+	runtime->pending_state = state;
 	runtime->trigger_master = substream;
 	return 0;
 }
@@ -915,6 +916,7 @@ static int snd_pcm_pre_stop(struct snd_pcm_substream *substream, int state)
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	if (runtime->status->state == SNDRV_PCM_STATE_OPEN)
 		return -EBADFD;
+	runtime->pending_state = state;
 	runtime->trigger_master = substream;
 	return 0;
 }
@@ -2473,7 +2475,7 @@ static int snd_pcm_delay(struct snd_pcm_substream *substream,
 			n = snd_pcm_playback_hw_avail(runtime);
 		else
 			n = snd_pcm_capture_avail(runtime);
-		n += runtime->delay;
+		n += runtime->delay + runtime->soc_delay;
 		break;
 	case SNDRV_PCM_STATE_XRUN:
 		err = -EPIPE;

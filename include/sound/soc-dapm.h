@@ -382,6 +382,11 @@ int dapm_regulator_event(struct snd_soc_dapm_widget *w,
 			 struct snd_kcontrol *kcontrol, int event);
 int dapm_clock_event(struct snd_soc_dapm_widget *w,
 			 struct snd_kcontrol *kcontrol, int event);
+bool dapm_kcontrol_set_value(const struct snd_kcontrol *kcontrol,
+	unsigned int value);
+unsigned int dapm_kcontrol_get_value(const struct snd_kcontrol *kcontrol);
+struct snd_soc_dapm_widget_list *dapm_kcontrol_get_wlist(
+	const struct snd_kcontrol *kcontrol);
 
 /* dapm controls */
 int snd_soc_dapm_put_volsw(struct snd_kcontrol *kcontrol,
@@ -461,6 +466,7 @@ int snd_soc_dapm_nc_pin_unlocked(struct snd_soc_dapm_context *dapm,
 int snd_soc_dapm_get_pin_status(struct snd_soc_dapm_context *dapm,
 				const char *pin);
 int snd_soc_dapm_sync(struct snd_soc_dapm_context *dapm);
+int snd_soc_dapm_sync_unlocked(struct snd_soc_dapm_context *dapm);
 int snd_soc_dapm_force_enable_pin(struct snd_soc_dapm_context *dapm,
 				  const char *pin);
 int snd_soc_dapm_force_enable_pin_unlocked(struct snd_soc_dapm_context *dapm,
@@ -512,6 +518,9 @@ enum snd_soc_dapm_type {
 	snd_soc_dapm_dai_link,		/* link between two DAI structures */
 	snd_soc_dapm_kcontrol,		/* Auto-disabled kcontrol */
 };
+
+/* dapm set/reset */
+int snd_soc_dapm_state_set(struct snd_soc_card *card, bool reset_state);
 
 enum snd_soc_dapm_subclass {
 	SND_SOC_DAPM_CLASS_INIT		= 0,
