@@ -922,18 +922,18 @@ void hda_sst_set_be_dmic_config(struct snd_soc_dai *dai,
 		currenlt;y using timeslot */
 		if (strncmp(dai->name, "DMIC23 Pin", strlen(dai->name)) == 0) {
 			mconfig->time_slot = 1;
-			outctrl = mconfig->formats_config.caps[730];
+			outctrl = mconfig->formats_config.caps[3];
 		} else
-			outctrl = mconfig->formats_config.caps[1];
+			outctrl = mconfig->formats_config.caps[2];
 
 		if (hda_sst_get_bit_depth(params)  == DEPTH_16BIT)
 			outctrl &= ~BIT(19);
 		else if (hda_sst_get_bit_depth(params) == DEPTH_24BIT)
 			outctrl |= BIT(19);
 		if (strncmp(dai->name, "DMIC23 Pin", strlen(dai->name)) == 0)
-			mconfig->formats_config.caps[730] = outctrl;
+			mconfig->formats_config.caps[3] = outctrl;
 		else
-			mconfig->formats_config.caps[1] = outctrl;
+			mconfig->formats_config.caps[2] = outctrl;
 		dev_dbg(platform->dev, "%s: outctrl =%x\n", __func__, outctrl);
 		hda_set_module_params(mconfig, params, true);
 
