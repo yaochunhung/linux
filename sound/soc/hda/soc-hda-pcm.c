@@ -285,9 +285,7 @@ static int hda_be_hw_params(struct snd_pcm_substream *substream,
 				struct snd_pcm_hw_params *params,
 				struct snd_soc_dai *dai)
 {
-	struct azx *chip = get_chip_ctx(substream);
-
-	dev_dbg(chip->dev, "%s: %s\n", __func__, dai->name);
+	dev_dbg(dai->dev, "%s: %s\n", __func__, dai->name);
 	/*will set the be copier spefic config here
 	now the default values will be taken from DFW */
 	return 0;
@@ -298,11 +296,10 @@ static int hda_be_ssp_hw_params(struct snd_pcm_substream *substream,
 				struct snd_pcm_hw_params *params,
 				struct snd_soc_dai *dai)
 {
-	struct azx *chip = get_chip_ctx(substream);
-
-	dev_dbg(chip->dev, "%s: %s\n", __func__, dai->name);
+	dev_dbg(dai->dev, "%s: %s\n", __func__, dai->name);
 
 	hda_sst_set_be_ssp_config(dai, substream->stream);
+	return 0;
 }
 
 static int hda_be_dmic_prepare(struct snd_pcm_substream *substream,
@@ -310,7 +307,7 @@ static int hda_be_dmic_prepare(struct snd_pcm_substream *substream,
 {
 	struct snd_pcm_hw_params params;
 	struct snd_interval *channels, *rate;
-	struct azx *chip = get_chip_ctx(substream);
+	struct azx *chip = dev_get_drvdata(dai->dev);
 
 	dev_dbg(chip->dev, "%s: %s\n", __func__, dai->name);
 
@@ -353,7 +350,7 @@ static int soc_hda_be_link_hw_params(struct snd_pcm_substream *substream,
 				struct snd_soc_dai *dai)
 {
 	struct azx_dev *link_dev;
-	struct azx *chip = get_chip_ctx(substream);
+	struct azx *chip = dev_get_drvdata(dai->dev);
 	int dma_id;
 
 	pr_debug("%s\n", __func__);
@@ -373,7 +370,7 @@ static int soc_hda_be_link_pcm_prepare(struct snd_pcm_substream *substream,
 		struct snd_soc_dai *dai)
 {
 	struct snd_soc_pcm_runtime *rtd = snd_pcm_substream_chip(substream);
-	struct azx *chip = get_chip_ctx(substream);
+	struct azx *chip = dev_get_drvdata(dai->dev);
 	struct azx_dev *link_dev = snd_soc_dai_get_dma_data(dai, substream);
 	unsigned int format_val;
 	int ret = 0;
@@ -432,7 +429,7 @@ static int soc_hda_be_link_pcm_prepare(struct snd_pcm_substream *substream,
 static int soc_hda_be_link_pcm_trigger(struct snd_pcm_substream *substream,
 	int cmd, struct snd_soc_dai *dai)
 {
-	struct azx *chip = get_chip_ctx(substream);
+	struct azx *chip = dev_get_drvdata(dai->dev);
 	struct azx_dev *link_dev = snd_soc_dai_get_dma_data(dai, substream);
 
 	dev_dbg(chip->dev, "In %s cmd=%d\n", __func__, cmd);
@@ -456,7 +453,7 @@ static int soc_hda_be_link_pcm_trigger(struct snd_pcm_substream *substream,
 static int soc_hda_be_link_hw_free(struct snd_pcm_substream *substream,
 		struct snd_soc_dai *dai)
 {
-	struct azx *chip = get_chip_ctx(substream);
+	struct azx *chip = dev_get_drvdata(dai->dev);
 	struct azx_dev *link_dev = snd_soc_dai_get_dma_data(dai, substream);
 
 	dev_dbg(chip->dev, "%s: %s\n", __func__, dai->name);

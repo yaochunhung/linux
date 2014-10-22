@@ -749,7 +749,7 @@ static int hda_sst_widget_load(struct snd_soc_platform *platform,
 	mconfig->out_fmt.bit_depth = dfw_config->out_fmt.bit_depth;
 	mconfig->out_fmt.valid_bit_depth = dfw_config->out_fmt.valid_bit_depth;
 	mconfig->out_fmt.channel_config = dfw_config->out_fmt.ch_cfg;
-	pipe =  hda_sst_add_pipe(platform->dev, pinfo, &dfw_config->pipe);
+	pipe =  hda_sst_add_pipe(chip->dev, pinfo, &dfw_config->pipe);
 	if (pipe)
 		mconfig->pipe = pipe;
 	mconfig->dev_type =  dfw_config->dev_type;
@@ -793,16 +793,16 @@ static int hda_sst_pvt_load(struct snd_soc_platform *platform,
 
 
 static struct module_config *hda_sst_get_module_by_dir(
-	struct snd_soc_dapm_widget *w, struct sst_dsp_ctx *ctx,
-	int dir, char *m_type)
+	struct snd_soc_dapm_widget *w, int dir, char *m_type)
 {
+	struct snd_soc_dapm_context *dapm = w->dapm;
 	struct snd_soc_dapm_widget *w1 = NULL;
 	struct snd_soc_dapm_path *p = NULL;
 	struct module_config *mconfig = NULL;
 
 	/* get the source modules  dir = 0 source module, dir = 1 sink modules*/
 	if (dir == 0) {
-		dev_dbg(ctx->dev, "Stream name=%s\n", w->name);
+		dev_dbg(dapm->dev, "Stream name=%s\n", w->name);
 		if (list_empty(&w->sources))
 			return mconfig;
 
@@ -813,13 +813,13 @@ static struct module_config *hda_sst_get_module_by_dir(
 				continue;
 
 			if (p->connect && p->source->priv) {
-				dev_dbg(ctx->dev, "module widget=%s\n", p->source->name);
+				dev_dbg(dapm->dev, "module widget=%s\n", p->source->name);
 				return p->source->priv;
 			}
 			w1 = p->source;
 		}
 	} else {
-		dev_dbg(ctx->dev, "Stream name=%s\n", w->name);
+		dev_dbg(dapm->dev, "Stream name=%s\n", w->name);
 		if (list_empty(&w->sinks))
 			return mconfig;
 
@@ -830,29 +830,24 @@ static struct module_config *hda_sst_get_module_by_dir(
 				continue;
 
 			if (p->connect && p->sink->priv) {
-				dev_dbg(ctx->dev, "module widget=%s\n", p->sink->name);
+				dev_dbg(dapm->dev, "module widget=%s\n", p->sink->name);
 				return p->sink->priv;
 			}
 			w1 = p->sink;
 		}
 	}
 	if (w1 != NULL)
-		mconfig = hda_sst_get_module_by_dir(w1, ctx, dir, m_type);
+		mconfig = hda_sst_get_module_by_dir(w1, dir, m_type);
 	return mconfig;
 }
 
 static struct module_config *hda_sst_get_module(struct snd_soc_dai *dai,
 	int stream, bool is_fe, char *m_type)
 {
-	struct snd_soc_platform *platform = dai->platform;
-	struct azx *chip = snd_soc_platform_get_drvdata(platform);
-	struct snd_soc_azx *schip =
-			container_of(chip, struct snd_soc_azx, hda_azx);
-	struct sst_dsp_ctx *ctx = schip->dsp;
 	struct snd_soc_dapm_widget *w;
 	int dir = 0;
 
-	dev_dbg(ctx->dev, "%s: enter, dai-name=%s dir=%d\n", __func__, dai->name, stream);
+	dev_dbg(dai->dev, "%s: enter, dai-name=%s dir=%d\n", __func__, dai->name, stream);
 
 	/*if FE - Playback, then parse sink list , Capture then source list
 	if BE - Playback, then parse source list , Capture then sink list */
@@ -863,7 +858,7 @@ static struct module_config *hda_sst_get_module(struct snd_soc_dai *dai,
 		w = dai->capture_widget;
 		(is_fe) ? (dir = 0) : (dir = 1);
 	}
-	return hda_sst_get_module_by_dir(w, ctx, dir, m_type);
+	return hda_sst_get_module_by_dir(w, dir, m_type);
 }
 
 static void hda_set_module_params(struct module_config *mconfig,
@@ -898,11 +893,10 @@ static void hda_set_module_params(struct module_config *mconfig,
 void hda_sst_set_copier_hw_params(struct snd_soc_dai *dai,
 	struct snd_pcm_hw_params *params, int stream, bool is_fe)
 {
-	struct snd_soc_platform *platform = dai->platform;
 	struct module_config *mconfig = NULL;
 	bool in_fmt;
 
-	dev_dbg(platform->dev,
+	dev_dbg(dai->dev,
 		"%s: enter, dai-name=%s dir=%d\n", __func__, dai->name, stream);
 	if (stream == SNDRV_PCM_STREAM_PLAYBACK)
 		in_fmt = true;
@@ -932,10 +926,9 @@ void hda_sst_set_copier_dma_id(struct snd_soc_dai *dai, int dma_id, int stream,
 void hda_sst_set_be_copier_caps(struct snd_soc_dai *dai,
 	struct specific_config *configs, int stream)
 {
-	struct snd_soc_platform *platform = dai->platform;
 	struct module_config *mconfig = NULL;
 
-	dev_dbg(platform->dev, "%s: enter, dai-name=%s\n", __func__, dai->name);
+	dev_dbg(dai->dev, "%s: enter, dai-name=%s\n", __func__, dai->name);
 	mconfig = hda_sst_get_module(dai, stream, false, "cpr");
 	if (mconfig != NULL && configs->caps_size != 0) {
 		memcpy(mconfig->formats_config.caps,
@@ -949,11 +942,10 @@ void hda_sst_set_be_copier_caps(struct snd_soc_dai *dai,
 
 void hda_sst_set_be_ssp_config(struct snd_soc_dai *dai, int stream)
 {
-	struct snd_soc_platform *platform = dai->platform;
 	struct module_config *mconfig = NULL;
 	union ssp_dma_node dma_id;
 
-	dev_dbg(platform->dev, "%s: enter, dai-name=%s\n", __func__, dai->name);
+	dev_dbg(dai->dev, "%s: enter, dai-name=%s\n", __func__, dai->name);
 	mconfig = hda_sst_get_module(dai, stream, false, "cpr");
 
 	if (mconfig != NULL) {
@@ -972,11 +964,10 @@ void hda_sst_set_be_ssp_config(struct snd_soc_dai *dai, int stream)
 void hda_sst_set_be_dmic_config(struct snd_soc_dai *dai,
 	struct snd_pcm_hw_params *params, int stream)
 {
-	struct snd_soc_platform *platform = dai->platform;
 	struct module_config *mconfig = NULL;
 	u32 outctrl;
 
-	dev_dbg(platform->dev, "%s: enter, dai-name=%s\n", __func__, dai->name);
+	dev_dbg(dai->dev, "%s: enter, dai-name=%s\n", __func__, dai->name);
 	mconfig = hda_sst_get_module(dai, stream, false, "cpr");
 	if (mconfig != NULL && mconfig->formats_config.caps_size != 0) {
 		/*FIXME need to fix based on the FW dmic interface struct.
@@ -996,7 +987,7 @@ void hda_sst_set_be_dmic_config(struct snd_soc_dai *dai,
 			mconfig->formats_config.caps[3] = outctrl;
 		else
 			mconfig->formats_config.caps[2] = outctrl;
-		dev_dbg(platform->dev, "%s: outctrl =%x\n", __func__, outctrl);
+		dev_dbg(dai->dev, "%s: outctrl =%x\n", __func__, outctrl);
 		hda_set_module_params(mconfig, params, true);
 
 		/*FIXME need to fix based on the FW dmic interface struct.
@@ -1015,6 +1006,7 @@ int hda_sst_set_fe_pipeline_state(struct snd_soc_dai *dai, bool start,
 	struct snd_soc_azx *schip =
 			container_of(chip, struct snd_soc_azx, hda_azx);
 	struct sst_dsp_ctx *ctx = schip->dsp;
+
 	struct module_config *mconfig = NULL;
 	int ret = 0;
 
