@@ -1425,7 +1425,6 @@ static int azx_probe_continue(struct azx *chip)
 
 	pci_set_drvdata(pci, chip);
 
-	pci_set_drvdata(pci, chip);
 	/*create new hda_bus */
 	err = azx_bus_create(chip);
 	if (err < 0)
@@ -1491,14 +1490,14 @@ static void azx_remove(struct pci_dev *pci)
 	if (pci_dev_run_wake(pci))
 		pm_runtime_get_noresume(&pci->dev);
 
-	azx_i2s_machine_device_unregister(chip);
-	dev_dbg(chip->dev, "In %s machine device removed", __func__);
 	soc_hda_platform_unregister(&pci->dev);
 	dev_dbg(chip->dev, "In %s platform component removed", __func__);
+	azx_i2s_machine_device_unregister(chip);
+	dev_dbg(chip->dev, "In %s machine device removed", __func__);
+	azx_dsp_unregister(chip);
+	dev_dbg(chip->dev, "In %s dsp unregistered", __func__);
 	snd_soc_hda_bus_release();
 	dev_dbg(chip->dev, "In %s bus unregistered", __func__);
-	azx_dsp_unregister(chip);
-	dev_dbg(chip->dev, "In %s dsp unrwgistered", __func__);
 	azx_free(chip);
 	dev_dbg(chip->dev, "In %s azx_free", __func__);
 	pci_set_drvdata(pci, NULL);
