@@ -916,6 +916,10 @@ void hda_sst_set_be_ssp_config(struct snd_soc_dai *dai, int stream)
 		dma_id.val = mconfig->dma_id;
 		if (strncmp(dai->name, "SSP0 Pin", strlen(dai->name)) == 0)
 			dma_id.dma_node.i2s_instance = 0;
+		if (strncmp(dai->name, "SSP1 Pin", strlen(dai->name)) == 0)
+			dma_id.dma_node.i2s_instance = 1;
+		if (strncmp(dai->name, "SSP2 Pin", strlen(dai->name)) == 0)
+			dma_id.dma_node.i2s_instance = 2;
 		mconfig->dma_id = dma_id.val;
 	}
 }
