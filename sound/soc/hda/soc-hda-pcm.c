@@ -606,17 +606,17 @@ static struct snd_soc_dai_driver soc_hda_platform_dai[] = {
 	},
 },
 {
-	.name = "BT Pin",
-	.ops = &hda_be_dai_ops,
+	.name = "SSP1 Pin",
+	.ops = &hda_be_ssp_dai_ops,
 	.playback = {
-		.stream_name = "BT Tx",
+		.stream_name = "ssp1 Tx",
 		.channels_min = HDA_STEREO,
 		.channels_max = HDA_STEREO,
 		.rates = SNDRV_PCM_RATE_48000,
 		.formats = SNDRV_PCM_FMTBIT_S16_LE,
 	},
 	.capture = {
-		.stream_name = "BT Rx",
+		.stream_name = "ssp1 Rx",
 		.channels_min = HDA_STEREO,
 		.channels_max = HDA_STEREO,
 		.rates = SNDRV_PCM_RATE_48000,
@@ -624,17 +624,17 @@ static struct snd_soc_dai_driver soc_hda_platform_dai[] = {
 	},
 },
 {
-	.name = "Modem Pin",
-	.ops = &hda_be_dai_ops,
+	.name = "SSP2 Pin",
+	.ops = &hda_be_ssp_dai_ops,
 	.playback = {
-		.stream_name = "Modem Tx",
+		.stream_name = "ssp2 Tx",
 		.channels_min = HDA_STEREO,
 		.channels_max = HDA_STEREO,
 		.rates = SNDRV_PCM_RATE_48000,
 		.formats = SNDRV_PCM_FMTBIT_S16_LE,
 	},
 	.capture = {
-		.stream_name = "Modem Rx",
+		.stream_name = "ssp2 Rx",
 		.channels_min = HDA_STEREO,
 		.channels_max = HDA_STEREO,
 		.rates = SNDRV_PCM_RATE_48000,
