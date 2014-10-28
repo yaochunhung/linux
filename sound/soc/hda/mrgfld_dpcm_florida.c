@@ -75,6 +75,27 @@ struct mrgfld_mc_private {
 	u8		pmic_id;
 	void __iomem    *osc_clk0_reg;
 };
+static const struct snd_soc_pcm_stream bxtn_florida_dai_params_codec = {
+	.formats = SNDRV_PCM_FMTBIT_S24_LE,
+	.rate_min = 48000,
+	.rate_max = 48000,
+	.channels_min = 2,
+	.channels_max = 2,
+};
+static const struct snd_soc_pcm_stream bxtn_florida_dai_params_modem = {
+	.formats = SNDRV_PCM_FMTBIT_S16_LE,
+	.rate_min = 48000,
+	.rate_max = 48000,
+	.channels_min = 2,
+	.channels_max = 2,
+};
+static const struct snd_soc_pcm_stream bxtn_florida_dai_params_bt = {
+	.formats = SNDRV_PCM_FMTBIT_S16_LE,
+	.rate_min = 48000,
+	.rate_max = 48000,
+	.channels_min = 2,
+	.channels_max = 2,
+};
 
 /* set_osc_clk0-	enable/disables the osc clock0
  * addr:		address of the register to write to
@@ -381,6 +402,17 @@ static const struct snd_soc_dapm_route morg_map[] = {
 
 	{ "hif1", NULL, "iDisp Tx"},
 	{ "iDisp Tx", NULL, "iDisp_out"},
+
+	/* Modem Path */
+	{ "ssp2 Tx", NULL, "modem0_out"},
+	{ "modem0_in", NULL, "ssp2 Rx" },
+	/* Bt Path */
+	{ "Dummy Playback", NULL, "ssp1 Tx"},
+	{ "ssp1 Tx", NULL, "bt_out"},
+	{ "ssp1 Rx", NULL, "Dummy Capture" },
+	{ "bt_in", NULL, "ssp1 Rx" },
+
+
 #ifdef OSC_PMIC
 	{ "Dummy Playback", NULL, "VFLEXCNT"},
 	{ "Dummy Capture", NULL, "VFLEXCNT"},
@@ -594,6 +626,37 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 		.ignore_suspend = 1,
 		.dynamic = 1,
 	},
+	/* CODEC<->CODEC link */
+	{
+		.name = "Bxtn Codec-Loop Port",
+		.stream_name = "Bxtn Codec-Loop",
+		.cpu_dai_name = "SSP0 Pin",
+		.platform_name = "0000:02:18.0",
+		.codec_name = "florida-codec",
+		.codec_dai_name = "florida-aif1",
+		.params = &bxtn_florida_dai_params_codec,
+		.dsp_loopback = true,
+	},
+	{
+		.name = "Bxtn Modem-Loop Port",
+		.stream_name = "Bxtn Modem-Loop",
+		.cpu_dai_name = "SSP2 Pin",
+		.platform_name = "0000:02:18.0",
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.params = &bxtn_florida_dai_params_modem,
+		.dsp_loopback = true,
+	},
+	{
+		.name = "Bxtn BTFM-Loop Port",
+		.stream_name = "Bxtn BTFM-Loop",
+		.cpu_dai_name = "SSP1 Pin",
+		.platform_name = "0000:02:18.0",
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.params = &bxtn_florida_dai_params_bt,
+		.dsp_loopback = true,
+	},
 
 	/* back ends */
 	{
@@ -611,10 +674,10 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 	{
 		.name = "SSP1-BTFM",
 		.be_id = 2,
-		.cpu_dai_name = "snd-soc-dummy-dai",
+		.cpu_dai_name = "SSP1 Pin",
+		.platform_name = "0000:02:18.0",
 		.codec_name = "snd-soc-dummy",
 		.codec_dai_name = "snd-soc-dummy-dai",
-		.platform_name = "snd-soc-dummy",
 		.ignore_suspend = 1,
 		.no_pcm = 1,
 	},
