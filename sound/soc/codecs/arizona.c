@@ -1462,6 +1462,11 @@ static int arizona_startup(struct snd_pcm_substream *substream,
 	const struct snd_pcm_hw_constraint_list *constraint;
 	unsigned int base_rate;
 
+	/* We dont need constraints list for codec codec link. For codec
+	 * codec link runtime will be NULL
+	 */
+	if (!substream->runtime)
+		return 0;
 	switch (dai_priv->clk) {
 	case ARIZONA_CLK_SYSCLK:
 		base_rate = priv->sysclk;
