@@ -29,8 +29,6 @@
 #define MODULE_NAME_DEFAULT_LENGTH 8
 #define MODULE_UUID_DEFAULT_LENGTH 4
 
-#define CSS_HEADER_LENGTH 8192
-
 struct sst_segment_flags {
 	uint32_t contents:1;
 	uint32_t alloc:1;
@@ -101,7 +99,6 @@ struct sst_adsp_fw_binary_header {
 	uint32_t num_module_entries;
 	uint32_t hw_buf_base_addr;
 	uint32_t hw_buf_length;
-	uint32_t load_offset;
 } __packed;
 
 struct sst_adsp_fw_binary_desc {
@@ -145,7 +142,6 @@ struct sst_manifest_crypto_block {
 struct sst_fw_image_manifest {
 	struct sst_css_header header;
 	struct sst_manifest_crypto_block crypto_block;
-	uint8_t css_header[CSS_HEADER_LENGTH];
 	struct sst_adsp_fw_binary_desc adsp_fw_bin_desc;
 } __packed;
 
