@@ -624,6 +624,24 @@ static struct snd_soc_dai_driver soc_hda_platform_dai[] = {
 	},
 },
 {
+	.name = "Modem Pin",
+	.ops = &hda_be_dai_ops,
+	.playback = {
+		.stream_name = "Modem Tx",
+		.channels_min = HDA_STEREO,
+		.channels_max = HDA_STEREO,
+		.rates = SNDRV_PCM_RATE_48000,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE,
+	},
+	.capture = {
+		.stream_name = "Modem Rx",
+		.channels_min = HDA_STEREO,
+		.channels_max = HDA_STEREO,
+		.rates = SNDRV_PCM_RATE_48000,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE,
+	},
+},
+{
 	.name = "iDisp Pin",
 	.ops = &hda_be_link_dai_ops,
 	.playback = {
