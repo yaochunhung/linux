@@ -439,7 +439,7 @@ static int morg_florida_init(struct snd_soc_pcm_runtime *runtime)
 
 	pr_info("Entry %s\n", __func__);
 
-	ret = snd_soc_dai_set_tdm_slot(florida_dai, 0, 0, 4, 24);
+	ret = snd_soc_dai_set_tdm_slot(florida_dai, 0, 0, 4, 16);
 	/* slot width is set as 25, SNDRV_PCM_FORMAT_S32_LE */
 	if (ret < 0) {
 		pr_err("can't set codec pcm format %d\n", ret);
@@ -479,6 +479,8 @@ static struct snd_pcm_hw_constraint_list constraints_8000_16000 = {
 
 static unsigned int rates_48000[] = {
 	48000,
+	16000,
+	8000,
 };
 
 static struct snd_pcm_hw_constraint_list constraints_48000 = {

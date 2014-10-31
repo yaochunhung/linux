@@ -500,9 +500,9 @@ static struct snd_soc_dai_driver soc_hda_platform_dai[] = {
 	.ops = &hda_pcm_dai_ops,
 	.playback = {
 		.stream_name = "System Playback",
-		.channels_min = HDA_STEREO,
+		.channels_min = HDA_MONO,
 		.channels_max = HDA_STEREO,
-		.rates = SNDRV_PCM_RATE_48000,
+		.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_8000,
 		.formats = SNDRV_PCM_FMTBIT_S16_LE,
 	},
 	.capture = {
