@@ -187,12 +187,4 @@ static inline void snd_compr_drain_notify(struct snd_compr_stream *stream)
 	wake_up(&stream->runtime->sleep);
 }
 
-static inline void snd_compr_drain_notify(struct snd_compr_stream *stream)
-{
-	snd_BUG_ON(!stream);
-
-	stream->runtime->drain_wake = 1;
-	wake_up(&stream->runtime->wait);
-}
-
 #endif

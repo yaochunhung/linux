@@ -880,10 +880,6 @@ struct soc_bytes {
 	u32 mask;
 };
 
-struct soc_bytes_ext {
-	int max;
-};
-
 /* multi register control */
 struct soc_mreg_control {
 	long min, max;
