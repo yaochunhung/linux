@@ -882,16 +882,6 @@ struct soc_bytes {
 
 struct soc_bytes_ext {
 	int max;
-};
-
-/* multi register control */
-struct soc_mreg_control {
-	long min, max;
-	unsigned int regbase, regcount, nbits, invert;
-};
-
-struct soc_bytes_ext {
-	int max;
 
 	/* dynamic controls */
 	struct list_head list;
@@ -900,6 +890,12 @@ struct soc_bytes_ext {
 
 	unsigned int pvt_data_len;
 	char *pvt_data;
+};
+
+/* multi register control */
+struct soc_mreg_control {
+	long min, max;
+	unsigned int regbase, regcount, nbits, invert;
 };
 
 /* enumerated kcontrol */

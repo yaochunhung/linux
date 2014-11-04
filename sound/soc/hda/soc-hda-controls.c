@@ -158,16 +158,13 @@ int hda_sst_mix_put(struct snd_kcontrol *kcontrol,
 
 	if (w->power)
 		hda_sst_src_bind_unbind_modules(w, ctx, connect, 1);
-	w->value = val;
+	dapm_kcontrol_set_value(kcontrol,  val);
 	update.kcontrol = kcontrol;
-	update.widget = w;
 	update.reg = mc->reg;
 	update.mask = mask;
 	update.val = val;
 
-	w->dapm->update = &update;
-	snd_soc_dapm_mixer_update_power(w, kcontrol, connect);
-	w->dapm->update = NULL;
+	snd_soc_dapm_mixer_update_power(w->dapm, kcontrol, connect, &update);
 	return 0;
 }
 
