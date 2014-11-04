@@ -166,7 +166,7 @@ int hda_sst_mix_put(struct snd_kcontrol *kcontrol,
 	update.val = val;
 
 	w->dapm->update = &update;
-	snd_soc_dapm_mixer_update_power(w, kcontrol, connect, &update);
+	snd_soc_dapm_mixer_update_power(w, kcontrol, connect);
 	w->dapm->update = NULL;
 	return 0;
 }
