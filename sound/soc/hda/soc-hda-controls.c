@@ -400,6 +400,7 @@ static int hda_sst_dapm_post_pmu_event(struct snd_soc_dapm_widget *w,
 	struct module_config *mconfig = w->priv;
 	struct sst_pipeline *ppl, *__ppl;
 	int ret = 0;
+	int bind_done = 0;
 
 	dev_dbg(ctx->dev, "%s: widget = %s\n", __func__, w->name);
 
@@ -407,6 +408,8 @@ static int hda_sst_dapm_post_pmu_event(struct snd_soc_dapm_widget *w,
 	if (w_type == HDA_SST_WIDGET_PGA) {
 		/*bind module */
 		ret = hda_sst_src_bind_unbind_modules(w, ctx, true, true);
+		if (mconfig->m_state == BIND_DONE)
+			bind_done = 1;
 	}
 
 	if (w_type == HDA_SST_WIDGET_VMIXER ||
@@ -425,7 +428,7 @@ static int hda_sst_dapm_post_pmu_event(struct snd_soc_dapm_widget *w,
 	}
 
 	if ((w_type == HDA_SST_WIDGET_PGA)
-	&& (mconfig->pipe->conn_type == CONN_TYPE_FE)) {
+	&& (bind_done)) {
 		list_for_each_entry_safe(ppl, __ppl, &pinfo->ppl_start_list, node) {
 			list_del(&ppl->node);
 
@@ -435,6 +438,7 @@ static int hda_sst_dapm_post_pmu_event(struct snd_soc_dapm_widget *w,
 			if (ret < 0)
 				return ret;
 		}
+		bind_done = 0;
 	}
 	return ret;
 }
