@@ -343,6 +343,44 @@ static bool hda_sst_is_pipe_mcps_available(struct hda_platform_info *pinfo,
 	return true;
 }
 
+static void hda_sst_update_cpr_ssp_id(struct snd_soc_dapm_widget *w,
+		struct module_config *mconfig, struct sst_dsp_ctx *ctx)
+{
+	char *cpr, *ssp;
+	union ssp_dma_node dma_id;
+	bool id_found = 1;
+	cpr = strstr(w->name, "cpr");
+	if (cpr) {
+		dma_id.val = mconfig->dma_id;
+		id_found = 0;
+		dev_dbg(ctx->dev, "%s: Copier found widget =%s sname = %s\n", __func__, w->name, w->sname);
+		ssp = strstr(w->name, "codec");
+		if (ssp) {
+			dev_dbg(ctx->dev, "%s SSP instance set to 0", __func__);
+			dma_id.dma_node.i2s_instance = 0;
+			mconfig->dma_id = dma_id.val;
+			id_found = 1;
+		}
+		ssp = strstr(w->name, "modem0");
+		if (ssp) {
+			dev_dbg(ctx->dev, "%s SSP instance set to 2", __func__);
+			dma_id.dma_node.i2s_instance = 2;
+			mconfig->dma_id = dma_id.val;
+			id_found = 1;
+		}
+		ssp = strstr(w->name, "bt");
+		if (ssp) {
+			dev_dbg(ctx->dev, "%s SSP instance set to 1", __func__);
+			dma_id.dma_node.i2s_instance = 1;
+			mconfig->dma_id = dma_id.val;
+			id_found = 1;
+		}
+	}
+	if (cpr && !id_found)
+		dev_dbg(ctx->dev, "Valid SSP id not found for cpr %s\n", w->name);
+
+}
+
 static int hda_sst_dapm_pre_pmu_event(struct snd_soc_dapm_widget *w,
 	int w_type, struct sst_dsp_ctx *ctx, struct hda_platform_info *pinfo)
 {
@@ -355,6 +393,7 @@ static int hda_sst_dapm_pre_pmu_event(struct snd_soc_dapm_widget *w,
 	if (!hda_sst_is_pipe_mcps_available(pinfo, ctx, mconfig))
 		return -1;
 
+	hda_sst_update_cpr_ssp_id(w, mconfig, ctx);
 	if (w_type == HDA_SST_WIDGET_VMIXER ||
 		w_type == HDA_SST_WIDGET_MIXER) {
 
@@ -364,6 +403,7 @@ static int hda_sst_dapm_pre_pmu_event(struct snd_soc_dapm_widget *w,
 		ret = hda_sst_create_pipeline(ctx, mconfig->pipe);
 		if (ret < 0)
 			return ret;
+		hda_sst_update_cpr_ssp_id(w, mconfig, ctx);
 		ret = hda_sst_init_module(ctx, mconfig, NULL);
 		if (ret < 0)
 			return ret;
