@@ -496,8 +496,9 @@ irqreturn_t sst_irq_thread_handler(int irq, void *context)
 		if (header.primary & 0x20000000) {
 			/* Handle Immediate reply from DSP Core */
 			ipc_process_reply(ipc, header);
-		} else
-			dev_dbg(dsp->dev, "IPC irq: Notification from firmware\n");
+		} else {
+			trace_printk("IPC irq: Notification from firmware\n");
+		}
 		/* clear  busy interrupt */
 		sst_updatel_bits(dsp, HDA_ADSP_REG_HIPCT,
 			HDA_ADSP_REG_HIPCT_BUSY, HDA_ADSP_REG_HIPCT_BUSY);
