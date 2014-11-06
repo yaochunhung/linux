@@ -154,7 +154,7 @@ int hda_sst_mix_put(struct snd_kcontrol *kcontrol,
 	dapm_kcontrol_set_value(kcontrol,  val);
 	update.kcontrol = kcontrol;
 	update.reg = mc->reg;
-	update.mask = mask;
+	update.mask = mask << mc->shift;
 	update.val = val;
 
 	snd_soc_dapm_mixer_update_power(dapm, kcontrol, connect, &update);
