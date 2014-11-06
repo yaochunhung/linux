@@ -214,9 +214,9 @@ static int morg_florida_set_clk_fmt(struct snd_soc_codec *codec)
 {
 	int ret = 0;
 	struct snd_soc_card *card = codec->card;
+#ifdef OSC_PMIC
 	struct morg_8281_mc_private *ctx = snd_soc_card_get_drvdata(card);
 
-#ifdef OSC_PMIC
 	/* Enable the osc clock at start so that it gets settling time */
 	set_soc_osc_clk0(ctx->osc_clk0_reg, true);
 #endif
@@ -272,7 +272,9 @@ static int morg_florida_set_bias_level_post(struct snd_soc_card *card,
 {
 	struct snd_soc_dai *florida_dai = morg_florida_get_codec_dai(card, "florida-aif1");
 	struct snd_soc_codec *florida_codec = morg_florida_get_codec(card);
+#ifdef OSC_PMIC
 	struct morg_8281_mc_private *ctx = snd_soc_card_get_drvdata(card);
+#endif
 	int ret = 0;
 
 	if (!florida_dai)
