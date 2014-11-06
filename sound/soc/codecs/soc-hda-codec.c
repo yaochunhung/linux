@@ -228,26 +228,44 @@ static int create_hda_soc_dai(struct snd_soc_hda_codec *codec,
 {
 	u32 rates, bps;
 	u64 formats;
-	int ret;
+	int ret, i;
+	unsigned int rate_max = 0, rate_min = 0;
 	struct hda_cvt_setup *cvtp;
+	static unsigned int rate_pcm[] = {
+                8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200,
+                96000, 176400, 192000, 384000
+        };
 
 	dentry->name = kstrdup(dai_name, GFP_KERNEL);
 	ret = snd_hda_query_supported_pcm(&codec->hdac, nid,
 				&rates, &formats, &bps);
 	if (ret)
 		return ret;
+
 	soc_codec_dbg(codec, "nid:%d rates 0x%x, formats 0x%x, bps 0x%x\n",
 			      nid, rates, (unsigned int)formats, bps);
-	soc_codec_dbg(codec, "min_rate 0x%x, max_rate 0x%x\n",
-				(1<<ffs(rates)), (1<<fls(rates)));
+
+	for (i = 0; i < ARRAY_SIZE(rate_pcm); i++) {
+		if (rates & (1 << i)) {
+			rate_min = rate_pcm[i];
+			break;
+		}
+	}
+	for (i = ARRAY_SIZE(rate_pcm) - 1; i >= 0; i--) {
+		if (rates & (1 << i)) {
+			rate_max = rate_pcm[i];
+			break;
+		}
+	}
+	soc_codec_dbg(codec, "min_rate %d, max_rate %d\n", rate_min, rate_max);
 
 	if (!direction) {
 		dentry->playback.stream_name = kstrdup(stream_name,
 								GFP_KERNEL);
 		dentry->playback.formats = formats;
 		dentry->playback.rates = rates;
-		dentry->playback.rate_min = 1 << ffs(rates);
-		dentry->playback.rate_max = 1 << fls(rates);
+		dentry->playback.rate_max = rate_max;
+		dentry->playback.rate_min = rate_min;
 		dentry->playback.channels_min = 1;
 		dentry->playback.channels_max = max_chan;
 	} else {
@@ -255,8 +273,8 @@ static int create_hda_soc_dai(struct snd_soc_hda_codec *codec,
 							GFP_KERNEL);
 		dentry->capture.formats = formats;
 		dentry->capture.rates = rates;
-		dentry->capture.rate_min = 1 << ffs(rates);
-		dentry->capture.rate_max = 1 << fls(rates);
+		dentry->capture.rate_min = rate_min;
+		dentry->capture.rate_max = rate_max;
 		dentry->capture.channels_min = 1;
 		dentry->capture.channels_max = max_chan;
 
