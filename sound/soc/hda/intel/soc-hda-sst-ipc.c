@@ -98,16 +98,16 @@
 /* Init instance message */
 /* extension register */
 #define IPC_PARAM_BLOCK_SIZE_SHIFT	0
-#define IPC_PARAM_BLOCK_SIZE_MASK	0x1FF
+#define IPC_PARAM_BLOCK_SIZE_MASK	0xFFFF
 #define IPC_PARAM_BLOCK_SIZE(x)		(((x) & IPC_PARAM_BLOCK_SIZE_MASK) \
 					<< IPC_PARAM_BLOCK_SIZE_SHIFT)
 
-#define IPC_PPL_INSTANCE_ID_SHIFT	9
+#define IPC_PPL_INSTANCE_ID_SHIFT	16
 #define IPC_PPL_INSTANCE_ID_MASK	0xFF
 #define IPC_PPL_INSTANCE_ID(x)		(((x) & IPC_PPL_INSTANCE_ID_MASK) \
 					<< IPC_PPL_INSTANCE_ID_SHIFT)
 
-#define IPC_CORE_ID_SHIFT	17
+#define IPC_CORE_ID_SHIFT	24
 #define IPC_CORE_ID_MASK	0x1F
 #define IPC_CORE_ID(x)		(((x) & IPC_CORE_ID_MASK) \
 				<< IPC_CORE_ID_SHIFT)
@@ -693,9 +693,6 @@ int ipc_init_instance(struct ipc *ipc, struct init_instance_msg *msg,
 	dev_dbg(ipc->dev, "param size: %d bytes\n", msg->param_data_size);
 	for (i = 0; i < param_block_size; ++i)
 		dev_dbg(ipc->dev, "%x\n ", buffer[i]);
-
-	if (param_block_size > 0x1FF)
-		param_block_size = 0x1FF;
 
 	header.primary = IPC_MSG_TARGET(IPC_MODULE_MSG);
 	header.primary |= IPC_MSG_DIR(IPC_MSG_REQUEST);
