@@ -349,9 +349,12 @@ static int soc_hda_be_link_hw_params(struct snd_pcm_substream *substream,
 				struct snd_pcm_hw_params *params,
 				struct snd_soc_dai *dai)
 {
+	struct snd_soc_pcm_runtime *rtd = snd_pcm_substream_chip(substream);
 	struct azx_dev *link_dev;
 	struct azx *chip = dev_get_drvdata(dai->dev);
 	int dma_id;
+	struct snd_soc_hda_dma_params *dma_params;
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 
 	pr_debug("%s\n", __func__);
 	link_dev = soc_azx_assign_link_device(chip, substream);
@@ -359,7 +362,14 @@ static int soc_hda_be_link_hw_params(struct snd_pcm_substream *substream,
 		mutex_unlock(&chip->open_mutex);
 		return -EBUSY;
 	}
+
 	snd_soc_dai_set_dma_data(dai, substream, (void *)link_dev);
+
+	/*set the stream tag in the codec dai dma params */
+	dma_params  = (struct snd_soc_hda_dma_params *)
+			snd_soc_dai_get_dma_data(codec_dai, substream);
+	dma_params->stream_tag =  link_dev->stream_tag;
+	snd_soc_dai_set_dma_data(codec_dai, substream, (void *)dma_params);
 	dma_id = azx_get_dma_id(chip, link_dev);
 	hda_sst_set_copier_dma_id(dai, dma_id, substream->stream, false);
 
@@ -378,6 +388,8 @@ static int soc_hda_be_link_pcm_prepare(struct snd_pcm_substream *substream,
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	struct snd_pcm_hw_params *params;
 	struct snd_interval *channels, *rate;
+	u32 __iomem *addr;
+	u32 value;
 
 	dev_dbg(chip->dev, "%s: %s\n", __func__, dai->name);
 	if (link_dev->prepared) {
@@ -396,15 +408,12 @@ static int soc_hda_be_link_pcm_prepare(struct snd_pcm_substream *substream,
 					SNDRV_PCM_HW_PARAM_FIRST_MASK],
 					substream->runtime->format);
 
-	hda_sst_set_copier_hw_params(dai, params, substream->stream, false);
 
 	dma_params  = (struct snd_soc_hda_dma_params *)
 			snd_soc_dai_get_dma_data(codec_dai, substream);
 	format_val = dma_params->format;
-	dma_params->stream_tag =  link_dev->stream_tag;
-	snd_soc_dai_set_dma_data(codec_dai, substream, (void *)dma_params);
-	dev_dbg(chip->dev, "stream_tag=%d formatvalue=%d\n",
-				link_dev->stream_tag, format_val);
+	dev_dbg(chip->dev, "stream_tag=%d formatvalue=%d codec_dai_name=%s\n",
+				link_dev->stream_tag, format_val, codec_dai->name);
 	azx_link_dma_reset(chip, link_dev);
 
 	ret = azx_link_dma_set_stream_id(chip, link_dev);
@@ -417,10 +426,10 @@ static int soc_hda_be_link_pcm_prepare(struct snd_pcm_substream *substream,
 		dev_err(chip->dev, "Failed to set format to link DMA");
 		return -EIO;
 	}
-	/* FIXEME NEED to check if this required
-	azx_writel(chip, ML_LOSIDVX[link_dev->index],
-	azx_readl(chip, ML_LOSIDVX[link_dev->index]) |
-			(1 << link_dev->stream_tag)); */
+	/*FIXME map the link */
+	addr = (chip->remap_addr + chip->azx_link[0].losidv_offset);
+	value = (azx_ml_readl(chip, addr) | (1 << link_dev->stream_tag));
+	azx_ml_writel(chip, addr, value);
 	if (!ret)
 		link_dev->prepared = 1;
 	return ret;
@@ -455,11 +464,18 @@ static int soc_hda_be_link_hw_free(struct snd_pcm_substream *substream,
 {
 	struct azx *chip = dev_get_drvdata(dai->dev);
 	struct azx_dev *link_dev = snd_soc_dai_get_dma_data(dai, substream);
+	u32 __iomem *addr;
+	u32 value;
 
 	dev_dbg(chip->dev, "%s: %s\n", __func__, dai->name);
 
 	link_dev->stream_tag = 0;
 	link_dev->prepared = 0;
+
+	/*FIXME map the link */
+	addr = (chip->remap_addr + chip->azx_link[0].losidv_offset);
+	value = (azx_ml_readl(chip, addr) & ~(1 << link_dev->stream_tag));
+	azx_ml_writel(chip, addr, value);
 	azx_link_release_device(link_dev);
 	return 0;
 }
@@ -1087,9 +1103,6 @@ int soc_hda_platform_register(struct device *dev)
 	INIT_LIST_HEAD(&pinfo->ppl_list);
 	INIT_LIST_HEAD(&pinfo->ppl_start_list);
 
-	if (sazx == NULL)
-		printk("In%s socazx is null\n", __func__);
-
 	sazx->pinfo  = pinfo;
 	if (chip->ppcap_offset)
 		soc_hda_platform_ops.trigger = soc_hda_platform_pcm_dsp_trigger;
@@ -1108,7 +1121,7 @@ int soc_hda_platform_register(struct device *dev)
 		snd_soc_unregister_platform(dev);
 	}
 
-	printk("In%s platform driver registe successfull\n", __func__);
+	dev_dbg(chip->dev, "In%s registration successful\n", __func__);
 
 	return ret;
 
