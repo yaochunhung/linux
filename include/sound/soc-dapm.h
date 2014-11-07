@@ -171,7 +171,8 @@ struct snd_soc_dapm_widget *snd_soc_dapm_find_widget(
 			bool search_other_contexts);
 
 struct snd_soc_codec *snd_soc_dapm_kcontrol_codec(struct snd_kcontrol *kcontrol);
-
+struct snd_soc_dapm_context *snd_soc_dapm_kcontrol_dapm(
+		struct snd_kcontrol *kcontrol);
 /* dapm set/reset */
 int snd_soc_dapm_state_set(struct snd_soc_card *card, bool reset_state);
 

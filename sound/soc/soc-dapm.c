@@ -352,6 +352,12 @@ bool dapm_kcontrol_set_value(const struct snd_kcontrol *kcontrol,
 
 EXPORT_SYMBOL_GPL(dapm_kcontrol_set_value);
 
+struct snd_soc_dapm_context *snd_soc_dapm_kcontrol_dapm(
+		struct snd_kcontrol *kcontrol)
+{
+	return dapm_kcontrol_get_wlist(kcontrol)->widgets[0]->dapm;
+}
+EXPORT_SYMBOL_GPL(snd_soc_dapm_kcontrol_dapm);
 
 /**
  * snd_soc_dapm_kcontrol_codec() - Returns the codec associated to a kcontrol
