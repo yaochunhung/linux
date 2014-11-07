@@ -47,7 +47,17 @@ config SND_SOC_HDA_MRGFLD_MACH
 	select REGULATOR_ARIZONA
 	select GPIO_ARIZONA
 	select SND_SOC_HDA_BUS
-	default n
+	help
+	This adds support for ASoC machine driver . This will create an alsa
+	sound card.
+	Say Y if you have such a device
+	If unsure select "N".
+
+config SND_SOC_HDA_SKL_MACH
+	tristate "SOC Machine Audio driver for SKL HDA"
+	select SND_SOC_HDA_BUS
+	select SND_SOC_ALC269
+	select SND_SOC_HDMI
 	help
 	This adds support for ASoC machine driver . This will create an alsa
 	sound card.
@@ -59,7 +69,6 @@ config SND_SOC_HDA_GENERIC_MACH
 	select SND_SOC_HDA_BUS
 	select SND_SOC_ALC269
 	select SND_SOC_HDMI
-	default n
 	help
 	This adds support for ASoC machine driver . This will create an alsa
 	sound card.
