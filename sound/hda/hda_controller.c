@@ -1536,6 +1536,30 @@ void azx_ppcap_enable(struct azx *chip, bool enable)
 		enable ? PPCTL_GPROCEN : 0);
 }
 
+int azx_get_ml_capablities(struct azx *chip)
+{
+	int i = 0;
+	chip->link_count = azx_readl_alt(chip, chip->mlcap_offset + ICH6_REG_ML_MLCD);
+
+	chip->azx_link = devm_kzalloc(chip->dev, (chip->link_count + 1) *
+					sizeof(*chip->azx_link),
+					GFP_KERNEL);
+	 if (!chip->azx_link) {
+		dev_err(chip->dev, "cannot allocate azx_link\n");
+		return -ENOMEM;
+	}
+
+	for (i = 0; i < chip->link_count; i++) {
+		chip->azx_link[i].lcap = azx_readl_alt(chip, chip->mlcap_offset +
+								 ICH6_REG_ML_LCAPX(i));
+		chip->azx_link[i].lsdiid = azx_readl_alt(chip, chip->mlcap_offset +
+								ICH6_REG_ML_LSDIIDX(i));
+		chip->azx_link[i].losidv_offset = chip->mlcap_offset + ICH6_REG_ML_LOSIDVX(i);
+	}
+
+	return 0;
+}
+
 int azx_parse_capabilities(struct azx *chip)
 {
 	unsigned int cur_cap;
@@ -1567,6 +1591,7 @@ int azx_parse_capabilities(struct azx *chip)
 		switch ((cur_cap & CAP_HDR_ID_MASK) >> CAP_HDR_ID_OFF) {
 		case ML_CAP_ID:
 			dev_dbg(chip->dev, "Found ML capability");
+			chip->mlcap_offset = offset;
 			break;
 		case GTS_CAP_ID:
 			dev_dbg(chip->dev, "Found GTS capability");

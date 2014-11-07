@@ -390,8 +390,8 @@ enum {
 #define ML_CAP_ID					0x2
 #define ICH6_REG_ML_MLCH			0x00
 #define ICH6_REG_ML_MLCD			0x04
-#define ICH6_REG_ML_XBASE			0x40
-#define ICH6_REG_ML_XINTERVAL		0x40
+#define HDA_ML_XBASE			0x40
+#define HDA_ML_XINTERVAL		0x40
 
 #define ICH6_REG_ML_RECUR(_X_, _OFFSET_) \
 	HDA_RECUR_REG_OFFSET( \
@@ -529,5 +529,11 @@ enum {
 	((chip)->ops->reg_writeb( \
 		((chip)->ops->reg_readb((dev)->pplc_addr + (reg)) & (mask_and)) | (mask_or),\
 		(dev)->pplc_addr + (reg)))
+
+#define azx_ml_writel(chip, reg, value) \
+       ((chip)->ops->reg_writel(value, reg))
+#define azx_ml_readl(chip,  reg) \
+       ((chip)->ops->reg_readl(reg))
+
 
 #endif /* __SOUND_HDA_REGISTER_H */

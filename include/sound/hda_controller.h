@@ -99,6 +99,7 @@ struct azx_rb {
 };
 
 struct azx;
+struct azx_link;
 
 /* Functions to read/write to hda registers. */
 struct hda_controller_ops {
@@ -208,9 +209,18 @@ struct azx {
 	struct dev_pm_domain hdmi_pm_domain;
 	unsigned int ppcap_offset;
 	unsigned int spbcap_offset;
+	unsigned int mlcap_offset;
 	struct azx_dev saved_azx_dev;
 	/* link (x num_streams) */
 	struct azx_dev *link_dev;
+	struct azx_link *azx_link;
+	u32 link_count;
+};
+
+struct azx_link {
+	u32 lcap;
+	u32 lsdiid;
+	unsigned int losidv_offset;
 };
 
 static struct snd_pcm_hardware azx_pcm_hw = {
