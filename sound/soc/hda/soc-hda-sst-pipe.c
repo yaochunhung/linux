@@ -439,10 +439,10 @@ int hda_sst_bind_unbind_modules(struct sst_dsp_ctx *ctx, struct module_config
 	} else {
 
 		src_module->out_queue_mask = 0;
-		src_module->in_queue_mask = 0;
+		dst_module->in_queue_mask = 0;
 	}
 	dev_dbg(ctx->dev, "in quque = %d out_queue =%d\n",
-		 src_module->out_queue, src_module->in_queue);
+		 src_module->out_queue, dst_module->in_queue);
 	msg.src_queue = src_module->out_queue;
 	msg.dst_queue = dst_module->in_queue;
 	msg.bind = bind;
