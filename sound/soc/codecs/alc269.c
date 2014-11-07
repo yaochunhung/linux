@@ -1292,11 +1292,11 @@ static int power_ev(struct snd_soc_dapm_widget *w,
 }
 
 static const struct snd_soc_dapm_widget alc_cvt_widgets[] = {
-SND_SOC_DAPM_DAC_E("SPKDAC", "Speaker", SND_SOC_NOPM, 3, 0,
+SND_SOC_DAPM_DAC_E("SPKDAC", NULL, SND_SOC_NOPM, 3, 0,
 	power_ev, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
-SND_SOC_DAPM_DAC_E("HPDAC", "Headphone", SND_SOC_NOPM, 2, 0,
+SND_SOC_DAPM_DAC_E("HPDAC", NULL, SND_SOC_NOPM, 2, 0,
 	power_ev, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
-SND_SOC_DAPM_ADC_E("ADC1", "Record", SND_SOC_NOPM, 0x11, 0,
+SND_SOC_DAPM_ADC_E("ADC1", NULL, SND_SOC_NOPM, 0x11, 0,
 	power_ev, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
 };
 
@@ -1373,16 +1373,18 @@ static const struct snd_soc_dapm_widget alc_pin_widgets[] = {
 };
 
 static const struct snd_soc_dapm_route alc_intercon[] = {
+	{"HPOUT", NULL, "Headphone"},
+	{"SPKOUT", NULL, "Speaker"},
+	{"Record", NULL, "Mic"},
 /* Headphone path */
-	{"HPOUT", NULL, "Mixer0xc"},
-	{"Mixer0xc", NULL, "HPDAC"},
+	{"Mixer0xc", NULL, "HPOUT"},
+	{"HPDAC", NULL, "Mixer0xc"},
 /* Speaker path */
-	{"SPKOUT", NULL, "Mixer0xd"},
-	{"Mixer0xd", NULL, "SPKDAC"},
+	{"Mixer0xd", NULL, "SPKOUT"},
+	{"SPKDAC", NULL, "Mixer0xd"},
 /* capture path */
-	{"ADC1", NULL, "Mux0x22"},
-	{"Mux0x22", NULL, "Mic"},
-
+	{"Mic", NULL, "Mux0x22"},
+	{"Mux0x22", NULL, "ADC1"},
 };
 /* codec registration */
 static int alc_codec_probe(struct snd_soc_codec *codec)
@@ -1442,6 +1444,8 @@ static int alc_set_hw_params(struct snd_pcm_substream *substream,
 	int ret, idx;
 	int format_id;
 
+	dev_dbg(dai->dev, "In %s\n", __func__);
+
 	idx = snd_soc_hda_get_dai_map(codec, dai);
 	if (idx < 0)
 		return -1;
@@ -1452,7 +1456,7 @@ static int alc_set_hw_params(struct snd_pcm_substream *substream,
 	dd->format = snd_hda_calc_stream_format(params_rate(hparams),
 			params_channels(hparams), params_format(hparams),
 			map->maxbps, 0);
-	soc_codec_dbg(codec, "hda format val = 0x%x\n", dd->format);
+	dev_dbg(dai->dev, "hda format val = 0x%x\n", dd->format);
 	snd_soc_dai_set_dma_data(dai, substream, (void *)dd);
 	return 0;
 
@@ -1465,10 +1469,10 @@ static int alc_prepare(struct snd_pcm_substream *substream,
 	struct snd_soc_pcm_runtime *rtd = snd_pcm_substream_chip(substream);
 	struct hda_dai_map *map;
 	struct hda_cvt_setup *cvt;
-	struct snd_soc_dai *cpu_dai;
-	struct snd_soc_hda_dma_params *dp, *dd;
+	struct snd_soc_hda_dma_params *dd;
 	int idx;
 
+	dev_dbg(dai->dev, "In %s\n", __func__);
 	if (substream == NULL)
 		return -1;
 
@@ -1481,14 +1485,11 @@ static int alc_prepare(struct snd_pcm_substream *substream,
 	if (cvt == NULL)
 		return -1;
 
-	cpu_dai = rtd->cpu_dai;
-	dp = (struct snd_soc_hda_dma_params *)
-				snd_soc_dai_get_dma_data(cpu_dai, substream);
-	soc_codec_dbg(codec, "stream tag from cpu dai %d\n", dp->stream_tag);
-
 	dd = (struct snd_soc_hda_dma_params *)
 				snd_soc_dai_get_dma_data(dai, substream);
-	snd_hda_codec_setup_stream(&codec->hdac, map->nid, dp->stream_tag, 0, dd->format);
+	dev_dbg(dai->dev, "stream tag from cpu dai %di format=%d dainame=%s\n",
+				dd->stream_tag, dd->format, dai->name);
+	snd_hda_codec_setup_stream(&codec->hdac, map->nid, dd->stream_tag, 0, dd->format);
 	return 0;
 
 }
@@ -1505,6 +1506,8 @@ static int alc_hw_free(struct snd_pcm_substream *substream,
 
 	if (substream == NULL)
 		return -1;
+
+	dev_dbg(dai->dev, "In %s\n", __func__);
 
 	idx = snd_soc_hda_get_dai_map(codec, dai);
 	if (idx < 0)
