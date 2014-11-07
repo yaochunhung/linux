@@ -71,17 +71,38 @@
 /* Size of osc clock register */
 #define MERR_OSC_CLKOUT_CTRL0_REG_SIZE  4
 
+static int bt_debug;
+module_param(bt_debug, int, S_IRUGO);
+MODULE_PARM_DESC(bt_debug, "0: bt_debug disable, 1: debug bt in wideband mode, 2: debug bt in narrow band mode");
+
+
 struct mrgfld_mc_private {
 	u8		pmic_id;
 	void __iomem    *osc_clk0_reg;
 };
-static const struct snd_soc_pcm_stream bxtn_florida_dai_params_codec = {
+static const struct snd_soc_pcm_stream bxtn_florida_dai_params_codec_default = {
 	.formats = SNDRV_PCM_FMTBIT_S24_LE,
 	.rate_min = 48000,
 	.rate_max = 48000,
 	.channels_min = 2,
 	.channels_max = 2,
 };
+
+static const struct snd_soc_pcm_stream bxtn_florida_dai_params_codec_bt_wb = {
+	.formats = SNDRV_PCM_FMTBIT_S16_LE,
+	.rate_min = 16000,
+	.rate_max = 16000,
+	.channels_min = 1,
+	.channels_max = 1,
+};
+static const struct snd_soc_pcm_stream bxtn_florida_dai_params_codec_bt_nb = {
+	.formats = SNDRV_PCM_FMTBIT_S16_LE,
+	.rate_min = 8000,
+	.rate_max = 8000,
+	.channels_min = 1,
+	.channels_max = 1,
+};
+
 static const struct snd_soc_pcm_stream bxtn_florida_dai_params_modem = {
 	.formats = SNDRV_PCM_FMTBIT_S16_LE,
 	.rate_min = 48000,
@@ -250,6 +271,8 @@ static int morg_florida_set_bias_level(struct snd_soc_card *card,
 	struct snd_soc_codec *florida_codec = morg_florida_get_codec(card);
 	int ret = 0;
 	unsigned int fmt;
+	int slot_width;
+
 
 	if (!florida_dai)
 		return -ENODEV;
@@ -259,7 +282,19 @@ static int morg_florida_set_bias_level(struct snd_soc_card *card,
 
 	if (level == SND_SOC_BIAS_PREPARE) {
 		if (card->dapm.bias_level == SND_SOC_BIAS_STANDBY) {
-			ret = snd_soc_dai_set_tdm_slot(florida_dai, 0, 0, 4, 24);
+			switch (bt_debug) {
+			case 0:
+				slot_width = 24;
+				break;
+			case 1:
+			case 2:
+				slot_width = 16;
+				break;
+			default:
+				slot_width = 24;
+			}
+			pr_info("Slot width for codec = %d\n", slot_width);
+			ret = snd_soc_dai_set_tdm_slot(florida_dai, 0, 0, 4, slot_width);
 			if (ret < 0) {
 				pr_err("can't set codec pcm format %d\n", ret);
 				return ret;
@@ -454,11 +489,24 @@ static int morg_florida_init(struct snd_soc_pcm_runtime *runtime)
 	struct snd_soc_codec *florida_codec = morg_florida_get_codec(card);
 	struct snd_soc_dai *florida_dai = morg_florida_get_codec_dai(card, "florida-aif1");
 	struct snd_soc_dapm_context *dapm =  &(florida_codec->dapm);
+	int slot_width;
 
 
 	pr_info("Entry %s\n", __func__);
+	switch (bt_debug) {
+	case 0:
+		slot_width = 24;
+		break;
+	case 1:
+	case 2:
+		slot_width = 16;
+		break;
+	default:
+		slot_width = 24;
+	}
+	pr_info("Slot width for codec = %d\n", slot_width);
 
-	ret = snd_soc_dai_set_tdm_slot(florida_dai, 0, 0, 4, 16);
+	ret = snd_soc_dai_set_tdm_slot(florida_dai, 0, 0, 4, slot_width);
 	/* slot width is set as 25, SNDRV_PCM_FORMAT_S32_LE */
 	if (ret < 0) {
 		pr_err("can't set codec pcm format %d\n", ret);
@@ -655,7 +703,6 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 		.platform_name = "0000:02:18.0",
 		.codec_name = "florida-codec",
 		.codec_dai_name = "florida-aif1",
-		.params = &bxtn_florida_dai_params_codec,
 		.dsp_loopback = true,
 	},
 	{
@@ -811,10 +858,11 @@ static struct snd_soc_card snd_soc_card_morg = {
 
 static int snd_morg_florida_mc_probe(struct platform_device *pdev)
 {
-	int ret_val = 0;
+	int i, ret_val = 0;
 	struct mrgfld_mc_private *drv;
-	pr_debug("Entry %s\n", __func__);
+	struct snd_soc_dai_link *dai_link = NULL;
 
+	pr_debug("Entry %s\n", __func__);
 	drv = devm_kzalloc(&pdev->dev, sizeof(*drv), GFP_ATOMIC);
 	if (!drv) {
 		pr_err("allocation failed\n");
@@ -838,6 +886,36 @@ static int snd_morg_florida_mc_probe(struct platform_device *pdev)
 		goto unalloc;
 	}
 #endif
+	/* Override the params based on bt debug param */
+	for (i = 0; i < ARRAY_SIZE(morg_florida_msic_dailink); i++) {
+		if (!(strcmp("Bxtn Codec-Loop Port", morg_florida_msic_dailink[i].name))) {
+			dai_link = &morg_florida_msic_dailink[i];
+			pr_info("Codec Codec link found\n");
+		}
+	}
+	if (dai_link) {
+		switch (bt_debug) {
+		case 0:
+			dai_link->params =
+				&bxtn_florida_dai_params_codec_default;
+			pr_info("Default codec params selected\n");
+			break;
+		case 1:
+			dai_link->params =
+				&bxtn_florida_dai_params_codec_bt_wb;
+			pr_info("BT Wideband codec params selected\n");
+			break;
+		case 2:
+			dai_link->params =
+				&bxtn_florida_dai_params_codec_bt_nb;
+			pr_info("BT Narrowband codec params selected\n");
+			break;
+		default:
+			dai_link->params =
+				&bxtn_florida_dai_params_codec_default;
+			pr_info("Default codec params selected\n");
+		}
+	}
 	/* register the soc card */
 	snd_soc_card_morg.dev = &pdev->dev;
 	snd_soc_card_set_drvdata(&snd_soc_card_morg, drv);
