@@ -120,8 +120,8 @@ static int azx_get_dma_id(struct azx *chip, struct azx_dev *azx_dev)
 static struct azx *get_chip_ctx(struct snd_pcm_substream *substream)
 {
 	struct snd_soc_pcm_runtime *rtd = snd_pcm_substream_chip(substream);
-	struct snd_soc_platform *platform = rtd->platform;
-	struct azx *chip = dev_get_drvdata(platform->dev);
+	struct device *dev = rtd->cpu_dai->dev;
+	struct azx *chip = dev_get_drvdata(dev);
 	return chip;
 }
 
@@ -131,7 +131,7 @@ static struct azx *get_chip_ctx(struct snd_pcm_substream *substream)
 static int soc_hda_pcm_open(struct snd_pcm_substream *substream,
 		struct snd_soc_dai *dai)
 {
-	struct azx *chip = get_chip_ctx(substream);
+	struct azx *chip = dev_get_drvdata(dai->dev);
 	struct azx_dev *azx_dev;
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	unsigned long flags;
@@ -174,7 +174,7 @@ static int soc_hda_pcm_prepare(struct snd_pcm_substream *substream,
 		struct snd_soc_dai *dai)
 {
 	struct snd_soc_pcm_runtime *rtd = snd_pcm_substream_chip(substream);
-	struct azx *chip = get_chip_ctx(substream);
+	struct azx *chip = dev_get_drvdata(dai->dev);
 	struct azx_dev *azx_dev = get_azx_dev(substream);
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	unsigned int format_val = 0;
@@ -218,7 +218,7 @@ static int soc_hda_pcm_hw_params(struct snd_pcm_substream *substream,
 				struct snd_pcm_hw_params *params,
 				struct snd_soc_dai *dai)
 {
-	struct azx *chip = get_chip_ctx(substream);
+	struct azx *chip = dev_get_drvdata(dai->dev);
 	struct azx_dev *azx_dev = get_azx_dev(substream);
 	int ret, dma_id;
 	struct snd_pcm_runtime *runtime = substream->runtime;
@@ -247,7 +247,7 @@ static int soc_hda_pcm_hw_params(struct snd_pcm_substream *substream,
 static void soc_hda_pcm_close(struct snd_pcm_substream *substream,
 		struct snd_soc_dai *dai)
 {
-	struct azx *chip = get_chip_ctx(substream);
+	struct azx *chip = dev_get_drvdata(dai->dev);
 	struct azx_dev *azx_dev = get_azx_dev(substream);
 	unsigned long flags;
 	struct snd_soc_hda_dma_params *dma_params;
@@ -268,7 +268,7 @@ static void soc_hda_pcm_close(struct snd_pcm_substream *substream,
 static int soc_hda_pcm_hw_free(struct snd_pcm_substream *substream,
 		struct snd_soc_dai *dai)
 {
-	struct azx *chip = get_chip_ctx(substream);
+	struct azx *chip = dev_get_drvdata(dai->dev);
 	struct azx_dev *azx_dev = get_azx_dev(substream);
 
 	dev_dbg(chip->dev, "%s: %s\n", __func__, dai->name);
@@ -328,7 +328,7 @@ static int hda_be_dmic_prepare(struct snd_pcm_substream *substream,
 static int soc_hda_pcm_trigger(struct snd_pcm_substream *substream, int cmd,
 		struct snd_soc_dai *dai)
 {
-	struct azx *chip = get_chip_ctx(substream);
+	struct azx *chip = dev_get_drvdata(dai->dev);
 
 	dev_dbg(chip->dev, "In %s cmd=%d\n", __func__, cmd);
 	switch (cmd) {
@@ -700,7 +700,7 @@ static int soc_hda_platform_open(struct snd_pcm_substream *substream)
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai_link *dai_link = rtd->dai_link;
 
-	dev_dbg(rtd->platform->dev, "In %s:%s\n", __func__,
+	dev_dbg(rtd->cpu_dai->dev, "In %s:%s\n", __func__,
 					dai_link->cpu_dai_name);
 
 	runtime = substream->runtime;
@@ -713,7 +713,7 @@ static int soc_hda_platform_close(struct snd_pcm_substream *substream)
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai_link *dai_link = rtd->dai_link;
 
-	dev_dbg(rtd->platform->dev, "In %s:%s\n", __func__,
+	dev_dbg(rtd->cpu_dai->dev, "In %s:%s\n", __func__,
 					dai_link->cpu_dai_name);
 
 	return 0;
@@ -996,15 +996,14 @@ static void soc_hda_pcm_free(struct snd_pcm *pcm)
 
 static int soc_hda_pcm_new(struct snd_soc_pcm_runtime *rtd)
 {
-	struct snd_soc_platform *platform = rtd->platform;
-	struct azx *chip = dev_get_drvdata(platform->dev);
 	struct snd_soc_dai *dai = rtd->cpu_dai;
+	struct azx *chip = dev_get_drvdata(dai->dev);
 	struct snd_pcm *pcm = rtd->pcm;
 	unsigned int size;
 
 	int retval = 0;
 
-	dev_dbg(chip->dev, "In %s\n", __func__);
+	dev_dbg(dai->dev, "In %s\n", __func__);
 	if (dai->driver->playback.channels_min ||
 			dai->driver->capture.channels_min) {
 			/* buffer pre-allocation */
@@ -1015,7 +1014,7 @@ static int soc_hda_pcm_new(struct snd_soc_pcm_runtime *rtd)
 					      snd_dma_pci_data(chip->pci),
 					      size, MAX_PREALLOC_SIZE);
 		if (retval) {
-			dev_err(chip->dev, "dma buffer allocationf fail\n");
+			dev_err(dai->dev, "dma buffer allocationf fail\n");
 			return retval;
 		}
 	}
@@ -1027,10 +1026,10 @@ static int soc_hda_soc_probe(struct snd_soc_platform *platform)
 	struct azx *chip = dev_get_drvdata(platform->dev);
 	int ret = 0;
 
-	dev_dbg(platform->dev, "Enter:%s\n", __func__);
+	dev_dbg(chip->dev, "Enter:%s\n", __func__);
 
 	if (chip->ppcap_offset)
-		ret = hda_sst_dsp_control_init(platform);
+		ret = hda_sst_dsp_control_init(platform, chip);
 	return ret;
 }
 

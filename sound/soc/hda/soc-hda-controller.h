@@ -70,8 +70,8 @@ void hda_sst_set_copier_hw_params(struct snd_soc_dai *dai,
 void hda_sst_set_be_dmic_config(struct snd_soc_dai *dai,
 	struct snd_pcm_hw_params *params, int stream);
 void hda_sst_set_be_ssp_config(struct snd_soc_dai *dai, int stream);
-int hda_sst_dsp_control_init(struct snd_soc_platform *platform);
-
+int hda_sst_dsp_control_init(struct snd_soc_platform *platform,
+	struct azx *chip);
 int dsp_register(struct azx *chip);
 void azx_dsp_unregister(struct azx *chip);
 int azx_load_i2s_machine(struct azx *chip);

@@ -42,10 +42,9 @@ static int hda_sst_algo_control_get(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
 	struct soc_bytes_ext *sb = (void *) kcontrol->private_value;
-	struct snd_soc_dapm_widget_list *wlist = snd_kcontrol_chip(kcontrol);
-	struct snd_soc_dapm_widget *w = wlist->widgets[0];
 	struct hda_sst_algo_data *bc = (struct hda_sst_algo_data *)sb->pvt_data;
-	struct azx *chip = snd_soc_platform_get_drvdata(w->platform);
+	struct snd_soc_dapm_context *dapm = snd_soc_dapm_kcontrol_dapm(kcontrol);
+	struct azx *chip = dev_get_drvdata(dapm->dev);
 
 	dev_dbg(chip->dev, "In%s control_name=%s\n", __func__, kcontrol->id.name);
 	switch (bc->type) {
@@ -54,7 +53,7 @@ static int hda_sst_algo_control_get(struct snd_kcontrol *kcontrol,
 			memcpy(ucontrol->value.bytes.data, bc->params, bc->max);
 		break;
 	default:
-		dev_err(w->platform->dev, "Invalid Input- algo type:%d\n", bc->type);
+		dev_err(chip->dev, "Invalid Input- algo type:%d\n", bc->type);
 		return -EINVAL;
 
 	}
@@ -64,9 +63,8 @@ static int hda_sst_algo_control_get(struct snd_kcontrol *kcontrol,
 static int hda_sst_algo_control_set(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_dapm_widget_list *wlist = snd_kcontrol_chip(kcontrol);
-	struct snd_soc_dapm_widget *w = wlist->widgets[0];
-	struct azx *chip = snd_soc_platform_get_drvdata(w->platform);
+	struct snd_soc_dapm_context *dapm = snd_soc_dapm_kcontrol_dapm(kcontrol);
+	struct azx *chip = dev_get_drvdata(dapm->dev);
 	struct soc_bytes_ext *sb = (void *) kcontrol->private_value;
 	struct hda_sst_algo_data *bc = (struct hda_sst_algo_data *)sb->pvt_data;
 
@@ -136,46 +134,40 @@ unsigned int hda_sst_reg_write(struct hda_platform_info *pinfo, unsigned int reg
 int hda_sst_mix_put(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_dapm_widget_list *wlist = snd_kcontrol_chip(kcontrol);
-	struct snd_soc_dapm_widget *w = wlist->widgets[0];
 	struct soc_mixer_control *mc =
 				(struct soc_mixer_control *)kcontrol->private_value;
-	struct azx *chip  = snd_soc_platform_get_drvdata(w->platform);
+	struct snd_soc_dapm_context *dapm = snd_soc_dapm_kcontrol_dapm(kcontrol);
+	struct azx *chip  = dev_get_drvdata(dapm->dev);
 	struct snd_soc_azx *schip =
 			container_of(chip, struct snd_soc_azx, hda_azx);
 	struct hda_platform_info *pinfo = schip->pinfo;
-	struct sst_dsp_ctx *ctx = schip->dsp;
 	unsigned int mask = (1 << fls(mc->max)) - 1;
 	unsigned int val;
 	int connect;
 	struct snd_soc_dapm_update update;
 
-	dev_dbg(chip->dev, "%s called set %#lx for %s\n", __func__, ucontrol->value.integer.value[0],
-		w->name);
+	dev_dbg(chip->dev, "%s called set %#lx\n", __func__, ucontrol->value.integer.value[0]);
 	val = hda_sst_reg_write(pinfo, mc->reg, mc->shift, mc->max,
 				ucontrol->value.integer.value[0]);
 	connect = !!val;
 
-	if (w->power)
-		hda_sst_src_bind_unbind_modules(w, ctx, connect, 1);
 	dapm_kcontrol_set_value(kcontrol,  val);
 	update.kcontrol = kcontrol;
 	update.reg = mc->reg;
 	update.mask = mask;
 	update.val = val;
 
-	snd_soc_dapm_mixer_update_power(w->dapm, kcontrol, connect, &update);
+	snd_soc_dapm_mixer_update_power(dapm, kcontrol, connect, &update);
 	return 0;
 }
 
 int hda_sst_mix_get(struct snd_kcontrol *kcontrol,
 		struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_dapm_widget_list *wlist = snd_kcontrol_chip(kcontrol);
-	struct snd_soc_dapm_widget *w = wlist->widgets[0];
 	struct soc_mixer_control *mc =
 			(struct soc_mixer_control *)kcontrol->private_value;
-	struct azx *chip  = snd_soc_platform_get_drvdata(w->platform);
+	struct snd_soc_dapm_context *dapm = snd_soc_dapm_kcontrol_dapm(kcontrol);
+	struct azx *chip  = dev_get_drvdata(dapm->dev);
 	struct snd_soc_azx *schip =
 			container_of(chip, struct snd_soc_azx, hda_azx);
 	struct hda_platform_info *pinfo = schip->pinfo;
@@ -185,13 +177,13 @@ int hda_sst_mix_get(struct snd_kcontrol *kcontrol,
 }
 
 static bool is_last_pipeline(struct snd_soc_dapm_widget *w,
-		struct sst_dsp_ctx *ctx)
+		struct device *dev)
 {
 	struct module_config *smodule = w->priv;
 	struct module_config *module = NULL;
 	struct snd_soc_dapm_path *p = NULL;
 
-	dev_dbg(ctx->dev, "%s: widget = %s\n", __func__, w->name);
+	dev_dbg(dev, "%s: widget = %s\n", __func__, w->name);
 
 	if (smodule == NULL)
 		return 0;
@@ -338,7 +330,8 @@ static bool hda_sst_is_pipe_mem_available(struct hda_platform_info *pinfo,
 static bool hda_sst_is_pipe_mcps_available(struct hda_platform_info *pinfo,
 	struct sst_dsp_ctx *ctx, struct module_config *mconfig)
 {
-	dev_dbg(ctx->dev, "%s: module_id = %d instance=%d\n", __func__, mconfig->id.module_id, mconfig->id.instance_id);
+	dev_dbg(ctx->dev, "%s: module_id = %d instance=%d\n", __func__,
+			mconfig->id.module_id, mconfig->id.instance_id);
 	pinfo->resource.mcps += mconfig->mcps;
 
 	if (pinfo->resource.mcps > pinfo->resource.max_mcps) {
@@ -351,8 +344,7 @@ static bool hda_sst_is_pipe_mcps_available(struct hda_platform_info *pinfo,
 }
 
 static int hda_sst_dapm_pre_pmu_event(struct snd_soc_dapm_widget *w,
-	int w_type, struct sst_dsp_ctx *ctx,
-	struct hda_platform_info *pinfo)
+	int w_type, struct sst_dsp_ctx *ctx, struct hda_platform_info *pinfo)
 {
 	int ret = 0;
 	struct module_config *mconfig = w->priv;
@@ -403,8 +395,7 @@ static int hda_sst_dapm_pre_pmu_event(struct snd_soc_dapm_widget *w,
 }
 
 static int hda_sst_dapm_post_pmu_event(struct snd_soc_dapm_widget *w,
-	int w_type, struct sst_dsp_ctx *ctx,
-	struct hda_platform_info *pinfo)
+	int w_type, struct sst_dsp_ctx *ctx, struct hda_platform_info *pinfo)
 {
 	struct module_config *mconfig = w->priv;
 	struct sst_pipeline *ppl, *__ppl;
@@ -449,8 +440,7 @@ static int hda_sst_dapm_post_pmu_event(struct snd_soc_dapm_widget *w,
 }
 
 static int hda_sst_dapm_pre_pmd_event(struct snd_soc_dapm_widget *w,
-	int w_type, struct sst_dsp_ctx *ctx,
-	struct hda_platform_info *pinfo)
+	int w_type, struct sst_dsp_ctx *ctx, struct hda_platform_info *pinfo)
 {
 	struct module_config *mconfig = w->priv;
 	int ret = 0;
@@ -471,8 +461,7 @@ static int hda_sst_dapm_pre_pmd_event(struct snd_soc_dapm_widget *w,
 }
 
 static int hda_sst_dapm_post_pmd_event(struct snd_soc_dapm_widget *w,
-	int w_type, struct sst_dsp_ctx *ctx,
-	struct hda_platform_info *pinfo)
+	int w_type, struct sst_dsp_ctx *ctx, struct hda_platform_info *pinfo)
 {
 	struct module_config *mconfig = w->priv;
 	int ret = 0;
@@ -499,13 +488,14 @@ static int hda_sst_dapm_post_pmd_event(struct snd_soc_dapm_widget *w,
 static int hda_sst_event_handler(struct snd_soc_dapm_widget *w,
 				int event, int w_type)
 {
-	struct azx *chip  = snd_soc_platform_get_drvdata(w->platform);
+	struct snd_soc_dapm_context *dapm = w->dapm;
+	struct azx *chip  = dev_get_drvdata(dapm->dev);
 	struct snd_soc_azx *schip =
 			container_of(chip, struct snd_soc_azx, hda_azx);
 	struct hda_platform_info *pinfo = schip->pinfo;
 	struct sst_dsp_ctx *ctx = schip->dsp;
 
-	dev_dbg(ctx->dev, "%s: widget = %s\n", __func__, w->name);
+	dev_dbg(dapm->dev, "%s: widget = %s\n", __func__, w->name);
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
@@ -528,14 +518,18 @@ static int hda_sst_event_handler(struct snd_soc_dapm_widget *w,
 static int hda_sst_vmixer_event(struct snd_soc_dapm_widget *w,
 		struct snd_kcontrol *k, int event)
 {
-	dev_dbg(w->platform->dev, "%s: widget = %s\n", __func__, w->name);
+	struct snd_soc_dapm_context *dapm = w->dapm;
+
+	dev_dbg(dapm->dev, "%s: widget = %s\n", __func__, w->name);
 	return hda_sst_event_handler(w, event, HDA_SST_WIDGET_VMIXER);
 }
 
 static int hda_sst_mixer_event(struct snd_soc_dapm_widget *w,
 			struct snd_kcontrol *k, int event)
 {
-	dev_dbg(w->platform->dev, "%s: widget = %s\n", __func__, w->name);
+	struct snd_soc_dapm_context *dapm = w->dapm;
+
+	dev_dbg(dapm->dev, "%s: widget = %s\n", __func__, w->name);
 
 	return hda_sst_event_handler(w, event, HDA_SST_WIDGET_MIXER);
 }
@@ -543,7 +537,9 @@ static int hda_sst_mixer_event(struct snd_soc_dapm_widget *w,
 static int hda_sst_mux_event(struct snd_soc_dapm_widget *w,
 			struct snd_kcontrol *k, int event)
 {
-	dev_dbg(w->platform->dev, "%s: widget = %s\n", __func__, w->name);
+	struct snd_soc_dapm_context *dapm = w->dapm;
+
+	dev_dbg(dapm->dev, "%s: widget = %s\n", __func__, w->name);
 
 	return hda_sst_event_handler(w, event, HDA_SST_WIDGET_MUX);
 }
@@ -552,7 +548,9 @@ static int hda_sst_pga_event(struct snd_soc_dapm_widget *w,
 				struct snd_kcontrol *k, int event)
 
 {
-	dev_dbg(w->platform->dev, "%s: widget = %s\n", __func__, w->name);
+	struct snd_soc_dapm_context *dapm = w->dapm;
+
+	dev_dbg(dapm->dev, "%s: widget = %s\n", __func__, w->name);
 	return hda_sst_event_handler(w, event, HDA_SST_WIDGET_PGA);
 }
 
@@ -568,23 +566,23 @@ const struct snd_soc_fw_widget_events hda_sst_widget_ops[] = {
 	{HDA_SST_SET_PGA, hda_sst_pga_event},
 };
 
-static int hda_sst_copy_algo_control(struct snd_soc_platform *platform,
+static int hda_sst_copy_algo_control(struct device *dev,
 		struct soc_bytes_ext *be, struct snd_soc_fw_bytes_ext *mbe)
 {
 	struct hda_sst_algo_data *ac;
 	struct hda_dfw_algo_data *fw_ac = (struct hda_dfw_algo_data *)mbe->pvt_data;
-	ac = devm_kzalloc(platform->dev, sizeof(*ac), GFP_KERNEL);
+	ac = devm_kzalloc(dev, sizeof(*ac), GFP_KERNEL);
 	if (!ac) {
-		pr_err("kzalloc failed\n");
+		dev_err(dev, "kzalloc failed\n");
 		return -ENOMEM;
 	}
 
 	/* Fill private data */
 	ac->max = fw_ac->max;
 	if (fw_ac->params) {
-		ac->params = (char *) devm_kzalloc(platform->dev, fw_ac->max, GFP_KERNEL);
+		ac->params = (char *) devm_kzalloc(dev, fw_ac->max, GFP_KERNEL);
 		if (ac->params == NULL) {
-			pr_err("kzalloc failed\n");
+			dev_err(dev, "kzalloc failed\n");
 			return -ENOMEM;
 		} else {
 			memcpy(ac->params, fw_ac->params, fw_ac->max);
@@ -595,13 +593,12 @@ static int hda_sst_copy_algo_control(struct snd_soc_platform *platform,
 	return 0;
 }
 
-int hda_sst_fw_kcontrol_find_io(struct snd_soc_platform *platform,
+int hda_sst_fw_kcontrol_find_io(struct device *dev,
 		u32 io_type, const struct snd_soc_fw_kcontrol_ops *ops,
 		int num_ops, unsigned long sm, unsigned long mc)
 {
 	int i;
 
-	pr_info("number of ops = %d %x io_type\n", num_ops, io_type);
 	for (i = 0; i < num_ops; i++) {
 		if ((SOC_CONTROL_GET_ID_PUT(ops[i].id) ==
 			SOC_CONTROL_GET_ID_PUT(io_type) && ops[i].put)
@@ -609,7 +606,7 @@ int hda_sst_fw_kcontrol_find_io(struct snd_soc_platform *platform,
 			SOC_CONTROL_GET_ID_GET(io_type) && ops[i].get)) {
 			switch (SOC_CONTROL_GET_ID_PUT(ops[i].id)) {
 			case SOC_CONTROL_TYPE_HDA_SST_ALGO_PARAMS:
-				hda_sst_copy_algo_control(platform, (struct soc_bytes_ext *)sm,
+				hda_sst_copy_algo_control(dev, (struct soc_bytes_ext *)sm,
 						(struct snd_soc_fw_bytes_ext *)mc);
 				break;
 			default:
@@ -672,7 +669,7 @@ static int hda_sst_widget_load(struct snd_soc_platform *platform,
 	if (!fw_w->pvt_data_len)
 		goto bind_event;
 
-	mconfig = devm_kzalloc(platform->dev, sizeof(*mconfig), GFP_KERNEL);
+	mconfig = devm_kzalloc(chip->dev, sizeof(*mconfig), GFP_KERNEL);
 
 	if (!mconfig)
 		return -ENOMEM;
@@ -719,11 +716,11 @@ static int hda_sst_widget_load(struct snd_soc_platform *platform,
 	if (mconfig->formats_config.caps_size == 0)
 		goto bind_event;
 
-	mconfig->formats_config.caps = (u32 *)devm_kzalloc(platform->dev,
+	mconfig->formats_config.caps = (u32 *)devm_kzalloc(chip->dev,
 				mconfig->formats_config.caps_size, GFP_KERNEL);
 
 	if (mconfig->formats_config.caps == NULL) {
-		dev_err(platform->dev, "kzalloc failed\n");
+		dev_err(chip->dev, "kzalloc failed\n");
 		return -ENOMEM;
 	} else
 		memcpy(mconfig->formats_config.caps, dfw_config->caps.caps,
@@ -735,7 +732,7 @@ bind_event:
 	ret = snd_soc_fw_widget_bind_event(fw_w->event_type, w,
 			hda_sst_widget_ops, ARRAY_SIZE(hda_sst_widget_ops));
 	if (ret) {
-		dev_err(platform->dev, "%s: No matching event handlers found for %d\n",
+		dev_err(chip->dev, "%s: No matching event handlers found for %d\n",
 					__func__, fw_w->event_type);
 		return -EINVAL;
 	}
@@ -746,7 +743,7 @@ bind_event:
 static int hda_sst_pvt_load(struct snd_soc_platform *platform,
 		u32 io_type, unsigned long sm, unsigned long mc)
 {
-	return hda_sst_fw_kcontrol_find_io(platform, io_type,
+	return hda_sst_fw_kcontrol_find_io(platform->dev, io_type,
 			control_ops, ARRAY_SIZE(control_ops), sm, mc);
 }
 
@@ -876,10 +873,9 @@ void hda_sst_set_copier_hw_params(struct snd_soc_dai *dai,
 void hda_sst_set_copier_dma_id(struct snd_soc_dai *dai, int dma_id, int stream,
 		bool is_fe)
 {
-	struct snd_soc_platform *platform = dai->platform;
 	struct module_config *mconfig = NULL;
 
-	dev_dbg(platform->dev,
+	dev_dbg(dai->dev,
 		 "%s: enter, dai-name=%s dir=%d\n", __func__,
 		dai->name, stream);
 	mconfig = hda_sst_get_module(dai, stream, is_fe, "cpr");
@@ -967,15 +963,14 @@ void hda_sst_set_be_dmic_config(struct snd_soc_dai *dai,
 int hda_sst_set_fe_pipeline_state(struct snd_soc_dai *dai, bool start,
 		 int stream)
 {
-	struct snd_soc_platform *platform = dai->platform;
-	struct azx *chip = snd_soc_platform_get_drvdata(platform);
+	struct azx *chip = dev_get_drvdata(dai->dev);
 	struct snd_soc_azx *schip =
 			container_of(chip, struct snd_soc_azx, hda_azx);
 	struct sst_dsp_ctx *ctx = schip->dsp;
 	struct module_config *mconfig = NULL;
 	int ret = 0;
 
-	dev_dbg(ctx->dev, "%s: enter, dai-name=%s dir=%d\n", __func__,
+	dev_dbg(dai->dev, "%s: enter, dai-name=%s dir=%d\n", __func__,
 		 dai->name, stream);
 	mconfig = hda_sst_get_module(dai, stream, true, "cpr");
 	if (mconfig != NULL) {
@@ -995,18 +990,18 @@ static struct snd_soc_fw_platform_ops soc_fw_ops = {
 	.io_ops_count = ARRAY_SIZE(control_ops),
 };
 
-int hda_sst_dsp_control_init(struct snd_soc_platform *platform)
+int hda_sst_dsp_control_init(struct snd_soc_platform *platform,
+		 struct azx *chip)
 {
 	int ret = 0;
 	const struct firmware *fw;
-	struct azx *chip = snd_soc_platform_get_drvdata(platform);
 	struct snd_soc_azx *schip =
 		container_of(chip, struct snd_soc_azx, hda_azx);
 	struct hda_platform_info *pinfo = schip->pinfo;
 
 	dev_dbg(chip->dev, "In%s\n", __func__);
 
-	pinfo->widget = devm_kzalloc(platform->dev,
+	pinfo->widget = devm_kzalloc(chip->dev,
 				   HDA_SST_NUM_WIDGETS * sizeof(*pinfo->widget),
 				   GFP_KERNEL);
 	if (!pinfo->widget) {
@@ -1014,18 +1009,18 @@ int hda_sst_dsp_control_init(struct snd_soc_platform *platform)
 		return -ENOMEM;
 	}
 
-	dev_dbg(platform->dev, "In%s req firmware topology bin\n",  __func__);
-	ret = request_firmware(&fw, "dfw_sst.bin", platform->dev);
+	dev_dbg(chip->dev, "In%s req firmware topology bin\n",  __func__);
+	ret = request_firmware(&fw, "dfw_sst.bin", chip->dev);
 	if (fw == NULL) {
 		dev_err(chip->dev, "config firmware request failed with %d\n", ret);
 		return ret;
 	}
 
-	dev_dbg(platform->dev, "In%s soc fw load_platform\n", __func__);
+	dev_dbg(chip->dev, "In%s soc fw load_platform\n", __func__);
 	/* Index is for each config load */
 	ret = snd_soc_fw_load_platform(platform, &soc_fw_ops, fw, 0);
 	if (ret < 0) {
-		dev_err(platform->dev, "Control load failed%d\n", ret);
+		dev_err(chip->dev, "Control load failed%d\n", ret);
 		return -EINVAL;
 	}
 	return ret;
