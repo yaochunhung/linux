@@ -270,9 +270,6 @@ static int morg_florida_set_bias_level(struct snd_soc_card *card,
 	struct snd_soc_dai *florida_dai = morg_florida_get_codec_dai(card, "florida-aif1");
 	struct snd_soc_codec *florida_codec = morg_florida_get_codec(card);
 	int ret = 0;
-	unsigned int fmt;
-	int slot_width;
-
 
 	if (!florida_dai)
 		return -ENODEV;
@@ -281,38 +278,9 @@ static int morg_florida_set_bias_level(struct snd_soc_card *card,
 		return 0;
 
 	if (level == SND_SOC_BIAS_PREPARE) {
-		if (card->dapm.bias_level == SND_SOC_BIAS_STANDBY) {
-			switch (bt_debug) {
-			case 0:
-				slot_width = 24;
-				break;
-			case 1:
-			case 2:
-				slot_width = 16;
-				break;
-			default:
-				slot_width = 24;
-			}
-			pr_info("Slot width for codec = %d\n", slot_width);
-			ret = snd_soc_dai_set_tdm_slot(florida_dai, 0, 0, 4, slot_width);
-			if (ret < 0) {
-				pr_err("can't set codec pcm format %d\n", ret);
-				return ret;
-			}
-
-			/* bit clock inverse not required */
-			fmt =   SND_SOC_DAIFMT_DSP_A | SND_SOC_DAIFMT_NB_NF
-				| SND_SOC_DAIFMT_CBS_CFS;
-			ret = snd_soc_dai_set_fmt(florida_dai, fmt);
-			if (ret < 0) {
-				pr_err("can't set codec DAI configuration %d\n", ret);
-				return ret;
-			}
-
+		if (card->dapm.bias_level == SND_SOC_BIAS_STANDBY)
 			ret = morg_florida_set_clk_fmt(florida_codec);
-		}
 	}
-
 	pr_debug("%s card(%s)->bias_level %u\n", __func__, card->name,
 			card->dapm.bias_level);
 	return ret;
