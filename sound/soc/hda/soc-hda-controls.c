@@ -454,7 +454,7 @@ static int hda_sst_dapm_post_pmu_event(struct snd_soc_dapm_widget *w,
 
 	if (w_type == HDA_SST_WIDGET_VMIXER ||
 		w_type == HDA_SST_WIDGET_MIXER) {
-		if (mconfig->conn_type != CONN_TYPE_FE) {
+		if (mconfig->pipe->conn_type != CONN_TYPE_FE) {
 			/*if module is not a FE then add to ppl_start list,
 			 *to send the run pipe when be is reached */
 			ppl = kzalloc(sizeof(*ppl), GFP_KERNEL);
@@ -492,7 +492,7 @@ static int hda_sst_dapm_pre_pmd_event(struct snd_soc_dapm_widget *w,
 	dev_dbg(ctx->dev, "****%s: widget = %s\n", __func__, w->name);
 
 	if (w_type == HDA_SST_WIDGET_PGA) {
-		if (mconfig->conn_type != CONN_TYPE_FE) {
+		if (mconfig->pipe->conn_type != CONN_TYPE_FE) {
 			ret = hda_sst_stop_pipe(ctx, mconfig->pipe);
 			if (ret < 0)
 				return ret;
