@@ -576,6 +576,44 @@ static int morg_florida_codec_fixup(struct snd_soc_pcm_runtime *rtd,
 	return 0;
 }
 
+static int mrgfld_codec_loop_fixup(struct snd_soc_dai_link *dai_link, struct snd_soc_dai *dai)
+{
+	int ret;
+	unsigned int fmt;
+	int slot_width;
+	struct snd_soc_card *card = dai->card;
+	struct snd_soc_dai *florida_dai = morg_florida_get_codec_dai(card, "florida-aif1");
+
+	switch (bt_debug) {
+	case 0:
+		slot_width = 24;
+		break;
+	case 1:
+	case 2:
+		slot_width = 16;
+		break;
+	default:
+		slot_width = 24;
+	}
+	pr_info("Slot width for codec = %d\n", slot_width);
+	ret = snd_soc_dai_set_tdm_slot(florida_dai, 0, 0, 4, slot_width);
+	if (ret < 0) {
+		pr_err("can't set codec pcm format %d\n", ret);
+		return ret;
+	}
+
+	/* bit clock inverse not required */
+	fmt =   SND_SOC_DAIFMT_DSP_A | SND_SOC_DAIFMT_NB_NF
+		| SND_SOC_DAIFMT_CBS_CFS;
+	ret = snd_soc_dai_set_fmt(florida_dai, fmt);
+	if (ret < 0) {
+		pr_err("can't set codec DAI configuration %d\n", ret);
+		return ret;
+	}
+	return ret;
+}
+
+
 static const struct snd_soc_pcm_stream morg_florida_dai_params = {
 	.formats = SNDRV_PCM_FMTBIT_S24_LE,
 	.rate_min = 48000,
@@ -670,8 +708,10 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 		.cpu_dai_name = "SSP0 Pin",
 		.platform_name = "0000:02:18.0",
 		.codec_name = "florida-codec",
+		/* .params is set when card gets register, based on module param */
 		.codec_dai_name = "florida-aif1",
 		.dsp_loopback = true,
+		.be_fixup = mrgfld_codec_loop_fixup,
 	},
 	{
 		.name = "Bxtn Modem-Loop Port",
