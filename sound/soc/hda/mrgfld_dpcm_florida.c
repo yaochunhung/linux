@@ -853,10 +853,10 @@ static struct snd_soc_card snd_soc_card_morg = {
 	.name = "florida-audio",
 	.dai_link = morg_florida_msic_dailink,
 	.num_links = ARRAY_SIZE(morg_florida_msic_dailink),
-	.set_bias_level = morg_florida_set_bias_level,
-	.set_bias_level_post = morg_florida_set_bias_level_post,
 #ifdef OSC_PMIC
 	.late_probe = morg_florida_mc_late_probe,
+	.set_bias_level = morg_florida_set_bias_level,
+	.set_bias_level_post = morg_florida_set_bias_level_post,
 #endif
 	.dapm_widgets = morg_widgets,
 	.num_dapm_widgets = ARRAY_SIZE(morg_widgets),
