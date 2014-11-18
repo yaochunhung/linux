@@ -254,75 +254,8 @@ static int morg_florida_hw_params(struct snd_pcm_substream *substream,
 			   struct snd_pcm_hw_params *params)
 {
 
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *codec_dai = rtd->codec_dai;
-
-	if (!strcmp(codec_dai->name, "florida-aif1"))
-		return morg_florida_set_clk_fmt(rtd->codec);
-
 	return 0;
 }
-
-static int morg_florida_set_bias_level(struct snd_soc_card *card,
-		struct snd_soc_dapm_context *dapm,
-		enum snd_soc_bias_level level)
-{
-	struct snd_soc_dai *florida_dai = morg_florida_get_codec_dai(card, "florida-aif1");
-	struct snd_soc_codec *florida_codec = morg_florida_get_codec(card);
-	int ret = 0;
-
-	if (!florida_dai)
-		return -ENODEV;
-
-	if (dapm->dev != florida_dai->dev)
-		return 0;
-
-	if (level == SND_SOC_BIAS_PREPARE) {
-		if (card->dapm.bias_level == SND_SOC_BIAS_STANDBY)
-			ret = morg_florida_set_clk_fmt(florida_codec);
-	}
-	pr_debug("%s card(%s)->bias_level %u\n", __func__, card->name,
-			card->dapm.bias_level);
-	return ret;
-}
-
-static int morg_florida_set_bias_level_post(struct snd_soc_card *card,
-		 struct snd_soc_dapm_context *dapm,
-		 enum snd_soc_bias_level level)
-{
-	struct snd_soc_dai *florida_dai = morg_florida_get_codec_dai(card, "florida-aif1");
-	struct snd_soc_codec *florida_codec = morg_florida_get_codec(card);
-#ifdef OSC_PMIC
-	struct morg_8281_mc_private *ctx = snd_soc_card_get_drvdata(card);
-#endif
-	int ret = 0;
-
-	if (!florida_dai)
-		return -ENODEV;
-
-	if (dapm->dev != florida_dai->dev)
-		return 0;
-
-	if (level == SND_SOC_BIAS_STANDBY) {
-		/* Turn off PLL for MCLK1 */
-		ret = snd_soc_codec_set_pll(florida_codec, FLORIDA_FLL1, 0, 0, 0);
-		if (ret != 0) {
-			dev_err(florida_codec->dev, "Failed to diasble FLL1 %d\n", ret);
-			return ret;
-		}
-
-#ifdef OSC_PMIC
-		/* We are in stabdby so turn off 19.2MHz soc osc clock*/
-		/*The 32K Clk of codec is sourced from MCLK2 connected to onboard OSC*/
-		set_soc_osc_clk0(ctx->osc_clk0_reg, false);
-#endif
-	}
-	card->dapm.bias_level = level;
-	pr_debug("%s card(%s)->bias_level %u\n", __func__, card->name,
-			card->dapm.bias_level);
-	return ret;
-}
-
 #define PMIC_ID_ADDR		0x00
 #define PMIC_CHIP_ID_A0_VAL	0xC0
 
@@ -364,12 +297,43 @@ static int morg_florida_set_vflex_vsel(struct snd_soc_dapm_widget *w,
 	return retval;
 }
 #endif
+
+static int mrgfld_clock_control(struct snd_soc_dapm_widget *w,
+		struct snd_kcontrol *k, int  event)
+{
+
+	struct snd_soc_dapm_context *dapm = w->dapm;
+	struct snd_soc_card *card = dapm->card;
+	struct snd_soc_codec *florida_codec = morg_florida_get_codec(card);
+	int ret = 0;
+
+	if (!florida_codec) {
+		pr_err("%s: florida codec not found\n", __func__);
+		return -EINVAL;
+	}
+	if (SND_SOC_DAPM_EVENT_ON(event)) {
+		pr_info("%s %d Event On\n", __func__, __LINE__);
+		/* TODO: Ideally MCLK should be used to drive codec PLL
+		 * currently we are using BCLK
+		 */
+		ret = morg_florida_set_codec_clk(florida_codec, CODEC_IN_BCLK);
+	} else {
+		pr_info("%s %d Event Off\n", __func__, __LINE__);
+		/* TODO: Switch to 32K clock for saving power. */
+		pr_info("Currently we are not switching to 32K PMIC clock\n");
+	}
+	return ret;
+
+}
 static const struct snd_soc_dapm_widget morg_widgets[] = {
 	SND_SOC_DAPM_HP("Headphones", NULL),
 	SND_SOC_DAPM_SPK("Ext Spk", NULL),
 	SND_SOC_DAPM_SPK("EP", NULL),
 	SND_SOC_DAPM_MIC("AMIC", NULL),
 	SND_SOC_DAPM_MIC("DMIC", NULL),
+	SND_SOC_DAPM_SUPPLY("Platform Clock", SND_SOC_NOPM, 0, 0,
+			mrgfld_clock_control, SND_SOC_DAPM_PRE_PMU|
+			SND_SOC_DAPM_POST_PMD),
 
 #ifdef OSC_PMIC
 	SND_SOC_DAPM_SUPPLY("VFLEXCNT", SND_SOC_NOPM, 0, 0,
@@ -439,6 +403,12 @@ static const struct snd_soc_dapm_route morg_map[] = {
 	{ "Dummy Playback", NULL, "VFLEXCNT"},
 	{ "Dummy Capture", NULL, "VFLEXCNT"},
 #endif
+
+	{"Headphones", NULL, "Platform Clock"},
+	{"AMIC", NULL, "Platform Clock"},
+	{"DMIC", NULL, "Platform Clock"},
+	{"Ext Spk", NULL, "Platform Clock"},
+	{"EP", NULL, "Platform Clock"},
 };
 
 static const struct snd_kcontrol_new morg_controls[] = {
@@ -454,9 +424,7 @@ static int morg_florida_init(struct snd_soc_pcm_runtime *runtime)
 	int ret;
 	unsigned int fmt;
 	struct snd_soc_card *card = runtime->card;
-	struct snd_soc_codec *florida_codec = morg_florida_get_codec(card);
 	struct snd_soc_dai *florida_dai = morg_florida_get_codec_dai(card, "florida-aif1");
-	struct snd_soc_dapm_context *dapm =  &(florida_codec->dapm);
 	int slot_width;
 
 
@@ -490,7 +458,6 @@ static int morg_florida_init(struct snd_soc_pcm_runtime *runtime)
 		return ret;
 	}
 
-	morg_florida_set_bias_level(card, dapm, SND_SOC_BIAS_OFF);
 	card->dapm.idle_bias_off = true;
 
 	ret = snd_soc_add_card_controls(card, morg_controls,
@@ -539,10 +506,6 @@ static int morg_florida_8k_16k_startup(struct snd_pcm_substream *substream)
 
 static struct snd_soc_ops morg_florida_ops = {
 	.startup = morg_florida_startup,
-};
-
-static struct snd_soc_ops morg_florida_be_ssp2_ops = {
-	.hw_params = morg_florida_hw_params,
 };
 
 static struct snd_soc_ops morg_florida_8k_16k_ops = {
@@ -745,7 +708,6 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 		.be_hw_params_fixup = morg_florida_codec_fixup,
 		.ignore_suspend = 1,
 		.no_pcm = 1,
-		.ops = &morg_florida_be_ssp2_ops,
 	},
 	{
 		.name = "SSP1-BTFM",
@@ -855,8 +817,6 @@ static struct snd_soc_card snd_soc_card_morg = {
 	.num_links = ARRAY_SIZE(morg_florida_msic_dailink),
 #ifdef OSC_PMIC
 	.late_probe = morg_florida_mc_late_probe,
-	.set_bias_level = morg_florida_set_bias_level,
-	.set_bias_level_post = morg_florida_set_bias_level_post,
 #endif
 	.dapm_widgets = morg_widgets,
 	.num_dapm_widgets = ARRAY_SIZE(morg_widgets),
