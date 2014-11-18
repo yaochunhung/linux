@@ -231,31 +231,6 @@ static int morg_florida_set_codec_clk(struct snd_soc_codec *florida_codec, int s
 	return 0;
 }
 
-static int morg_florida_set_clk_fmt(struct snd_soc_codec *codec)
-{
-	int ret = 0;
-	struct snd_soc_card *card = codec->card;
-#ifdef OSC_PMIC
-	struct morg_8281_mc_private *ctx = snd_soc_card_get_drvdata(card);
-
-	/* Enable the osc clock at start so that it gets settling time */
-	set_soc_osc_clk0(ctx->osc_clk0_reg, true);
-#endif
-	/* FIXME: move this to SYS_CLOCK event handler when codec driver
-	 * dependency is clean.
-	 */
-	/* Switch to 19.2MHz MCLK1 input clock for codec */
-	ret = morg_florida_set_codec_clk(codec, CODEC_IN_BCLK);
-
-	return ret;
-}
-
-static int morg_florida_hw_params(struct snd_pcm_substream *substream,
-			   struct snd_pcm_hw_params *params)
-{
-
-	return 0;
-}
 #define PMIC_ID_ADDR		0x00
 #define PMIC_CHIP_ID_A0_VAL	0xC0
 
@@ -469,16 +444,16 @@ static int morg_florida_init(struct snd_soc_pcm_runtime *runtime)
 	return 0;
 }
 
+#if 0
 static unsigned int rates_8000_16000[] = {
 	8000,
 	16000,
 };
-
 static struct snd_pcm_hw_constraint_list constraints_8000_16000 = {
 	.count = ARRAY_SIZE(rates_8000_16000),
 	.list  = rates_8000_16000,
 };
-
+#endif
 static unsigned int rates_48000[] = {
 	48000,
 	16000,
@@ -497,22 +472,23 @@ static int morg_florida_startup(struct snd_pcm_substream *substream)
 			&constraints_48000);
 }
 
+#if 0
 static int morg_florida_8k_16k_startup(struct snd_pcm_substream *substream)
 {
 	return snd_pcm_hw_constraint_list(substream->runtime, 0,
 			SNDRV_PCM_HW_PARAM_RATE,
 			&constraints_8000_16000);
 }
-
+#endif
 static struct snd_soc_ops morg_florida_ops = {
 	.startup = morg_florida_startup,
 };
-
+#if 0
 static struct snd_soc_ops morg_florida_8k_16k_ops = {
 	.startup = morg_florida_8k_16k_startup,
 	.hw_params = morg_florida_hw_params,
 };
-
+#endif
 static struct snd_soc_compr_ops morg_compr_ops = {
 	.set_params = NULL,
 };
@@ -787,6 +763,7 @@ static int snd_morg_florida_poweroff(struct device *dev)
 #define snd_morg_florida_poweroff NULL
 #endif
 
+#ifdef OSC_PMIC
 static int morg_florida_mc_late_probe(struct snd_soc_card *card)
 {
 	int ret;
@@ -809,7 +786,7 @@ static int morg_florida_mc_late_probe(struct snd_soc_card *card)
 
 	return 0;
 }
-
+#endif
 /* SoC card */
 static struct snd_soc_card snd_soc_card_morg = {
 	.name = "florida-audio",
