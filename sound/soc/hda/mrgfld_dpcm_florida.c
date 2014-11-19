@@ -370,8 +370,9 @@ static const struct snd_soc_dapm_route morg_map[] = {
 	/* Bt Path */
 	{ "Dummy Playback", NULL, "ssp1 Tx"},
 	{ "ssp1 Tx", NULL, "bt_out"},
-	{ "ssp1 Rx", NULL, "Dummy Capture" },
+
 	{ "bt_in", NULL, "ssp1 Rx" },
+	{ "ssp1 Rx", NULL, "Dummy Capture" },
 
 
 #ifdef OSC_PMIC
