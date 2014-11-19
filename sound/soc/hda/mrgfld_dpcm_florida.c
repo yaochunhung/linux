@@ -365,8 +365,12 @@ static const struct snd_soc_dapm_route morg_map[] = {
 	{ "iDisp Tx", NULL, "iDisp_out"},
 
 	/* Modem Path */
+	{ "Dummy Playback", NULL, "ssp2 Tx"},
 	{ "ssp2 Tx", NULL, "modem0_out"},
+
 	{ "modem0_in", NULL, "ssp2 Rx" },
+	{ "ssp2 Rx", NULL, "Dummy Capture" },
+
 	/* Bt Path */
 	{ "Dummy Playback", NULL, "ssp1 Tx"},
 	{ "ssp1 Tx", NULL, "bt_out"},
