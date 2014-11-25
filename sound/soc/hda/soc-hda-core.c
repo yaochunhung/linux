@@ -1130,7 +1130,7 @@ static int azx_create(struct pci_dev *pci,
 		switch (chip->driver_type) {
 		case AZX_DRIVER_ICH:
 		case AZX_DRIVER_PCH:
-			bdl_pos_adj = 1;
+			bdl_pos_adj = 0;
 			break;
 		default:
 			bdl_pos_adj = 32;
