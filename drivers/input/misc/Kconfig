@@ -414,6 +414,11 @@ config INPUT_TWL4030_VIBRA
 	  To compile this driver as a module, choose M here. The module will
 	  be called twl4030_vibra.
 
+config INPUT_INTEL_VIBRA
+	tristate "Support for Intel Vibrator"
+	help
+	  This option enables support for Intel Mid Vibrator Driver.
+
 config INPUT_TWL6040_VIBRA
 	tristate "Support for TWL6040 Vibrator"
 	depends on TWL6040_CORE
