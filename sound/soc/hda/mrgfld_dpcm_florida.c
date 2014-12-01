@@ -403,6 +403,8 @@ static const struct snd_soc_dapm_route morg_map[] = {
 	{"DMIC", NULL, "Platform Clock"},
 	{"Ext Spk", NULL, "Platform Clock"},
 	{"EP", NULL, "Platform Clock"},
+	{"Tone Generator 1", NULL, "Platform Clock" },
+	{"Tone Generator 2", NULL, "Platform Clock" },
 };
 
 static const struct snd_kcontrol_new morg_controls[] = {
