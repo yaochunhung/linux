@@ -694,7 +694,8 @@ struct snd_soc_dai_link {
 
 	/* BE fixup method for CODEC<->CODEC dailink */
 	int (*be_fixup)(struct snd_soc_dai_link *dai_link,
-			struct snd_soc_dai *dai);
+			struct snd_soc_dai *dai,
+			struct snd_pcm_hw_params *params);
 	/* machine stream operations */
 	const struct snd_soc_ops *ops;
 	const struct snd_soc_compr_ops *compr_ops;

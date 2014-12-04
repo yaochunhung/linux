@@ -3665,15 +3665,14 @@ static int snd_soc_dai_link_event(struct snd_soc_dapm_widget *w,
 			is_codec_dai = strncmp(source->name, w->dai_link->cpu_dai_name,
 							strlen(w->dai_link->cpu_dai_name));
 			if (w->dai_link->be_fixup && !is_codec_dai) {
-				ret =  w->dai_link->be_fixup(w->dai_link, source);
+				/* TODO: Actually this should be be_hw_params_fixup
+				 * ASoC framework fix required
+				 */
+				ret =  w->dai_link->be_fixup(w->dai_link, source, params);
 
 				if (ret != 0) {
 					dev_err(source->dev, "ASoC: fix_up_be()	failed: %d\n", ret);
 					goto out;
-				}
-				if (w->dai_link->params) {
-					config = w->dai_link->params;
-					snd_soc_get_hw_params(params, config);
 				}
 			}
 			ret = source->driver->ops->hw_params(&substream,
@@ -3690,16 +3689,14 @@ static int snd_soc_dai_link_event(struct snd_soc_dapm_widget *w,
 			is_codec_dai = strncmp(sink->name, w->dai_link->cpu_dai_name,
 							strlen(w->dai_link->cpu_dai_name));
 			if (w->dai_link->be_fixup && !is_codec_dai) {
-				ret =  w->dai_link->be_fixup(w->dai_link, sink);
+				/* TODO: Actually this should be be_hw_params_fixup
+				 * ASoC framework fix required
+				 */
+				ret =  w->dai_link->be_fixup(w->dai_link, sink, params);
 
 				if (ret != 0) {
 					dev_err(source->dev, "ASoC: fix_up_be() failed: %d\n", ret);
 					goto out;
-				}
-
-				if (w->dai_link->params) {
-					config = w->dai_link->params;
-					snd_soc_get_hw_params(params, config);
 				}
 			}
 			ret = sink->driver->ops->hw_params(&substream, params,
