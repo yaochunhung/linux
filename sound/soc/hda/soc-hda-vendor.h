@@ -240,6 +240,8 @@ struct hda_dfw_module {
 	u8 time_slot;
 	u32 obs;
 	u32 ibs;
+	u32 params_fixup;
+	u32 converter;
 	struct hda_dfw_pipe pipe;
 	struct hda_dfw_module_fmt in_fmt;
 	struct hda_dfw_module_fmt out_fmt;

@@ -222,6 +222,8 @@ struct module_config {
 	u8 dev_type;
 	u8 dma_id;
 	u8 time_slot;
+	u32 params_fixup;
+	u32 converter;
 	enum hw_connection_type hw_conn_type;
 	enum sst_module_state m_state;
 	struct sst_pipe *pipe;

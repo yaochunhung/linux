@@ -34,6 +34,23 @@
 #include "soc-hda-controls.h"
 #include "soc-hda-vendor.h"
 
+#define CH_FIXUP		(1 << 0)
+#define RATE_FIXUP		(1 << 1)
+#define FMT_FIXUP		(1 << 2)
+
+#define CH_FIXUP_MASK		(1 << 0)
+#define RATE_FIXUP_MASK		(1 << 1)
+#define FMT_FIXUP_MASK		(1 << 2)
+
+
+#define CH_CONVERTER		(1 << 0)
+#define RATE_CONVERTER		(1 << 1)
+#define FMT_CONVERTER		(1 << 2)
+
+#define CH_CONVERTER_MASK	(1 << 0)
+#define RATE_CONVERTER_MASK	(1 << 1)
+#define FMT_CONVERTER_MASK	(1 << 2)
+
 
 static int hda_sst_src_bind_unbind_modules(struct snd_soc_dapm_widget *w,
 			struct sst_dsp_ctx *ctx, bool bind, bool is_pipe);
@@ -749,11 +766,15 @@ static int hda_sst_widget_load(struct snd_soc_platform *platform,
 	mconfig->out_fmt.bit_depth = dfw_config->out_fmt.bit_depth;
 	mconfig->out_fmt.valid_bit_depth = dfw_config->out_fmt.valid_bit_depth;
 	mconfig->out_fmt.channel_config = dfw_config->out_fmt.ch_cfg;
-	pipe =  hda_sst_add_pipe(chip->dev, pinfo, &dfw_config->pipe);
+	mconfig->params_fixup = dfw_config->params_fixup;
+	mconfig->converter = dfw_config->converter;
+	pipe =	hda_sst_add_pipe(chip->dev, pinfo, &dfw_config->pipe);
+
+
 	if (pipe)
 		mconfig->pipe = pipe;
 	mconfig->dev_type =  dfw_config->dev_type;
-	mconfig->hw_conn_type =  dfw_config->hw_conn_type;
+	mconfig->hw_conn_type = dfw_config->hw_conn_type;
 	mconfig->time_slot =  dfw_config->time_slot;
 	mconfig->formats_config.caps_size = dfw_config->caps.caps_size;
 
