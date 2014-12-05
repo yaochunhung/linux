@@ -36,6 +36,9 @@
 #define dsp_is_locked(dev)	0
 #endif
 
+
+#define AZX_DAI_TYPE_SSP	1
+
 struct azx_dev {
 	struct snd_dma_buffer bdl; /* BDL buffer */
 	u32 *posbuf;		/* position buffer pointer */
@@ -128,6 +131,65 @@ struct hda_controller_ops {
 	/* Check if current position is acceptable */
 	int (*position_check)(struct azx *chip, struct azx_dev *azx_dev);
 };
+
+/***
+ * struct azx_ssp_dai_config - DAI configuration structure. SSP type of DAI
+ * configuration. Configuration specific to SSP DAIs will go here.
+ *
+ * @slot_width : * Number of slots per frame for tdm/pcm mode,
+ *		for I2S mode this is dont care. Currently slot_width
+ *		supported is same as active bits in slots. All dummy
+ *		bits will be programmed after the last slot in TDM mode
+ * @slots : Number of slots per frame for tdm/pcm mode,
+ *		for I2S mode this is dont care. Currently slot_width
+ *		supported is same as active bits in slots. All dummy
+ *		bits will be programmed after the last slot in TDM mode
+ *
+ * @ssp_mode : SP mode like DSP_A, I2S etc
+ * @bclk_invert : Clock invert,
+ *		clock_invert = 1,  data driven on rising edge of clock,
+ *		sample on falling edge of clock.
+ *		clock_invert =  0, data driver on falling edge of clock,
+ *		sample on rising edge of clock.
+ *
+ * @fs_invert : Invert the frame sync,
+ *		fs_invert = 0, frame sync active low
+ *		fs_invert = 1, frame sync active high
+ *
+ * @fs_slave : Frame sync is slave or master 1 = slave, 0 = master
+ * @bclk_slave : BCLK is master of slave 1 = slave, 0 = master
+ * @i2s_instance: It its SSP dai, hardware I2S instance for this DAI
+ */
+struct azx_ssp_dai_config {
+	u8 slot_width;
+	u8 slots;
+	u8 ssp_mode;
+	bool bclk_invert;
+	bool fs_invert;
+	bool fs_slave;
+	bool bclk_slave;
+	u32 i2s_instance;
+};
+
+/***
+ * struct azx_ssp_dai_config - DAI configuration structure. DSP widgets and
+ * SSP registers will be configured based on this structure. This
+ * structure will be filled in part based on number of call to DAI methods
+ * like hw_params, set_tdm_slot and set_fmt.
+ * @s_fmt: Sampling format likt 24bit per ch, 16 bits per ch
+ * @num_channels :  number of active channels. This must be 2 for I2S mode
+ * @sampling_rate : Sampling frequency in hertz 48000 for 48K sampling freq
+ * @dai_type : if its a SSP Dai, need to configure somethings extra for SSP dai
+ * @ssp_dai_config: Configuration specific to SSP dai
+ */
+struct azx_dai_config {
+	u8 s_fmt;
+	u8 num_channels;
+	u32 sampling_rate;
+	u32 dai_type;
+	struct azx_ssp_dai_config ssp_dai_config;
+};
+
 
 struct azx {
 	struct pci_dev *pci;

@@ -3,7 +3,7 @@ ccflags-y += -DDEBUG
 
 snd-soc-hda-bus-objs := soc-hda-bus.o
 
-snd-soc-hda-intel-objs := soc-hda-core.o soc-hda-pcm.o soc-hda-sst-pipe.o soc-hda-controls.o soc-hda-dsp.o
+snd-soc-hda-intel-objs := intel-ssp-config.o soc-hda-core.o soc-hda-pcm.o soc-hda-sst-pipe.o soc-hda-controls.o soc-hda-dsp.o
 
 snd-mach_hda_generic-objs := mach_hda_generic.o
 

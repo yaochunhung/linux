@@ -27,6 +27,10 @@
 #define HDA_MONO 1
 #define HDA_STEREO 2
 
+#define HDA_SSP_MODE_I2S	0
+#define HDA_SSP_MODE_DSP_A	1
+#define HDA_SSP_MODE_DSP_B	2
+#define HDA_SSP_MAX_SLOTS	8
 struct hda_platform_info;
 
 struct snd_soc_azx {
@@ -90,5 +94,7 @@ int azx_free_dma_buf(struct device *dev,
 
 int azx_load_dsp_init(struct device *dev);
 bool azx_is_dsp_running(struct azx *chip);
+int azx_calculate_ssp_regs(struct sst_dsp_ctx *ctx,
+			struct azx_dai_config *cfg, void *ssp_regs);
 
 #endif /* __SOUND_HDA_CONTROLLER_H */
