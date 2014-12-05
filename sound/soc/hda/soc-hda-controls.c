@@ -51,6 +51,7 @@
 #define RATE_CONVERTER_MASK	(1 << 1)
 #define FMT_CONVERTER_MASK	(1 << 2)
 
+#define REGS_OFFSET_CPR_BLOB	8
 
 static int hda_sst_src_bind_unbind_modules(struct snd_soc_dapm_widget *w,
 			struct sst_dsp_ctx *ctx, bool bind, bool is_pipe);
@@ -359,6 +360,113 @@ static bool hda_sst_is_pipe_mcps_available(struct hda_platform_info *pinfo,
 	}
 	return true;
 }
+static struct snd_soc_dai *hda_find_dai_in(struct list_head *sinks)
+{
+	struct snd_soc_dapm_path *p;
+	struct snd_soc_dai *dai = NULL;
+	list_for_each_entry(p, sinks, list_source) {
+		if (p->connect) {
+			if (p->sink->id == snd_soc_dapm_dai_in ||
+					p->sink->id == snd_soc_dapm_dai_out) {
+				dai = p->sink->priv;
+				return dai;
+			}
+			dai = hda_find_dai_in(&p->sink->sinks);
+			if (dai)
+				return dai;
+		}
+	}
+	return dai;
+}
+
+static struct snd_soc_dai *hda_find_dai_out(struct list_head *sources)
+{
+	struct snd_soc_dapm_path *p;
+	struct snd_soc_dai *dai = NULL;
+	list_for_each_entry(p, sources, list_sink) {
+		if (p->connect) {
+			if (p->source->id == snd_soc_dapm_dai_in ||
+					p->source->id == snd_soc_dapm_dai_out) {
+				dai = p->source->priv;
+				break;
+			}
+			dai = hda_find_dai_out(&p->source->sources);
+			if (dai)
+				return dai;
+		}
+	}
+	return dai;
+}
+
+static struct azx_dai_config *hda_sst_get_dai_config(struct snd_soc_dapm_widget *w,
+		struct module_config *mconfig, struct sst_dsp_ctx *ctx)
+{
+	struct snd_soc_dai *dai = NULL;
+	struct azx *chip = NULL;
+	if (mconfig->hw_conn_type == SOURCE) {
+		if (mconfig->pipe->conn_type == CONN_TYPE_BE)
+			dai = hda_find_dai_in(&w->sinks);
+		else if (mconfig->pipe->conn_type == CONN_TYPE_FE)
+			dai = hda_find_dai_out(&w->sources);
+	} else if (mconfig->hw_conn_type == SINK) {
+		if (mconfig->pipe->conn_type == CONN_TYPE_BE)
+			dai = hda_find_dai_out(&w->sources);
+		else if (mconfig->pipe->conn_type == CONN_TYPE_FE)
+			dai = hda_find_dai_in(&w->sinks);
+	}
+	if (!dai) {
+		dev_dbg(ctx->dev, "Dai not found for widget %s\n", w->name);
+		return NULL;
+	}
+	dev_dbg(ctx->dev, "Dai found %s for widget %s\n",
+			dai->name, w->name);
+	chip = dev_get_drvdata(dai->dev);
+	return &chip->dai_config[dai->id - 1];
+
+}
+
+static void hda_dump_mconfig(struct sst_dsp_ctx *ctx,
+					struct module_config *mcfg)
+{
+	dev_dbg(ctx->dev, "Dumping Mconfig\n");
+	dev_dbg(ctx->dev, "module_id = %d\n", mcfg->id.module_id);
+	dev_dbg(ctx->dev, "instance_id = %d\n", mcfg->id.instance_id);
+	dev_dbg(ctx->dev, "Input Format:\n");
+	dev_dbg(ctx->dev, "channels = %d\n", mcfg->in_fmt.channels);
+	dev_dbg(ctx->dev, "sampling_freq = %d\n", mcfg->in_fmt.sampling_freq);
+	dev_dbg(ctx->dev, "Output Format:\n");
+	dev_dbg(ctx->dev, "channels = %d\n", mcfg->out_fmt.channels);
+	dev_dbg(ctx->dev, "sampling_freq = %d\n", mcfg->out_fmt.sampling_freq);
+}
+static void hda_dump_dai_config(struct sst_dsp_ctx *ctx,
+					struct azx_dai_config *cfg)
+{
+	struct azx_ssp_dai_config *ssp_cfg = &cfg->ssp_dai_config;
+	dev_dbg(ctx->dev, "Dumping SSP config\n");
+	dev_dbg(ctx->dev, "slot_width = %d\n", ssp_cfg->slot_width);
+	dev_dbg(ctx->dev, "Slot = %d\n", ssp_cfg->slots);
+	dev_dbg(ctx->dev, "ssp_mode = %d\n", ssp_cfg->ssp_mode);
+	dev_dbg(ctx->dev, "sampling rate = %d\n", cfg->sampling_rate);
+	dev_dbg(ctx->dev, "s_fmt = %d\n", cfg->s_fmt);
+	dev_dbg(ctx->dev, "bclk_invert = %d\n", ssp_cfg->bclk_invert);
+	dev_dbg(ctx->dev, "fs_invert = %d\n", ssp_cfg->fs_invert);
+	dev_dbg(ctx->dev, "num_channels = %d\n", cfg->num_channels);
+	dev_dbg(ctx->dev, "fs_slave = %d\n", ssp_cfg->fs_slave);
+	dev_dbg(ctx->dev, "bclk_slave = %d\n", ssp_cfg->bclk_slave);
+}
+
+static void hda_update_mconfig(struct module_format *fmt,
+						struct azx_dai_config *ssp_cfg,
+						int params_fixup)
+{
+	if (params_fixup & RATE_FIXUP_MASK)
+		fmt->sampling_freq = ssp_cfg->sampling_rate;
+	if (params_fixup & CH_FIXUP_MASK)
+		fmt->channels = ssp_cfg->num_channels;
+	if (params_fixup & CH_FIXUP_MASK)
+		fmt->channels = ssp_cfg->num_channels;
+
+}
 
 static void hda_sst_update_cpr_ssp_id(struct snd_soc_dapm_widget *w,
 		struct module_config *mconfig, struct sst_dsp_ctx *ctx)
@@ -397,6 +505,75 @@ static void hda_sst_update_cpr_ssp_id(struct snd_soc_dapm_widget *w,
 		dev_dbg(ctx->dev, "Valid SSP id not found for cpr %s\n", w->name);
 
 }
+static void hda_update_buffer_size(struct sst_dsp_ctx *ctx,
+				struct module_config *mcfg)
+{
+
+	mcfg->ibs = (mcfg->in_fmt.sampling_freq / 1000) *
+				(mcfg->in_fmt.channels) *
+				(mcfg->in_fmt.bit_depth >> 3);
+
+	mcfg->obs = (mcfg->out_fmt.sampling_freq / 1000) *
+				(mcfg->out_fmt.channels) *
+				(mcfg->out_fmt.bit_depth >> 3);
+}
+
+static void hda_sst_configure_widget(struct snd_soc_dapm_widget *w,
+	int w_type, struct sst_dsp_ctx *ctx, struct hda_platform_info *pinfo)
+{
+	struct module_config *m_cfg = w->priv;
+	struct azx_dai_config *dai_config;
+	union ssp_dma_node dma_id;
+	unsigned int *regs = NULL;
+
+	dai_config = hda_sst_get_dai_config(w, m_cfg, ctx);
+	if (!dai_config)
+		return;
+
+	if (m_cfg->id.module_id == COPIER_MODULE &&
+		m_cfg->pipe->conn_type == CONN_TYPE_BE &&
+		dai_config->dai_type == AZX_DAI_TYPE_SSP) {
+		dma_id.dma_node.i2s_instance =
+				dai_config->ssp_dai_config.i2s_instance;
+		m_cfg->dma_id = dma_id.val;
+		regs = m_cfg->formats_config.caps;
+	}
+	if (!m_cfg->params_fixup)
+		return;
+
+	dev_dbg(ctx->dev, "Mconfig for widget  %s BEFORE updation\n", w->name);
+	hda_dump_mconfig(ctx, m_cfg);
+
+	/* Based on whether the widget is in FE pipe or BE PIPE and playback direction
+	 * or capture direction, fixups applied will be changed
+	 */
+	if  ((m_cfg->pipe->conn_type == CONN_TYPE_FE &&
+		(m_cfg->hw_conn_type  == SINK)) ||
+		(m_cfg->pipe->conn_type == CONN_TYPE_BE &&
+		m_cfg->hw_conn_type  == SOURCE)) {
+		hda_update_mconfig(&m_cfg->out_fmt, dai_config,
+						m_cfg->params_fixup);
+		hda_update_mconfig(&m_cfg->in_fmt, dai_config,
+				(~m_cfg->converter) & m_cfg->params_fixup);
+	}
+	if  ((m_cfg->pipe->conn_type == CONN_TYPE_BE &&
+		(m_cfg->hw_conn_type  == SINK)) ||
+		(m_cfg->pipe->conn_type == CONN_TYPE_FE &&
+		m_cfg->hw_conn_type  == SOURCE)) {
+		hda_update_mconfig(&m_cfg->in_fmt, dai_config,
+						m_cfg->params_fixup);
+		hda_update_mconfig(&m_cfg->out_fmt, dai_config,
+				(~m_cfg->converter) & m_cfg->params_fixup);
+	}
+	hda_update_buffer_size(ctx, m_cfg);
+	if (regs)
+		azx_calculate_ssp_regs(ctx, dai_config,
+				&regs[REGS_OFFSET_CPR_BLOB]);
+	dev_dbg(ctx->dev, "Mconfig for widget  %s AFTER updation\n", w->name);
+	hda_dump_mconfig(ctx, m_cfg);
+	hda_dump_dai_config(ctx, dai_config);
+
+}
 
 static int hda_sst_dapm_pre_pmu_event(struct snd_soc_dapm_widget *w,
 	int w_type, struct sst_dsp_ctx *ctx, struct hda_platform_info *pinfo)
@@ -410,6 +587,7 @@ static int hda_sst_dapm_pre_pmu_event(struct snd_soc_dapm_widget *w,
 	if (!hda_sst_is_pipe_mcps_available(pinfo, ctx, mconfig))
 		return -1;
 
+	hda_sst_configure_widget(w, w_type, ctx, pinfo);
 	hda_sst_update_cpr_ssp_id(w, mconfig, ctx);
 	if (w_type == HDA_SST_WIDGET_VMIXER ||
 		w_type == HDA_SST_WIDGET_MIXER) {
@@ -960,27 +1138,6 @@ void hda_sst_set_be_copier_caps(struct snd_soc_dai *dai,
 	}
 	return;
 }
-
-void hda_sst_set_be_ssp_config(struct snd_soc_dai *dai, int stream)
-{
-	struct module_config *mconfig = NULL;
-	union ssp_dma_node dma_id;
-
-	dev_dbg(dai->dev, "%s: enter, dai-name=%s\n", __func__, dai->name);
-	mconfig = hda_sst_get_module(dai, stream, false, "cpr");
-
-	if (mconfig != NULL) {
-		dma_id.val = mconfig->dma_id;
-		if (strncmp(dai->name, "SSP0 Pin", strlen(dai->name)) == 0)
-			dma_id.dma_node.i2s_instance = 0;
-		if (strncmp(dai->name, "SSP1 Pin", strlen(dai->name)) == 0)
-			dma_id.dma_node.i2s_instance = 1;
-		if (strncmp(dai->name, "SSP2 Pin", strlen(dai->name)) == 0)
-			dma_id.dma_node.i2s_instance = 2;
-		mconfig->dma_id = dma_id.val;
-	}
-}
-
 
 void hda_sst_set_be_dmic_config(struct snd_soc_dai *dai,
 	struct snd_pcm_hw_params *params, int stream)
