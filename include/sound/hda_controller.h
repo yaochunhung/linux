@@ -277,6 +277,11 @@ struct azx {
 	struct azx_dev *link_dev;
 	struct azx_link *azx_link;
 	u32 link_count;
+	/* Structure to save dai_configuration, private data  for each DAIs
+	 * Memory will be allcated where platform driver is registered, based
+	 * on number of DAIs getting registered.
+	 */
+	struct azx_dai_config *dai_config;
 };
 
 struct azx_link {
