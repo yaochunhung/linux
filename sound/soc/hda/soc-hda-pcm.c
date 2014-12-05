@@ -126,6 +126,13 @@ static struct azx *get_chip_ctx(struct snd_pcm_substream *substream)
 	return chip;
 }
 
+static struct azx_dai_config *hda_be_get_dai_config(struct snd_soc_dai *dai)
+{
+	struct azx *chip = dev_get_drvdata(dai->dev);
+
+	return &chip->dai_config[dai->id - 1];
+}
+
 /*
  * PCM support
  */
@@ -222,6 +229,14 @@ static int soc_hda_pcm_prepare(struct snd_pcm_substream *substream,
 	return ret;
 }
 
+static void soc_hda_update_params(struct snd_pcm_hw_params *params,
+					struct azx_dai_config *dai_config)
+{
+	dai_config->s_fmt = snd_pcm_format_width(params_format(params));
+	dai_config->num_channels = params_channels(params);
+	dai_config->sampling_rate = params_rate(params);
+}
+
 static int soc_hda_pcm_hw_params(struct snd_pcm_substream *substream,
 				struct snd_pcm_hw_params *params,
 				struct snd_soc_dai *dai)
@@ -230,6 +245,7 @@ static int soc_hda_pcm_hw_params(struct snd_pcm_substream *substream,
 	struct azx_dev *azx_dev = get_azx_dev(substream);
 	int ret, dma_id;
 	struct snd_pcm_runtime *runtime = substream->runtime;
+	struct azx_dai_config *dai_config = hda_be_get_dai_config(dai);
 
 	dev_dbg(chip->dev, "%s: %s\n", __func__, dai->name);
 	ret = chip->ops->substream_alloc_pages(chip, substream,
@@ -248,6 +264,16 @@ static int soc_hda_pcm_hw_params(struct snd_pcm_substream *substream,
 			 substream->stream, true);
 		hda_sst_set_copier_dma_id(dai, dma_id, substream->stream, true);
 	}
+
+	soc_hda_update_params(params, dai_config);
+
+	dev_dbg(dai->dev, "%s: %s\n", __func__, dai->name);
+	dev_dbg(dai->dev, "%s Sampling Format = %d\n",
+				dai->name, dai_config->s_fmt);
+	dev_dbg(dai->dev, "%s channels = %d\n",
+				dai->name, dai_config->num_channels);
+	dev_dbg(dai->dev, "%s rate = %d\n",
+				dai->name, dai_config->sampling_rate);
 
 	return ret;
 }
@@ -300,14 +326,125 @@ static int hda_be_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-
 static int hda_be_ssp_hw_params(struct snd_pcm_substream *substream,
 				struct snd_pcm_hw_params *params,
 				struct snd_soc_dai *dai)
 {
-	dev_dbg(dai->dev, "%s: %s\n", __func__, dai->name);
+	struct azx_dai_config *dai_config = hda_be_get_dai_config(dai);
+	struct azx_ssp_dai_config *ssp_cfg = &dai_config->ssp_dai_config;
 
-	hda_sst_set_be_ssp_config(dai, substream->stream);
+	soc_hda_update_params(params, dai_config);
+
+	if (strncmp(dai->name, "SSP0 Pin", strlen(dai->name)) == 0)
+		ssp_cfg->i2s_instance = 0;
+	else if (strncmp(dai->name, "SSP1 Pin", strlen(dai->name)) == 0)
+		ssp_cfg->i2s_instance = 1;
+	else if (strncmp(dai->name, "SSP2 Pin", strlen(dai->name)) == 0)
+		ssp_cfg->i2s_instance = 2;
+
+	dai_config->dai_type = AZX_DAI_TYPE_SSP;
+	dev_dbg(dai->dev, "%s: %s\n", __func__, dai->name);
+	dev_dbg(dai->dev, "%s Sampling Format = %d\n",
+				dai->name, dai_config->s_fmt);
+	dev_dbg(dai->dev, "%s channels = %d\n",
+				dai->name, dai_config->num_channels);
+	dev_dbg(dai->dev, "%s rate = %d\n",
+				dai->name, dai_config->sampling_rate);
+
+	return 0;
+}
+
+static int hda_be_ssp_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
+{
+	struct azx_dai_config *cfg = hda_be_get_dai_config(dai);
+	struct azx_ssp_dai_config *ssp_cfg = &cfg->ssp_dai_config;
+
+	switch (fmt & SND_SOC_DAIFMT_FORMAT_MASK) {
+	case SND_SOC_DAIFMT_DSP_A:
+		ssp_cfg->ssp_mode = HDA_SSP_MODE_DSP_A;
+		break;
+	case SND_SOC_DAIFMT_DSP_B:
+		ssp_cfg->ssp_mode = HDA_SSP_MODE_DSP_B;
+		break;
+	case SND_SOC_DAIFMT_I2S:
+		ssp_cfg->ssp_mode = HDA_SSP_MODE_I2S;
+		break;
+	default:
+		dev_err(dai->dev, "%s: Unsupport SSP mode for dai %s\n",
+				__func__, dai->name);
+		return -EINVAL;
+	}
+	dev_dbg(dai->dev, "%s SSP Mode = %d\n", dai->name, ssp_cfg->ssp_mode);
+	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
+	case SND_SOC_DAIFMT_CBS_CFS:
+		ssp_cfg->fs_slave = 1;
+		ssp_cfg->bclk_slave = 1;
+		break;
+	case SND_SOC_DAIFMT_CBS_CFM:
+		ssp_cfg->fs_slave = 0;
+		ssp_cfg->bclk_slave = 1;
+		break;
+	case SND_SOC_DAIFMT_CBM_CFS:
+		ssp_cfg->fs_slave = 1;
+		ssp_cfg->bclk_slave = 0;
+		break;
+	case SND_SOC_DAIFMT_CBM_CFM:
+		ssp_cfg->fs_slave = 0;
+		ssp_cfg->bclk_slave = 0;
+		break;
+	default:
+		dev_err(dai->dev, "Unsupported master mode for dai %s\n",
+								dai->name);
+		return -EINVAL;
+
+	}
+	dev_dbg(dai->dev, "%s Master mode fs = %d bclk= %d\n", dai->name,
+		ssp_cfg->fs_slave, ssp_cfg->bclk_slave);
+	switch (fmt & SND_SOC_DAIFMT_INV_MASK) {
+	case SND_SOC_DAIFMT_NB_NF:
+		ssp_cfg->fs_invert = 0;
+		ssp_cfg->bclk_invert = 0;
+		break;
+	case SND_SOC_DAIFMT_IB_IF:
+		ssp_cfg->fs_invert = 1;
+		ssp_cfg->bclk_invert = 1;
+		break;
+	case SND_SOC_DAIFMT_IB_NF:
+		ssp_cfg->fs_invert = 0;
+		ssp_cfg->bclk_invert = 1;
+		break;
+	case SND_SOC_DAIFMT_NB_IF:
+		ssp_cfg->fs_invert = 1;
+		ssp_cfg->bclk_invert = 0;
+		break;
+	default:
+		dev_err(dai->dev, "%s: Unsupport fs and blck invert mode for dai %s\n",
+				__func__, dai->name);
+		return -EINVAL;
+	}
+	dev_dbg(dai->dev, "%s Clock inversion fs = %d bclk= %d\n", dai->name,
+		ssp_cfg->fs_invert, ssp_cfg->bclk_invert);
+	return 0;
+}
+
+static int hda_be_ssp_set_tdm_slot(struct snd_soc_dai *dai,
+		unsigned int tx_mask, unsigned int rx_mask,
+		int slots, int slot_width)
+{
+	struct azx_dai_config *cfg = hda_be_get_dai_config(dai);
+	struct azx_ssp_dai_config *ssp_cfg = &cfg->ssp_dai_config;
+
+	if (tx_mask || rx_mask) {
+		dev_err(dai->dev, "%s Channel remapping not supported %s\n",
+			__func__, dai->name);
+		return -EINVAL;
+	}
+	ssp_cfg->slots = slots;
+	ssp_cfg->slot_width = slot_width;
+
+	dev_dbg(dai->dev, "%s num of slots = %d slot_width = %d\n", dai->name,
+			ssp_cfg->slots, ssp_cfg->slot_width);
+
 	return 0;
 }
 
@@ -593,6 +730,8 @@ static struct snd_soc_dai_ops hda_be_ssp_dai_ops = {
 	.startup = hda_be_ssp_startup,
 	.hw_params = hda_be_ssp_hw_params,
 	.shutdown = hda_be_ssp_shutdown,
+	.set_fmt = hda_be_ssp_set_fmt,
+	.set_tdm_slot = hda_be_ssp_set_tdm_slot,
 };
 
 static struct snd_soc_dai_ops hda_be_link_dai_ops = {
@@ -1188,7 +1327,8 @@ int soc_hda_platform_register(struct device *dev)
 	struct azx *chip = dev_get_drvdata(dev);
 	struct snd_soc_azx *sazx = container_of(chip,
 				struct snd_soc_azx, hda_azx);
-	int ret = 0;
+	int i, ret = 0;
+	struct snd_soc_dai_driver *dai_driver;
 
 	pinfo  = devm_kzalloc(chip->dev, sizeof(*pinfo), GFP_KERNEL);
 	if (pinfo == NULL) {
@@ -1196,6 +1336,13 @@ int soc_hda_platform_register(struct device *dev)
 		return -ENOMEM;
 	}
 
+	chip->dai_config = devm_kzalloc(chip->dev, sizeof(struct azx_dai_config) *
+				(ARRAY_SIZE(soc_hda_platform_dai)), GFP_KERNEL);
+
+	if (chip->dai_config == NULL) {
+		dev_err(chip->dev, "kzalloc failed\n");
+		return -ENOMEM;
+	}
 	pinfo->dev = dev;
 	INIT_LIST_HEAD(&pinfo->ppl_list);
 	INIT_LIST_HEAD(&pinfo->ppl_start_list);
@@ -1209,6 +1356,10 @@ int soc_hda_platform_register(struct device *dev)
 	if (ret) {
 		dev_err(dev, "registering soc platform failed\n");
 		return ret;
+	}
+	for (i = 0; i < ARRAY_SIZE(soc_hda_platform_dai); i++) {
+		dai_driver = &soc_hda_platform_dai[i];
+		dai_driver->id = i + 1;
 	}
 	ret = snd_soc_register_component(dev, &soc_hda_component,
 				soc_hda_platform_dai,
