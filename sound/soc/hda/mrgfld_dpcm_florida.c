@@ -171,6 +171,20 @@ static struct snd_soc_dai *morg_florida_get_codec_dai(struct snd_soc_card *card,
 	return NULL;
 }
 
+static struct snd_soc_dai *mrgfld_florida_get_cpu_dai(struct snd_soc_card *card,
+							const char *dai_name)
+{
+	int i;
+	for (i = 0; i < card->num_rtd; i++) {
+		if (!strcmp(card->rtd[i].cpu_dai->name, dai_name))
+			return card->rtd[i].cpu_dai;
+	}
+	pr_err("%s: unable to find cpu dai\n", __func__);
+	/* this should never occur */
+	WARN_ON(1);
+	return NULL;
+}
+
 /* Function to switch the input clock for codec,  When audio is in
  * progress input clock to codec will be through MCLK1 which is 19.2MHz
  * while in off state input clock to codec will be through 32KHz through
@@ -497,10 +511,13 @@ static struct snd_soc_ops morg_florida_8k_16k_ops = {
 static struct snd_soc_compr_ops morg_compr_ops = {
 	.set_params = NULL,
 };
-
-static int morg_florida_codec_fixup(struct snd_soc_pcm_runtime *rtd,
+static int mrgfld_florida_modem_fixup(struct snd_soc_pcm_runtime *rtd,
 			    struct snd_pcm_hw_params *params)
 {
+	struct snd_soc_dai *be_cpu_dai;
+	int fmt;
+	int ret = 0;
+
 	struct snd_interval *rate = hw_param_interval(params,
 			SNDRV_PCM_HW_PARAM_RATE);
 	struct snd_interval *channels = hw_param_interval(params,
@@ -510,43 +527,180 @@ static int morg_florida_codec_fixup(struct snd_soc_pcm_runtime *rtd,
 
 	/* The DSP will covert the FE rate to 48k, stereo, 24bits */
 	rate->min = rate->max = 48000;
-	channels->min = channels->max = 4;
+	channels->min = channels->max = 2;
 
-	/* set SSP2 to 24-bit */
 	snd_mask_none(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT));
-	snd_mask_set(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT), SNDRV_PCM_FORMAT_S24_LE);
+	snd_mask_set(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT),
+						SNDRV_PCM_FORMAT_S16_LE);
 
-	pr_debug("param width set to:0x%x\n", snd_pcm_format_width(params_format(params)));
-	return 0;
+
+	be_cpu_dai = rtd->cpu_dai;
+
+	/* bit clock inverse not required */
+	fmt =   SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF
+		| SND_SOC_DAIFMT_CBM_CFM;
+	ret = snd_soc_dai_set_fmt(be_cpu_dai, fmt);
+	if (ret < 0) {
+		pr_err("can't set cpu DAI configuration %d\n", ret);
+		return ret;
+	}
+
+	return ret;
+
 }
 
-static int mrgfld_codec_loop_fixup(struct snd_soc_dai_link *dai_link, struct snd_soc_dai *dai)
+static int mrgfld_florida_btfm_fixup(struct snd_soc_pcm_runtime *rtd,
+			    struct snd_pcm_hw_params *params)
+{
+	struct snd_soc_dai *be_cpu_dai;
+	int fmt;
+	int ret = 0;
+	int slot_width = 16;
+	struct snd_interval *rate = hw_param_interval(params,
+			SNDRV_PCM_HW_PARAM_RATE);
+	struct snd_interval *channels = hw_param_interval(params,
+						SNDRV_PCM_HW_PARAM_CHANNELS);
+
+	pr_debug("Invoked %s for dailink %s\n", __func__, rtd->dai_link->name);
+	slot_width = 24;
+	rate->min = rate->max = 48000;
+	channels->min = channels->max = 2;
+	snd_mask_none(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT));
+	snd_mask_set(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT),
+						SNDRV_PCM_FORMAT_S24_LE);
+
+	pr_info("Slot width = %d\n", slot_width);
+	pr_info("param width set to:0x%x\n",
+				snd_pcm_format_width(params_format(params)));
+
+	be_cpu_dai = rtd->cpu_dai;
+
+	/* SoC SSP is master */
+	fmt =   SND_SOC_DAIFMT_DSP_A | SND_SOC_DAIFMT_NB_NF
+		| SND_SOC_DAIFMT_CBM_CFM;
+	ret = snd_soc_dai_set_fmt(be_cpu_dai, fmt);
+	if (ret < 0) {
+		pr_err("can't set cpu DAI configuration %d\n", ret);
+		return ret;
+	}
+
+	ret = snd_soc_dai_set_tdm_slot(be_cpu_dai, 0, 0, 2, slot_width);
+	return ret;
+
+}
+static int morg_florida_codec_fixup(struct snd_soc_pcm_runtime *rtd,
+			    struct snd_pcm_hw_params *params)
+{
+	struct snd_soc_dai *be_cpu_dai;
+	int slot_width = 24;
+	int ret = 0;
+	int fmt;
+	struct snd_interval *rate = hw_param_interval(params,
+			SNDRV_PCM_HW_PARAM_RATE);
+	struct snd_interval *channels = hw_param_interval(params,
+						SNDRV_PCM_HW_PARAM_CHANNELS);
+
+	pr_debug("Invoked %s for dailink %s\n", __func__, rtd->dai_link->name);
+	slot_width = 24;
+	rate->min = rate->max = 48000;
+	channels->min = channels->max = 2;
+	snd_mask_none(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT));
+	snd_mask_set(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT),
+						SNDRV_PCM_FORMAT_S24_LE);
+
+
+	pr_info("param width set to:0x%x\n",
+			snd_pcm_format_width(params_format(params)));
+	pr_info("Slot width = %d\n", slot_width);
+
+	be_cpu_dai = rtd->cpu_dai;
+	ret = snd_soc_dai_set_tdm_slot(be_cpu_dai, 0, 0, 4, slot_width);
+	if (ret < 0) {
+		pr_err("can't set cpu dai pcm format %d\n", ret);
+		return ret;
+	}
+
+	/* bit clock inverse not required */
+	fmt =   SND_SOC_DAIFMT_DSP_A | SND_SOC_DAIFMT_NB_NF
+		| SND_SOC_DAIFMT_CBM_CFM;
+	ret = snd_soc_dai_set_fmt(be_cpu_dai, fmt);
+	if (ret < 0) {
+		pr_err("can't set codec DAI configuration %d\n", ret);
+		return ret;
+	}
+
+	return ret;
+}
+
+static int mrgfld_codec_loop_fixup(struct snd_soc_dai_link *dai_link,
+		struct snd_soc_dai *dai, struct snd_pcm_hw_params *params)
 {
 	int ret;
 	unsigned int fmt;
 	int slot_width;
 	struct snd_soc_card *card = dai->card;
 	struct snd_soc_dai *florida_dai = morg_florida_get_codec_dai(card, "florida-aif1");
+	struct snd_soc_dai *cpu_dai;
+	struct snd_interval *rate = hw_param_interval(params,
+			SNDRV_PCM_HW_PARAM_RATE);
+	struct snd_interval *channels = hw_param_interval(params,
+						SNDRV_PCM_HW_PARAM_CHANNELS);
+
+	pr_debug("Invoked %s for dailink %s\n", __func__, dai_link->name);
 
 	switch (bt_debug) {
 	case 0:
 		slot_width = 24;
+		rate->min = rate->max = 48000;
+		channels->min = channels->max = 2;
+		snd_mask_none(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT));
+		snd_mask_set(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT),
+						SNDRV_PCM_FORMAT_S24_LE);
 		break;
 	case 1:
+		slot_width = 16;
+		rate->min = rate->max = 16000;
+		channels->min = channels->max = 1;
+		snd_mask_none(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT));
+		snd_mask_set(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT),
+						SNDRV_PCM_FORMAT_S16_LE);
+
 	case 2:
 		slot_width = 16;
+		rate->min = rate->max = 8000;
+		channels->min = channels->max = 1;
+		snd_mask_none(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT));
+		snd_mask_set(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT),
+						SNDRV_PCM_FORMAT_S16_LE);
 		break;
 	default:
 		slot_width = 24;
+		rate->min = rate->max = 48000;
+		channels->min = channels->max = 2;
+		snd_mask_none(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT));
+		snd_mask_set(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT),
+						SNDRV_PCM_FORMAT_S24_LE);
+
 	}
-	pr_info("Slot width for codec = %d\n", slot_width);
+	pr_info("Slot width = %d\n", slot_width);
+	pr_info("param width set to:0x%x\n",
+				snd_pcm_format_width(params_format(params)));
+
+	cpu_dai = mrgfld_florida_get_cpu_dai(card, dai_link->cpu_dai_name);
+	if (!cpu_dai) {
+		pr_err("%s: %s CPU dai not found\n", __func__,
+							dai_link->cpu_dai_name);
+		return -EINVAL;
+	}
+
+	/* Set up tdm params for codec */
 	ret = snd_soc_dai_set_tdm_slot(florida_dai, 0, 0, 4, slot_width);
 	if (ret < 0) {
 		pr_err("can't set codec pcm format %d\n", ret);
 		return ret;
 	}
 
-	/* bit clock inverse not required */
+	/* Setup fmt for codec */
 	fmt =   SND_SOC_DAIFMT_DSP_A | SND_SOC_DAIFMT_NB_NF
 		| SND_SOC_DAIFMT_CBS_CFS;
 	ret = snd_soc_dai_set_fmt(florida_dai, fmt);
@@ -554,6 +708,148 @@ static int mrgfld_codec_loop_fixup(struct snd_soc_dai_link *dai_link, struct snd
 		pr_err("can't set codec DAI configuration %d\n", ret);
 		return ret;
 	}
+
+	/* Setup FMT for SSP on SoC side */
+	fmt =   SND_SOC_DAIFMT_DSP_A | SND_SOC_DAIFMT_NB_NF
+		| SND_SOC_DAIFMT_CBM_CFM;
+	ret = snd_soc_dai_set_fmt(cpu_dai, fmt);
+	if (ret < 0) {
+		pr_err("can't set format for CPU dai %s error %d\n",
+							cpu_dai->name, ret);
+		return ret;
+	}
+
+	/* Setup tdm slot for SSP on SoC side */
+	ret = snd_soc_dai_set_tdm_slot(cpu_dai, 0, 0, 4, slot_width);
+	if (ret < 0) {
+		pr_err("Can't set the slot config for CPU dai %s error %d\n",
+							cpu_dai->name, ret);
+		return ret;
+	}
+
+	return ret;
+}
+static int mrgfld_modem_loop_fixup(struct snd_soc_dai_link *dai_link,
+		struct snd_soc_dai *dai, struct snd_pcm_hw_params *params)
+{
+	int ret;
+	unsigned int fmt;
+	struct snd_soc_card *card = dai->card;
+	struct snd_soc_dai *cpu_dai;
+	struct snd_interval *rate = hw_param_interval(params,
+			SNDRV_PCM_HW_PARAM_RATE);
+	struct snd_interval *channels = hw_param_interval(params,
+						SNDRV_PCM_HW_PARAM_CHANNELS);
+
+	pr_debug("Invoked %s for dailink %s\n", __func__, dai_link->name);
+
+	/* The DSP will covert the FE rate to 48k, stereo, 24bits */
+	rate->min = rate->max = 48000;
+	channels->min = channels->max = 2;
+
+	snd_mask_none(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT));
+	snd_mask_set(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT),
+						SNDRV_PCM_FORMAT_S16_LE);
+
+	cpu_dai = mrgfld_florida_get_cpu_dai(card, dai_link->cpu_dai_name);
+	if (!cpu_dai) {
+		pr_err("%s: %s CPU dai not found\n", __func__,
+						dai_link->cpu_dai_name);
+		return -EINVAL;
+	}
+
+	/* SoC SSP is master, both BCLK and FS */
+	fmt =   SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF
+		| SND_SOC_DAIFMT_CBM_CFM;
+	ret = snd_soc_dai_set_fmt(cpu_dai, fmt);
+	if (ret < 0) {
+		pr_err("can't set format for CPU dai %s error %d\n",
+							cpu_dai->name, ret);
+		return ret;
+	}
+	/* TDM slot configuration is not required for I2S mode */
+
+	return ret;
+
+}
+
+static int mrgfld_btfm_loop_fixup(struct snd_soc_dai_link *dai_link,
+		struct snd_soc_dai *dai, struct snd_pcm_hw_params *params)
+{
+	int ret;
+	unsigned int fmt;
+	int slot_width;
+	struct snd_soc_card *card = dai->card;
+	struct snd_soc_dai *cpu_dai;
+	struct snd_interval *rate = hw_param_interval(params,
+			SNDRV_PCM_HW_PARAM_RATE);
+	struct snd_interval *channels = hw_param_interval(params,
+						SNDRV_PCM_HW_PARAM_CHANNELS);
+
+	pr_debug("Invoked %s for dailink %s\n", __func__, dai_link->name);
+	switch (bt_debug) {
+	case 0:
+		slot_width = 24;
+		rate->min = rate->max = 48000;
+		channels->min = channels->max = 2;
+		snd_mask_none(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT));
+		snd_mask_set(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT),
+						SNDRV_PCM_FORMAT_S24_LE);
+		break;
+	case 1:
+		slot_width = 16;
+		rate->min = rate->max = 16000;
+		channels->min = channels->max = 1;
+		snd_mask_none(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT));
+		snd_mask_set(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT),
+						SNDRV_PCM_FORMAT_S16_LE);
+
+	case 2:
+		slot_width = 16;
+		rate->min = rate->max = 8000;
+		channels->min = channels->max = 1;
+		snd_mask_none(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT));
+		snd_mask_set(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT),
+						SNDRV_PCM_FORMAT_S16_LE);
+		break;
+	default:
+		slot_width = 24;
+		rate->min = rate->max = 48000;
+		channels->min = channels->max = 2;
+		snd_mask_none(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT));
+		snd_mask_set(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT),
+						SNDRV_PCM_FORMAT_S24_LE);
+
+	}
+	pr_info("Slot width = %d\n", slot_width);
+	pr_info("param width set to:0x%x\n",
+				snd_pcm_format_width(params_format(params)));
+
+	cpu_dai = mrgfld_florida_get_cpu_dai(card, dai_link->cpu_dai_name);
+	if (!cpu_dai) {
+		pr_err("%s: %s CPU dai not found\n", __func__,
+						dai_link->cpu_dai_name);
+		return -EINVAL;
+	}
+
+
+	/* SoC SSP is master, both BCLK and FS */
+	fmt =   SND_SOC_DAIFMT_DSP_A | SND_SOC_DAIFMT_IB_NF
+		| SND_SOC_DAIFMT_CBM_CFM;
+	ret = snd_soc_dai_set_fmt(cpu_dai, fmt);
+	if (ret < 0) {
+		pr_err("can't set format for CPU dai %s error %d\n",
+							cpu_dai->name, ret);
+		return ret;
+	}
+
+	ret = snd_soc_dai_set_tdm_slot(cpu_dai, 0, 0, 2, slot_width);
+	if (ret < 0) {
+		pr_err("Can't set the slot config for CPU dai %s error %d\n",
+							cpu_dai->name, ret);
+		return ret;
+	}
+
 	return ret;
 }
 
@@ -666,6 +962,7 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 		.codec_name = "snd-soc-dummy",
 		.params = &bxtn_florida_dai_params_modem,
 		.dsp_loopback = true,
+		.be_fixup = mrgfld_modem_loop_fixup,
 	},
 	{
 		.name = "Bxtn BTFM-Loop Port",
@@ -676,6 +973,7 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 		.codec_name = "snd-soc-dummy",
 		.params = &bxtn_florida_dai_params_bt,
 		.dsp_loopback = true,
+		.be_fixup = mrgfld_btfm_loop_fixup,
 	},
 
 	/* back ends */
@@ -698,6 +996,7 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 		.codec_name = "snd-soc-dummy",
 		.codec_dai_name = "snd-soc-dummy-dai",
 		.ignore_suspend = 1,
+		.be_hw_params_fixup = mrgfld_florida_btfm_fixup,
 		.no_pcm = 1,
 	},
 	{
@@ -708,6 +1007,7 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 		.codec_dai_name = "snd-soc-dummy-dai",
 		.platform_name = "snd-soc-dummy",
 		.ignore_suspend = 1,
+		.be_hw_params_fixup = mrgfld_florida_modem_fixup,
 		.no_pcm = 1,
 	},
 	{
