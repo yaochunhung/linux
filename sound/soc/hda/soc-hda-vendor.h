@@ -47,8 +47,9 @@
 #define HDA_SST_MIX_EFX_LOOP2		HDA_SST_MIX(20)
 #define HDA_SST_MIX_EFX_LOOP3		HDA_SST_MIX(21)
 #define HDA_SST_MIX_IDISP		HDA_SST_MIX(22)
+#define HDA_SST_MIX_SNS2		HDA_SST_MIX(23)
 
-#define HDA_SST_REG_LAST            (HDA_SST_MIX_IDISP)
+#define HDA_SST_REG_LAST            (HDA_SST_MIX_SNS2)
 
 /* last entry defines array size */
 #define HDA_SST_NUM_WIDGETS         (HDA_SST_REG_LAST + 1)
