@@ -429,14 +429,14 @@ static void hda_dump_mconfig(struct sst_dsp_ctx *ctx,
 					struct module_config *mcfg)
 {
 	dev_dbg(ctx->dev, "Dumping Mconfig\n");
-	dev_dbg(ctx->dev, "module_id = %d\n", mcfg->id.module_id);
-	dev_dbg(ctx->dev, "instance_id = %d\n", mcfg->id.instance_id);
 	dev_dbg(ctx->dev, "Input Format:\n");
 	dev_dbg(ctx->dev, "channels = %d\n", mcfg->in_fmt.channels);
 	dev_dbg(ctx->dev, "sampling_freq = %d\n", mcfg->in_fmt.sampling_freq);
+	dev_dbg(ctx->dev, "valid bit depth = %d\n", mcfg->in_fmt.valid_bit_depth);
 	dev_dbg(ctx->dev, "Output Format:\n");
 	dev_dbg(ctx->dev, "channels = %d\n", mcfg->out_fmt.channels);
 	dev_dbg(ctx->dev, "sampling_freq = %d\n", mcfg->out_fmt.sampling_freq);
+	dev_dbg(ctx->dev, "valid bit depth = %d\n", mcfg->out_fmt.valid_bit_depth);
 }
 static void hda_dump_dai_config(struct sst_dsp_ctx *ctx,
 					struct azx_dai_config *cfg)
