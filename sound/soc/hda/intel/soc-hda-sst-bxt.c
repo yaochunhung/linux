@@ -25,6 +25,7 @@
 #include <linux/kernel.h>
 #include <linux/device.h>
 #include <asm/cacheflush.h>
+#include <sound/soc-hda-sst-ipc.h>
 #include <sound/soc-hda-sst-dsp.h>
 #include "soc-hda-sst-bxt-fw.h"
 
@@ -77,24 +78,20 @@ int sst_bxt_init(struct device *dev, void __iomem *mmio_base, int irq,
 
 	ctx->ops = bxt_ops;
 
+	ret = sst_dsp_init(ctx);
+	if (ret < 0)
+		return ret;
+
 	ret = ctx->ops.load_fw(ctx);
 	if (ret < 0) {
 		dev_err(dev, "Load base fw failed : %x", ret);
-		goto base_fw_load_failed;
+		return ret;
 	}
-
-	ret = sst_dsp_init(ctx);
-	if (ret < 0)
-		goto base_fw_load_failed;
 
 	if (dsp)
 		*dsp = ctx;
 	return 0;
 
-base_fw_load_failed:
-	sst_disable_dsp_core(ctx);
-	kfree(ctx);
-	return ret;
 }
 EXPORT_SYMBOL_GPL(sst_bxt_init);
 
@@ -140,16 +137,29 @@ static int sst_bxt_prepare_fw(struct sst_dsp_ctx *ctx)
 
 	for (i = BXT_ROM_INIT_HIPCIE_TIMEOUT; i > 0; --i) {
 		reg = sst_readl(ctx, HIPCIE);
-		if ((reg & HDA_ADSP_REG_HIPCIE_DONE) == HDA_ADSP_REG_HIPCIE_DONE) {
-			sst_updatel_bits(ctx, HDA_ADSP_REG_HIPCIE, HDA_ADSP_REG_HIPCIE_DONE, HDA_ADSP_REG_HIPCIE_DONE);
+
+		if (reg & HDA_ADSP_REG_HIPCIE_DONE) {
+			sst_updatel_bits(ctx, HDA_ADSP_REG_HIPCIE,
+					HDA_ADSP_REG_HIPCIE_DONE,
+					HDA_ADSP_REG_HIPCIE_DONE);
 			break;
 		}
 
 		mdelay(1);
 	}
-	if (!i)
+	if (!i) {
 		dev_err(ctx->dev, "Timeout waiting for HIPCIE done, reg: 0x%x\n", reg);
-	dev_dbg(ctx->dev, "HIPCIE reg: 0x%x\n", reg);
+		/*FIXME */
+		sst_updatel_bits(ctx, HDA_ADSP_REG_HIPCIE,
+				HDA_ADSP_REG_HIPCIE_DONE,
+				HDA_ADSP_REG_HIPCIE_DONE);
+	}
+
+	dev_dbg(ctx->dev, "******HIPCIE reg: 0x%x\n", reg);
+
+	/*enable Interrupt */
+	ipc_int_enable(ctx);
+	ipc_op_int_enable(ctx);
 
 	for (i = BXT_ROM_INIT_DONE_TIMEOUT; i > 0; --i) {
 		if (FW_ROM_INIT_DONE ==
@@ -207,6 +217,7 @@ static int sst_bxt_load_base_firmware(struct sst_dsp_ctx *ctx)
 	u32 fw_preload_page_count = 0;
 	u32 base_fw_size = 0;
 	struct sst_fw_image_manifest *manifest;
+	ctx->ipc->boot_complete = false;
 
 	ret = request_firmware(&fw, "dsp_fw_release.bin", ctx->dev);
 	if (ret < 0) {
@@ -230,10 +241,19 @@ static int sst_bxt_load_base_firmware(struct sst_dsp_ctx *ctx)
 	}
 
 	ret = sst_transfer_fw_host_dma(ctx, fw->data, fw->size);
-	if (ret < 0)
+	if (ret < 0) {
 		dev_err(ctx->dev, "Transfer firmware failed %d\n", ret);
-	else
+		sst_disable_dsp_core(ctx);
+	} else {
 		dev_dbg(ctx->dev, "Firmware download successfull\n");
+		ret = wait_event_timeout(ctx->ipc->boot_wait, ctx->ipc->boot_complete,
+						msecs_to_jiffies(IPC_BOOT_MSECS));
+		if (ret == 0) {
+			dev_err(ctx->dev, "DSP boot failed, FW Ready timed-out\n");
+			sst_disable_dsp_core(ctx);
+			ret = -EIO;
+		}
+	}
 
 sst_load_base_firmware_failed:
 	release_firmware(fw);

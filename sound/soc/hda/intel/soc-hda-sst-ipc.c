@@ -59,6 +59,20 @@
 #define IPC_MSG_DIR_MASK	0x1
 #define IPC_MSG_DIR(x)		(((x) & IPC_MSG_DIR_MASK) \
 				<< IPC_MSG_DIR_SHIFT)
+/*Global Notofication Message*/
+#define IPC_GLB_NOTIFI_TYPE_SHIFT	16
+#define IPC_GLB_NOTIFI_TYPE_MASK	0xFF
+#define IPC_GLB_NOTIFI_TYPE(x)		(((x) >> IPC_GLB_NOTIFI_TYPE_SHIFT) \
+					& IPC_GLB_NOTIFI_TYPE_MASK)
+
+#define IPC_GLB_NOTIFI_MSG_TYPE_SHIFT	24
+#define IPC_GLB_NOTIFI_MSG_TYPE_MASK	0x1F
+#define IPC_GLB_NOTIFI_MSG_TYPE(x)	(((x) >> IPC_GLB_NOTIFI_MSG_TYPE_SHIFT) & IPC_GLB_NOTIFI_MSG_TYPE_MASK)
+
+#define IPC_GLB_NOTIFI_RSP_SHIFT	29
+#define IPC_GLB_NOTIFI_RSP_MASK		0x1
+#define IPC_GLB_NOTIFI_RSP_TYPE(x)	(((x) >> IPC_GLB_NOTIFI_RSP_SHIFT) \
+					& IPC_GLB_NOTIFI_RSP_MASK)
 
 /** Pipeline operations **/
 /* Create pipeline message */
@@ -157,6 +171,7 @@ enum ipc_glb_type {
 	IPC_GLB_GET_PIPELINE_CONTEXT_SIZE = 21,
 	IPC_GLB_SAVE_PIPELINE = 22,
 	IPC_GLB_RESTORE_PIPELINE = 23,
+	IPC_GLB_NOTIFICATION = 26,
 	IPC_GLB_MAX_IPC_MESSAGE_TYPE = 31 /**< Maximum message number */
 };
 
@@ -195,6 +210,18 @@ enum ipc_glb_reply {
 	IPC_GLB_REPLY_PIPELINE_RESTORE_FAILED = 163,
 
 	IPC_MAX_STATUS = ((1<<IXC_STATUS_BITS)-1)
+};
+
+enum ipc_notification_type {
+	IPC_GLB_NOTIFCATION_GLITCH = 0,
+	IPC_GLB_NOTIFCATION_OVERRUN = 1,
+	IPC_GLB_NOTIFCATION_UNDERRUN = 2,
+	IPC_GLB_NOTIFCATION_END_STREAM = 3,
+	IPC_GLB_NOTIFCATION_PHRASE_DETECTED = 4,
+	IPC_GLB_NOTIFCATION_RESOURCE_EVENT = 5,
+	IPC_GLB_NOTIFCATION_LOG_BUFFER_STATUS = 6,
+	IPC_GLB_NOTIFCATION_TIMESTAMP_CAPTURED = 7,
+	IPC_GLB_NOTIFCATION_FW_READY = 8
 };
 
 /* Module Message Types */
@@ -418,6 +445,41 @@ out:
 	spin_unlock_irqrestore(&ipc->ipc_lock, irq_flags);
 }
 
+static int ipc_process_notification(struct ipc *ipc, struct header header)
+{
+	if (IPC_GLB_NOTIFI_MSG_TYPE(header.primary) ==
+			IPC_GLB_NOTIFI_MSG_TYPE(header.primary)) {
+		switch (IPC_GLB_NOTIFI_TYPE(header.primary)) {
+		case IPC_GLB_NOTIFCATION_GLITCH:
+			break;
+		case IPC_GLB_NOTIFCATION_OVERRUN:
+			break;
+		case IPC_GLB_NOTIFCATION_UNDERRUN:
+			dev_dbg(ipc->dev, "FW UNDERRUN\n");
+			break;
+		case IPC_GLB_NOTIFCATION_END_STREAM:
+			break;
+		case IPC_GLB_NOTIFCATION_PHRASE_DETECTED:
+			break;
+		case IPC_GLB_NOTIFCATION_RESOURCE_EVENT:
+			dev_dbg(ipc->dev, "MCPS Budget Violation\n");
+			break;
+		case IPC_GLB_NOTIFCATION_LOG_BUFFER_STATUS:
+			break;
+		case IPC_GLB_NOTIFCATION_TIMESTAMP_CAPTURED:
+			break;
+		case IPC_GLB_NOTIFCATION_FW_READY:
+			ipc->boot_complete = true;
+			wake_up(&ipc->boot_wait);
+			break;
+		default:
+			dev_err(ipc->dev, "ipc: error received unexpected msg=%x", header.primary);
+			break;
+		}
+	}
+	return 0;
+}
+
 static void ipc_process_reply(struct ipc *ipc, struct header header)
 {
 	struct ipc_message *msg;
@@ -463,7 +525,7 @@ irqreturn_t sst_irq_thread_handler(int irq, void *context)
 {
 	struct sst_dsp_ctx *dsp = (struct sst_dsp_ctx *)context;
 	struct ipc *ipc = dsp->ipc;
-	struct header header;
+	struct header header = {0};
 	u32 hipcie, hipct, hipcte;
 	int ipc_irq = 0;
 
@@ -498,6 +560,7 @@ irqreturn_t sst_irq_thread_handler(int irq, void *context)
 			ipc_process_reply(ipc, header);
 		} else {
 			trace_printk("IPC irq: Notification from firmware\n");
+			ipc_process_notification(ipc, header);
 		}
 		/* clear  busy interrupt */
 		sst_updatel_bits(dsp, HDA_ADSP_REG_HIPCT,
@@ -542,6 +605,16 @@ void ipc_int_disable(struct sst_dsp_ctx *ctx)
 			ADSPIC_IPC, 0);
 }
 
+void ipc_op_int_enable(struct sst_dsp_ctx *ctx)
+{
+	/* enable IPC DONE interrupt */
+	sst_updatel_bits(ctx, HDA_ADSP_REG_HIPCCTL,
+		HDA_ADSP_REG_HIPCCTL_DONE, HDA_ADSP_REG_HIPCCTL_DONE);
+	/* Enable IPC BUSY interrupt */
+	sst_updatel_bits(ctx, HDA_ADSP_REG_HIPCCTL,
+		HDA_ADSP_REG_HIPCCTL_BUSY, HDA_ADSP_REG_HIPCCTL_BUSY);
+}
+
 bool ipc_int_status(struct sst_dsp_ctx *ctx)
 {
 	return sst_readl(ctx, ADSPIS) & ADSPIS_IPC;
@@ -568,6 +641,7 @@ struct ipc *ipc_init(struct device *dev,
 	INIT_LIST_HEAD(&ipc->empty_list);
 	spin_lock_init(&ipc->ipc_lock);
 	init_waitqueue_head(&ipc->wait_txq);
+	init_waitqueue_head(&ipc->boot_wait);
 
 	err = ipc_msg_empty_list_init(ipc);
 	if (err < 0)
@@ -583,16 +657,6 @@ struct ipc *ipc_init(struct device *dev,
 		goto list_err;
 	}
 	init_kthread_work(&ipc->kwork, ipc_tx_msgs);
-
-	/* enable IPC interrupt */
-	ipc_int_enable(dsp);
-
-	/* enable IPC DONE interrupt */
-	sst_updatel_bits(dsp, HDA_ADSP_REG_HIPCCTL,
-		HDA_ADSP_REG_HIPCCTL_DONE, HDA_ADSP_REG_HIPCCTL_DONE);
-	/* Enable IPC BUSY interrupt */
-	sst_updatel_bits(dsp, HDA_ADSP_REG_HIPCCTL,
-		HDA_ADSP_REG_HIPCCTL_BUSY, HDA_ADSP_REG_HIPCCTL_BUSY);
 
 	return ipc;
 

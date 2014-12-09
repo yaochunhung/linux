@@ -20,6 +20,9 @@
 #include <linux/kthread.h>
 #include <linux/irqreturn.h>
 
+
+struct sst_dsp_ctx;
+
 enum pipeline_state {
 	PPL_INVALID_STATE = 0,
 	PPL_UNINITIALIZED = 1,
@@ -54,6 +57,11 @@ struct ipc {
 	struct task_struct *tx_thread;
 	struct kthread_worker kworker;
 	struct kthread_work kwork;
+
+	/* boot */
+	wait_queue_head_t boot_wait;
+	bool boot_complete;
+	bool shutdown;
 };
 
 struct init_instance_msg {
@@ -73,6 +81,8 @@ struct bind_unbind_msg {
 	u8 dst_queue;
 	bool bind;
 };
+
+#define IPC_BOOT_MSECS          3000
 
 irqreturn_t sst_irq_thread_handler(int irq, void *context);
 
@@ -94,7 +104,7 @@ int ipc_init_instance(struct ipc *sst_ipc, struct init_instance_msg *msg,
 int ipc_bind_unbind(struct ipc *sst_ipc, struct bind_unbind_msg *msg);
 
 void ipc_int_enable(struct sst_dsp_ctx *dsp);
-
+void ipc_op_int_enable(struct sst_dsp_ctx *ctx);
 void ipc_int_disable(struct sst_dsp_ctx *dsp);
 
 bool ipc_int_status(struct sst_dsp_ctx *dsp);
