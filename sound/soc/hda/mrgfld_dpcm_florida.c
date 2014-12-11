@@ -564,12 +564,12 @@ static int mrgfld_florida_btfm_fixup(struct snd_soc_pcm_runtime *rtd,
 						SNDRV_PCM_HW_PARAM_CHANNELS);
 
 	pr_debug("Invoked %s for dailink %s\n", __func__, rtd->dai_link->name);
-	slot_width = 24;
+	slot_width = 16;
 	rate->min = rate->max = 48000;
 	channels->min = channels->max = 2;
 	snd_mask_none(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT));
 	snd_mask_set(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT),
-						SNDRV_PCM_FORMAT_S24_LE);
+						SNDRV_PCM_FORMAT_S16_LE);
 
 	pr_info("Slot width = %d\n", slot_width);
 	pr_info("param width set to:0x%x\n",
@@ -780,7 +780,7 @@ static int mrgfld_btfm_loop_fixup(struct snd_soc_dai_link *dai_link,
 {
 	int ret;
 	unsigned int fmt;
-	int slot_width;
+	int slot_width, tdm_slots;
 	struct snd_soc_card *card = dai->card;
 	struct snd_soc_dai *cpu_dai;
 	struct snd_interval *rate = hw_param_interval(params,
@@ -789,38 +789,30 @@ static int mrgfld_btfm_loop_fixup(struct snd_soc_dai_link *dai_link,
 						SNDRV_PCM_HW_PARAM_CHANNELS);
 
 	pr_debug("Invoked %s for dailink %s\n", __func__, dai_link->name);
+	slot_width = 16;
+	snd_mask_none(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT));
+	snd_mask_set(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT),
+						SNDRV_PCM_FORMAT_S16_LE);
 	switch (bt_debug) {
 	case 0:
-		slot_width = 24;
 		rate->min = rate->max = 48000;
 		channels->min = channels->max = 2;
-		snd_mask_none(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT));
-		snd_mask_set(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT),
-						SNDRV_PCM_FORMAT_S24_LE);
+		tdm_slots = 2;
 		break;
 	case 1:
-		slot_width = 16;
 		rate->min = rate->max = 16000;
 		channels->min = channels->max = 1;
-		snd_mask_none(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT));
-		snd_mask_set(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT),
-						SNDRV_PCM_FORMAT_S16_LE);
-
+		tdm_slots = 1;
+		break;
 	case 2:
-		slot_width = 16;
 		rate->min = rate->max = 8000;
 		channels->min = channels->max = 1;
-		snd_mask_none(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT));
-		snd_mask_set(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT),
-						SNDRV_PCM_FORMAT_S16_LE);
+		tdm_slots = 1;
 		break;
 	default:
-		slot_width = 24;
 		rate->min = rate->max = 48000;
 		channels->min = channels->max = 2;
-		snd_mask_none(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT));
-		snd_mask_set(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT),
-						SNDRV_PCM_FORMAT_S24_LE);
+		tdm_slots = 2;
 
 	}
 	pr_info("Slot width = %d\n", slot_width);
@@ -845,7 +837,7 @@ static int mrgfld_btfm_loop_fixup(struct snd_soc_dai_link *dai_link,
 		return ret;
 	}
 
-	ret = snd_soc_dai_set_tdm_slot(cpu_dai, 0, 0, 2, slot_width);
+	ret = snd_soc_dai_set_tdm_slot(cpu_dai, 0, 0, tdm_slots, slot_width);
 	if (ret < 0) {
 		pr_err("Can't set the slot config for CPU dai %s error %d\n",
 							cpu_dai->name, ret);
