@@ -1556,6 +1556,8 @@ int azx_get_ml_capablities(struct azx *chip)
 								ICH6_REG_ML_LSDIIDX(i));
 		chip->azx_link[i].losidv_offset = chip->mlcap_offset + ICH6_REG_ML_LOSIDVX(i);
 	}
+	return 0;
+}
 
 	return 0;
 }
@@ -1592,6 +1594,7 @@ int azx_parse_capabilities(struct azx *chip)
 		case ML_CAP_ID:
 			dev_dbg(chip->dev, "Found ML capability");
 			chip->mlcap_offset = offset;
+			azx_get_ml_capablities(chip);
 			break;
 		case GTS_CAP_ID:
 			dev_dbg(chip->dev, "Found GTS capability");
