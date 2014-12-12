@@ -376,6 +376,20 @@ static int soc_hda_be_link_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
+int find_link_index(struct azx *chip, struct snd_soc_codec *codec)
+{
+	int i = 0, j = 0;
+	for (i = 0; i <= chip->link_count; i++) {
+		for (j = 0; j < 16; j++) {
+			if (strlen(chip->azx_link[i].codec_name[j]) == 0)
+				break;
+			if (!strcmp(chip->azx_link[i].codec_name[j], codec->name))
+				return i;
+		}
+	}
+	return -EINVAL;
+}
+
 static int soc_hda_be_link_pcm_prepare(struct snd_pcm_substream *substream,
 		struct snd_soc_dai *dai)
 {
@@ -384,6 +398,7 @@ static int soc_hda_be_link_pcm_prepare(struct snd_pcm_substream *substream,
 	struct azx_dev *link_dev = snd_soc_dai_get_dma_data(dai, substream);
 	unsigned int format_val;
 	int ret = 0;
+	int index = 0;
 	struct snd_soc_hda_dma_params *dma_params;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	struct snd_pcm_hw_params *params;
@@ -426,8 +441,13 @@ static int soc_hda_be_link_pcm_prepare(struct snd_pcm_substream *substream,
 		dev_err(chip->dev, "Failed to set format to link DMA");
 		return -EIO;
 	}
-	/*FIXME map the link */
-	addr = (chip->remap_addr + chip->azx_link[0].losidv_offset);
+
+	/*TODO: verify the mapping */
+	index = find_link_index(chip, rtd->codec);
+	if (index < 0)
+		return index;
+	dev_dbg(chip->dev, "using link: %d\n", index);
+	addr = (chip->remap_addr + chip->azx_link[index].losidv_offset);
 	value = (azx_ml_readl(chip, addr) | (1 << link_dev->stream_tag));
 	azx_ml_writel(chip, addr, value);
 	if (!ret)
@@ -463,17 +483,24 @@ static int soc_hda_be_link_hw_free(struct snd_pcm_substream *substream,
 		struct snd_soc_dai *dai)
 {
 	struct azx *chip = dev_get_drvdata(dai->dev);
+	struct snd_soc_pcm_runtime *rtd = snd_pcm_substream_chip(substream);
 	struct azx_dev *link_dev = snd_soc_dai_get_dma_data(dai, substream);
 	u32 __iomem *addr;
 	u32 value;
+	int index = 0;
 
 	dev_dbg(chip->dev, "%s: %s\n", __func__, dai->name);
 
 	link_dev->stream_tag = 0;
 	link_dev->prepared = 0;
 
-	/*FIXME map the link */
-	addr = (chip->remap_addr + chip->azx_link[0].losidv_offset);
+	/*TODO: verify the mapping */
+	index = find_link_index(chip, rtd->codec);
+	if (index < 0)
+		return index;
+	dev_dbg(chip->dev, "using link: %d\n", index);
+
+	addr = (chip->remap_addr + chip->azx_link[index].losidv_offset);
 	value = (azx_ml_readl(chip, addr) & ~(1 << link_dev->stream_tag));
 	azx_ml_writel(chip, addr, value);
 	azx_link_release_device(link_dev);
