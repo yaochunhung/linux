@@ -1559,8 +1559,29 @@ int azx_get_ml_capablities(struct azx *chip)
 	return 0;
 }
 
+int azx_map_codec_to_link(struct azx *chip, int addr)
+{
+	int i = 0, j = 0;
+	dev_dbg(chip->dev, "Link count: %d\n", chip->link_count);
+	for (i = 0; i <= chip->link_count; i++) {
+		dev_dbg(chip->dev, "lsdid for link %d: %x\n", i, chip->azx_link[i].lsdiid);
+		if (!(chip->azx_link[i].lsdiid))
+			continue;
+
+		if (chip->azx_link[i].lsdiid && (0x1 << addr)) {
+			for (j = 0; j < 16; j++) {
+				if (strlen(chip->azx_link[i].codec_name[j]) == 0) {
+					snprintf(chip->azx_link[i].codec_name[j],
+							sizeof(chip->azx_link[i].codec_name[j]),
+							"codec#%03x.%d", addr, addr);
+					break;
+				}
+			}
+		}
+	}
 	return 0;
 }
+EXPORT_SYMBOL_GPL(azx_map_codec_to_link);
 
 int azx_parse_capabilities(struct azx *chip)
 {

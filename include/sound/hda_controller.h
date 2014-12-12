@@ -221,6 +221,7 @@ struct azx_link {
 	u32 lcap;
 	u32 lsdiid;
 	unsigned int losidv_offset;
+	char codec_name[16][32];
 };
 
 static struct snd_pcm_hardware azx_pcm_hw = {
@@ -283,6 +284,7 @@ int azx_parse_capabilities(struct azx *chip);
 void azx_ppcap_enable(struct azx *chip, bool enable);
 void azx_ppcap_int_enable(struct azx *chip, bool enable);
 void azx_spbcap_one_enable(struct azx *chip, bool enable, int num_stream);
+int azx_map_codec_to_link(struct azx *chip, int addr);
 
 /* PCM setup */
 static inline struct azx_dev *get_azx_dev(struct snd_pcm_substream *substream)
