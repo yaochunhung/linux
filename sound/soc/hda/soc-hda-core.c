@@ -993,7 +993,9 @@ static int probe_codec(struct azx *chip, int addr)
 
 	ret = azx_add_codec_device(addr, res, chip->dev);
 
-	return 0;
+	ret = azx_map_codec_to_link(chip, addr);
+
+	return ret;
 }
 
 static int azx_bus_create(struct azx *chip)
