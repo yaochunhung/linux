@@ -529,7 +529,7 @@ static int mrgfld_florida_modem_fixup(struct snd_soc_pcm_runtime *rtd,
 
 	/* The DSP will covert the FE rate to 48k, stereo, 24bits */
 	rate->min = rate->max = 48000;
-	channels->min = channels->max = 2;
+	channels->min = channels->max = 1;
 
 	snd_mask_none(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT));
 	snd_mask_set(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT),
@@ -539,13 +539,16 @@ static int mrgfld_florida_modem_fixup(struct snd_soc_pcm_runtime *rtd,
 	be_cpu_dai = rtd->cpu_dai;
 
 	/* bit clock inverse not required */
-	fmt =   SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF
+	/* SoC SSP is master */
+	fmt =   SND_SOC_DAIFMT_DSP_A | SND_SOC_DAIFMT_NB_NF
 		| SND_SOC_DAIFMT_CBM_CFM;
 	ret = snd_soc_dai_set_fmt(be_cpu_dai, fmt);
 	if (ret < 0) {
 		pr_err("can't set cpu DAI configuration %d\n", ret);
 		return ret;
 	}
+
+	ret = snd_soc_dai_set_tdm_slot(be_cpu_dai, 0, 0, 1, 16);
 
 	return ret;
 
@@ -747,7 +750,7 @@ static int mrgfld_modem_loop_fixup(struct snd_soc_dai_link *dai_link,
 
 	/* The DSP will covert the FE rate to 48k, stereo, 24bits */
 	rate->min = rate->max = 48000;
-	channels->min = channels->max = 2;
+	channels->min = channels->max = 1;
 
 	snd_mask_none(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT));
 	snd_mask_set(hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT),
@@ -761,15 +764,16 @@ static int mrgfld_modem_loop_fixup(struct snd_soc_dai_link *dai_link,
 	}
 
 	/* SoC SSP is master, both BCLK and FS */
-	fmt =   SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF
+	/* bit clock inverse not required */
+	fmt =   SND_SOC_DAIFMT_DSP_A | SND_SOC_DAIFMT_NB_NF
 		| SND_SOC_DAIFMT_CBM_CFM;
 	ret = snd_soc_dai_set_fmt(cpu_dai, fmt);
 	if (ret < 0) {
-		pr_err("can't set format for CPU dai %s error %d\n",
-							cpu_dai->name, ret);
+		pr_err("can't set cpu DAI configuration %d\n", ret);
 		return ret;
 	}
-	/* TDM slot configuration is not required for I2S mode */
+
+	ret = snd_soc_dai_set_tdm_slot(cpu_dai, 0, 0, 1, 16);
 
 	return ret;
 
