@@ -24,6 +24,7 @@
 #include <linux/firmware.h>
 #include <linux/kernel.h>
 #include <linux/device.h>
+#include <sound/soc-hda-sst-ipc.h>
 #include <sound/soc-hda-sst-dsp.h>
 #include "soc-hda-sst-skl-fw.h"
 
@@ -77,24 +78,19 @@ int sst_skl_init(struct device *dev, void __iomem *mmio_base, int irq,
 
 	ctx->ops = skl_ops;
 
+	ret = sst_dsp_init(ctx);
+	if (ret < 0)
+		return ret;
+
 	ret = ctx->ops.load_fw(ctx);
 	if (ret < 0) {
 		dev_err(dev, "Load base fw failed : %x", ret);
-		goto base_fw_load_failed;
+		return ret;
 	}
-
-	ret = sst_dsp_init(ctx);
-	if (ret < 0)
-		goto base_fw_load_failed;
 
 	if (dsp)
 		*dsp = ctx;
 	return 0;
-
-base_fw_load_failed:
-	sst_disable_dsp_core(ctx);
-	kfree(ctx);
-	return ret;
 }
 EXPORT_SYMBOL_GPL(sst_skl_init);
 
@@ -194,6 +190,7 @@ static int sst_skl_load_base_firmware(struct sst_dsp_ctx *ctx)
 	struct sst_fw_image_manifest *manifest;
 	u32 reg;
 
+	ctx->ipc->boot_complete = false;
 	ret = sst_boot_dsp(ctx);
 	if (ret < 0) {
 		dev_err(ctx->dev, "Boot dsp core failed ret: %d", ret);
@@ -203,8 +200,13 @@ static int sst_skl_load_base_firmware(struct sst_dsp_ctx *ctx)
 	ret = request_firmware(&fw, "dsp_fw_release.bin", ctx->dev);
 	if (ret < 0) {
 		dev_err(ctx->dev, "Request firmware failed %d\n", ret);
-		goto sst_load_base_firmware_failed;
+		sst_disable_dsp_core(ctx);
+		return -EIO;
 	}
+
+	/*enable Interrupt */
+	ipc_int_enable(ctx);
+	ipc_op_int_enable(ctx);
 
 	/*check ROM Status */
 	for (i = SKL_ROM_INIT_DONE_TIMEOUT; i > 0; --i) {
@@ -217,7 +219,8 @@ static int sst_skl_load_base_firmware(struct sst_dsp_ctx *ctx)
 	if (!i) {
 		reg = sst_readl_alt(ctx, SKL_HDA_ADSP_REG_FW_STATUS);
 		dev_err(ctx->dev, "Timeout waiting for ROM init done, reg:0x%x\n", reg);
-		return -EIO;
+		ret = -EIO;
+		goto sst_load_base_firmware_failed;
 	}
 
 	manifest = (struct sst_fw_image_manifest *)fw->data;
@@ -233,11 +236,25 @@ static int sst_skl_load_base_firmware(struct sst_dsp_ctx *ctx)
 
 	ret = sst_skl_transfer_firmware(ctx, fw->data,
 			base_fw_size, fw_preload_page_count);
-	if (ret < 0)
+	if (ret < 0) {
 		dev_err(ctx->dev, "Transfer firmware failed%d\n", ret);
+		goto sst_load_base_firmware_failed;
+	} else {
+		dev_dbg(ctx->dev, "Download firmware successfull%d\n", ret);
+		/*FIXME - remove once firmware implementation is done
+		ret = wait_event_timeout(ctx->ipc->boot_wait, ctx->ipc->boot_complete,
+						msecs_to_jiffies(IPC_BOOT_MSECS));
+		if (ret == 0) {
+			dev_err(ctx->dev, "DSP boot failed, FW Ready timed-out\n");
+			ret = -EIO;
+			goto sst_load_base_firmware_failed;
+		} */
+	}
+	release_firmware(fw);
 	return 0;
 
 sst_load_base_firmware_failed:
+	sst_disable_dsp_core(ctx);
 	release_firmware(fw);
 	return ret;
 }
