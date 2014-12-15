@@ -46,6 +46,7 @@ config SND_SOC_HDA_MRGFLD_MACH
 	select MFD_FLORIDA
 	select REGULATOR_ARIZONA
 	select GPIO_ARIZONA
+	select SND_SOC_HDMI
 	select SND_SOC_HDA_BUS
 	help
 	This adds support for ASoC machine driver . This will create an alsa
