@@ -2415,11 +2415,11 @@ static struct hdmi_patch cougarpoint_drv_data = {
 static struct hdmi_patch pantherpoint_drv_data = {
 	.patch = &patch_intel_hdmi,
 };
-
 static const struct snd_soc_hda_device_id hdmi_list[] = {
 	{ .id = 0x80862805, .addr = 0, .name = "CougarPoint HDMI", (kernel_ulong_t)&cougarpoint_drv_data},
 	{ .id = 0x80862806, .addr = 0, .name = "PantherPoint HDMI", (kernel_ulong_t)&pantherpoint_drv_data},
 	{ .id = 0x8086280a, .addr = 0, .name = "CougarPoint HDMI", (kernel_ulong_t)&cougarpoint_drv_data},
+	{ .id = 0x80862809, .addr = 0, .name = "Skylake HDMI", (kernel_ulong_t)&cougarpoint_drv_data},
 	{},
 };
 

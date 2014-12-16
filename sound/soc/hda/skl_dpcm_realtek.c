@@ -37,10 +37,10 @@ static const struct snd_soc_dapm_route skl_map[] = {
 	{ "dmic01_hifi", NULL, "DMIC01 Rx"},
 	{ "dmic23_hifi", NULL, "DMIC23 Rx"},
 	{ "DMIC01 Rx", NULL, "Dummy Capture"},
-	{ "DMIC23 Rx", NULL, "Dummy Capture"}
+	{ "DMIC23 Rx", NULL, "Dummy Capture"},
 
-	/*{ "hif1", NULL, "iDisp Tx"},
-	{ "iDisp Tx", NULL, "iDisp_out"},*/
+	{ "hif1", NULL, "iDisp Tx"},
+	{ "iDisp Tx", NULL, "iDisp_out"},
 
 };
 
@@ -115,7 +115,7 @@ struct snd_soc_dai_link skl_audio_msic_dailink[] = {
 		.ignore_suspend = 1,
 		.dynamic = 1,
 	},
-/*	{
+	{
 		.name = "Skl HDMI Port",
 		.stream_name = "Hdmi",
 		.cpu_dai_name = "System Pin",
@@ -125,7 +125,7 @@ struct snd_soc_dai_link skl_audio_msic_dailink[] = {
 		.init = NULL,
 		.ignore_suspend = 1,
 		.dynamic = 1,
-	},*/
+	},
 	{
 		.name = "Skl Audio Refrence cap",
 		.stream_name = "refcap",
@@ -179,35 +179,35 @@ struct snd_soc_dai_link skl_audio_msic_dailink[] = {
 		.ignore_suspend = 1,
 		.no_pcm = 1,
 	},
-	/*{
+	{
 		.name = "iDisp",
 		.be_id = 5,
 		.cpu_dai_name = "iDisp Pin",
-		.codec_name = "codec#001.1",
+		.codec_name = "codec#002.2",
 		.codec_dai_name = "intel-hdmi-hif1",
 		.platform_name = "0000:00:1f.3",
 		.ignore_suspend = 1,
 		.no_pcm = 1,
-	},*/
-	{
-	.name = "dmic01",
-	.be_id = 5,
-	.cpu_dai_name = "DMIC01 Pin",
-	.codec_name = "snd-soc-dummy",
-	.codec_dai_name = "snd-soc-dummy-dai",
-	.platform_name = "0000:00:1f.3",
-	.ignore_suspend = 1,
-	.no_pcm = 1,
 	},
 	{
-	.name = "dmic23",
-	.be_id = 6,
-	.cpu_dai_name = "DMIC23 Pin",
-	.codec_name = "snd-soc-dummy",
-	.codec_dai_name = "snd-soc-dummy-dai",
-	.platform_name = "0000:00:1f.3",
-	.ignore_suspend = 1,
-	.no_pcm = 1,
+		.name = "dmic01",
+		.be_id = 6,
+		.cpu_dai_name = "DMIC01 Pin",
+		.codec_name = "snd-soc-dummy",
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.platform_name = "0000:00:1f.3",
+		.ignore_suspend = 1,
+		.no_pcm = 1,
+	},
+	{
+		.name = "dmic23",
+		.be_id = 7,
+		.cpu_dai_name = "DMIC23 Pin",
+		.codec_name = "snd-soc-dummy",
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.platform_name = "0000:00:1f.3",
+		.ignore_suspend = 1,
+		.no_pcm = 1,
 	},
 };
 
