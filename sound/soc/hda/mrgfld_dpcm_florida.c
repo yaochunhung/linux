@@ -882,6 +882,7 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 		.codec_name = "snd-soc-dummy",
 		.codec_dai_name = "snd-soc-dummy-dai",
 		.platform_name = "0000:02:18.0",
+		.dpcm_playback = 1,
 		.ignore_suspend = 1,
 		.dynamic = 1,
 		.ops = &morg_florida_ops,
@@ -896,6 +897,7 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 		.ignore_suspend = 1,
 		.dynamic = 1,
 		.ops = &morg_florida_ops,
+		.dpcm_playback = 1,
 	},
 	{
 		.name = "Bxtn Compress Port",
@@ -940,6 +942,7 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 		.init = NULL,
 		.ignore_suspend = 1,
 		.dynamic = 1,
+		.dpcm_capture = 1,
 	},
 	/* CODEC<->CODEC link */
 	{
