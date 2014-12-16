@@ -533,14 +533,19 @@ static void hda_sst_update_cpr_ssp_id(struct snd_soc_dapm_widget *w,
 static void hda_update_buffer_size(struct sst_dsp_ctx *ctx,
 				struct module_config *mcfg)
 {
+	int multiplier = 1;
 
+	if (mcfg->id.module_id == SRCINT_MODULE)
+		multiplier = 5;
 	mcfg->ibs = (mcfg->in_fmt.sampling_freq / 1000) *
 				(mcfg->in_fmt.channels) *
-				(mcfg->in_fmt.bit_depth >> 3);
+				(mcfg->in_fmt.bit_depth >> 3) *
+				multiplier;
 
 	mcfg->obs = (mcfg->out_fmt.sampling_freq / 1000) *
 				(mcfg->out_fmt.channels) *
-				(mcfg->out_fmt.bit_depth >> 3);
+				(mcfg->out_fmt.bit_depth >> 3) *
+				multiplier;
 }
 
 static void hda_sst_configure_widget(struct snd_soc_dapm_widget *w,
