@@ -84,6 +84,11 @@ struct bind_unbind_msg {
 
 #define IPC_BOOT_MSECS          3000
 
+struct dxstate_info {
+	u32 core_mask;
+	u32 dx_mask;
+};
+
 irqreturn_t sst_irq_thread_handler(int irq, void *context);
 
 int ipc_tx_message_wait(struct ipc *sst_ipc,
@@ -103,6 +108,8 @@ int ipc_init_instance(struct ipc *sst_ipc, struct init_instance_msg *msg,
 
 int ipc_bind_unbind(struct ipc *sst_ipc, struct bind_unbind_msg *msg);
 
+int ipc_set_dx(struct ipc *ipc, u8 instance_id, u16 module_id,
+		struct dxstate_info *dx);
 void ipc_int_enable(struct sst_dsp_ctx *dsp);
 void ipc_op_int_enable(struct sst_dsp_ctx *ctx);
 void ipc_int_disable(struct sst_dsp_ctx *dsp);

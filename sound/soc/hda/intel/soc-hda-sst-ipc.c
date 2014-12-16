@@ -146,6 +146,12 @@
 #define IPC_SRC_QUEUE(x)	(((x) & IPC_SRC_QUEUE_MASK) \
 				<< IPC_SRC_QUEUE_SHIFT)
 
+/*Save pipeline messgae extension register */
+#define IPC_DMA_ID_SHIFT	0
+#define IPC_DMA_ID_MASK		0x1F
+#define IPC_DMA_ID(x)		(((x) & IPC_DMA_ID_MASK) \
+				<< IPC_DMA_ID_SHIFT)
+
 #define W0_SIZE			2048
 #define W1_SIZE			4096
 
@@ -232,7 +238,8 @@ enum ipc_module_msg {
 	IPC_MODULE_LARGE_CONFIG_GET = 3,
 	IPC_MODULE_LARGE_CONFIG_SET = 4,
 	IPC_MODULE_BIND = 5,
-	IPC_MODULE_UNBIND = 6
+	IPC_MODULE_UNBIND = 6,
+	IPC_MODULE_SET_DX = 7
 };
 
 struct ipc_message {
@@ -743,6 +750,73 @@ int ipc_set_pipeline_state(struct ipc *ipc, u8 instance_id,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(ipc_set_pipeline_state);
+
+int ipc_save_pipeline(struct ipc *ipc, u8 instance_id, int dma_id)
+{
+	struct header header = {0};
+	int ret = 0;
+
+	header.primary = IPC_MSG_TARGET(IPC_FW_GEN_MSG);
+	header.primary |= IPC_MSG_DIR(IPC_MSG_REQUEST);
+	header.primary |= IPC_GLB_TYPE(IPC_GLB_SAVE_PIPELINE);
+	header.primary |= IPC_INSTANCE_ID(instance_id);
+
+	header.extension = IPC_DMA_ID(dma_id);
+	dev_dbg(ipc->dev, "In %s header=%d\n", __func__, header.primary);
+	ret = ipc_tx_message_wait(ipc, header, NULL, 0, NULL, 0);
+	if (ret < 0) {
+		dev_err(ipc->dev, "ipc: save pipeline failed, err: 0x%x\n", ret);
+		return ret;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(ipc_save_pipeline);
+
+int ipc_restore_pipeline(struct ipc *ipc, u8 instance_id)
+{
+	struct header header = {0};
+	int ret = 0;
+
+	header.primary = IPC_MSG_TARGET(IPC_FW_GEN_MSG);
+	header.primary |= IPC_MSG_DIR(IPC_MSG_REQUEST);
+	header.primary |= IPC_GLB_TYPE(IPC_GLB_RESTORE_PIPELINE);
+	header.primary |= IPC_INSTANCE_ID(instance_id);
+
+	dev_dbg(ipc->dev, "In %s header=%d\n", __func__, header.primary);
+	ret = ipc_tx_message_wait(ipc, header, NULL, 0, NULL, 0);
+	if (ret < 0) {
+		dev_err(ipc->dev, "ipc: restore  pipeline failed, err: 0x%x\n", ret);
+		return ret;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(ipc_restore_pipeline);
+
+int ipc_set_dx(struct ipc *ipc, u8 instance_id, u16 module_id,
+		struct dxstate_info *dx)
+{
+	struct header header = {0};
+	int ret = 0;
+
+	header.primary = IPC_MSG_TARGET(IPC_MODULE_MSG);
+	header.primary |= IPC_MSG_DIR(IPC_MSG_REQUEST);
+	header.primary |= IPC_GLB_TYPE(IPC_MODULE_SET_DX);
+	header.primary |= IPC_MODULE_INSTANCE_ID(instance_id);
+	header.primary |= IPC_MODULE_ID(module_id);
+
+	dev_dbg(ipc->dev, "In %s primary =%x ext=%x\n", __func__,
+			 header.primary, header.extension);
+	ret = ipc_tx_message_wait(ipc, header, (void *)dx, sizeof(dx),
+		NULL, 0);
+	if (ret < 0) {
+		dev_err(ipc->dev, "ipc: set dx failed\n");
+		return ret;
+	}
+
+	return ret;
+}
 
 int ipc_init_instance(struct ipc *ipc, struct init_instance_msg *msg,
 	void *param_data)
