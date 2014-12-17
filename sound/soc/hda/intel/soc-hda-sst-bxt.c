@@ -252,6 +252,7 @@ static int sst_bxt_set_dsp_D0(struct sst_dsp_ctx *ctx)
 		sst_disable_dsp_core(ctx);
 		return ret;
 	}
+	sst_dsp_set_state_locked(ctx, SST_DSP_RUNNING);
 	return ret;
 }
 
@@ -261,6 +262,9 @@ static int sst_bxt_set_dsp_D3(struct sst_dsp_ctx *ctx)
 	struct dxstate_info dx;
 
 	dev_dbg(ctx->dev, "In %s:\n", __func__);
+
+	if (!sst_dsp_is_running(ctx))
+		return ret;
 
 	dx.core_mask = DSP_CORES_MASK;
 	dx.dx_mask = ADSP_IPC_D3_MASK;
@@ -278,6 +282,7 @@ static int sst_bxt_set_dsp_D3(struct sst_dsp_ctx *ctx)
 		dev_err(ctx->dev, "disbale dsp core failed ret: %d\n", ret);
 		ret = -EIO;
 	}
+	sst_dsp_set_state_locked(ctx, SST_DSP_RESET);
 	return 0;
 }
 
@@ -324,6 +329,7 @@ static int sst_bxt_load_base_firmware(struct sst_dsp_ctx *ctx)
 			sst_disable_dsp_core(ctx);
 			ret = -EIO;
 		}
+		sst_dsp_set_state_locked(ctx, SST_DSP_RUNNING);
 	}
 
 sst_load_base_firmware_failed:

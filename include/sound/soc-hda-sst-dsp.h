@@ -374,12 +374,29 @@ struct sst_dsp_ctx {
 	struct ipc *ipc;
 	void __iomem *mmio_base;
 	struct sst_window window;
-	spinlock_t reg_lock;
 	int irq;
 	struct sst_dsp_loader_ops  dsp_ops;
 	struct sst_ops ops;
 	struct snd_dma_buffer dsp_fw_buf;
+	int sst_state;
+	struct mutex sst_lock;
+	spinlock_t reg_lock;
+	const struct firmware *fw;
+
 };
+
+enum sst_states {
+	SST_DSP_RUNNING = 1,
+	SST_DSP_RESET
+};
+
+static inline void
+sst_dsp_set_state_locked(struct sst_dsp_ctx *ctx, int state)
+{
+	mutex_lock(&ctx->sst_lock);
+	ctx->sst_state = state;
+	mutex_unlock(&ctx->sst_lock);
+}
 
 int sst_load_skl_base_firmware(struct sst_dsp_ctx *ctx);
 int sst_load_bxt_base_firmware(struct sst_dsp_ctx *ctx);
@@ -428,5 +445,5 @@ int sst_register_poll(struct sst_dsp_ctx  *ctx, u32 offset, u32 mask,
 int sst_enable_dsp_core(struct sst_dsp_ctx  *ctx);
 int sst_disable_dsp_core(struct sst_dsp_ctx  *ctx);
 int sst_dsp_set_power_state(struct sst_dsp_ctx *ctx, int state);
-
+bool sst_dsp_is_running(struct sst_dsp_ctx *ctx);
 #endif /*__HDA_SST_DSP_H__*/

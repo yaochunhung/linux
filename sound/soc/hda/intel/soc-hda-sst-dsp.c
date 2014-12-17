@@ -383,6 +383,9 @@ int sst_dsp_init(struct sst_dsp_ctx *ctx)
 {
 	int ret = 0;
 
+	mutex_init(&ctx->sst_lock);
+	spin_lock_init(&ctx->reg_lock);
+
 	/* initialize IPC */
 	ctx->ipc = ipc_init(ctx->dev, ctx);
 	if (ctx->ipc == NULL)
@@ -402,6 +405,7 @@ int sst_dsp_free(struct sst_dsp_ctx *dsp)
 
 	free_irq(dsp->irq, dsp);
 	ipc_free(dsp->ipc);
+	sst_disable_dsp_core(dsp);
 	kfree(dsp);
 	return ret;
 }
@@ -420,6 +424,18 @@ int sst_dsp_set_power_state(struct sst_dsp_ctx *ctx, int state)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(sst_dsp_set_power_state);
+
+bool sst_dsp_is_running(struct sst_dsp_ctx *ctx)
+{
+	bool ret = 0;
+
+	mutex_lock(&ctx->sst_lock);
+	ret = (ctx->sst_state == SST_DSP_RUNNING) ? 1 : 0;
+	mutex_unlock(&ctx->sst_lock);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(sst_dsp_is_running);
 
 /*
  * interrupt handler
