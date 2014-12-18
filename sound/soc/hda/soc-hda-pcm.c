@@ -23,7 +23,6 @@
 #include <linux/io.h>
 #include <linux/device.h>
 #include <linux/pci.h>
-#include <linux/pm_runtime.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -140,13 +139,6 @@ static int soc_hda_pcm_open(struct snd_pcm_substream *substream,
 
 	dev_dbg(chip->dev, "%s: %s\n", __func__, dai->name);
 	mutex_lock(&chip->open_mutex);
-	pm_runtime_get_sync(dai->dev);
-	/*dsp is running*/
-	if (!azx_is_dsp_running(chip)) {
-		mutex_unlock(&chip->open_mutex);
-		return -EAGAIN;
-	}
-
 	azx_dev = soc_azx_assign_device(chip, substream);
 	if (azx_dev == NULL) {
 		mutex_unlock(&chip->open_mutex);
@@ -269,7 +261,6 @@ static void soc_hda_pcm_close(struct snd_pcm_substream *substream,
 	soc_azx_release_device(azx_dev);
 	dma_params  = (struct snd_soc_hda_dma_params *)
 			snd_soc_dai_get_dma_data(dai, substream);
-	pm_runtime_put_sync(dai->dev);
 	kfree(dma_params);
 	mutex_unlock(&chip->open_mutex);
 }
@@ -311,24 +302,6 @@ static int hda_be_ssp_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int hda_be_ssp_startup(struct snd_pcm_substream *substream,
-		struct snd_soc_dai *dai)
-{
-	struct azx *chip = dev_get_drvdata(dai->dev);
-
-	pm_runtime_get_sync(dai->dev);
-	/*dsp is running*/
-	if (azx_is_dsp_running(chip))
-		return 0;
-	return -EAGAIN;
-}
-
-static void hda_be_ssp_shutdown(struct snd_pcm_substream *substream,
-		struct snd_soc_dai *dai)
-{
-	pm_runtime_put_sync(dai->dev);
-}
-
 static int hda_be_dmic_prepare(struct snd_pcm_substream *substream,
 				struct snd_soc_dai *dai)
 {
@@ -347,24 +320,6 @@ static int hda_be_dmic_prepare(struct snd_pcm_substream *substream,
 					substream->runtime->format);
 	hda_sst_set_be_dmic_config(dai, &params, substream->stream);
 	return 0;
-}
-
-static int hda_be_dmic_startup(struct snd_pcm_substream *substream,
-		struct snd_soc_dai *dai)
-{
-	struct azx *chip = dev_get_drvdata(dai->dev);
-
-	pm_runtime_get_sync(dai->dev);
-	/*dsp is running*/
-	if (azx_is_dsp_running(chip))
-		return 0;
-	return -EAGAIN;
-}
-
-static void hda_be_dmic_shutdown(struct snd_pcm_substream *substream,
-		struct snd_soc_dai *dai)
-{
-	pm_runtime_put_sync(dai->dev);
 }
 
 static int soc_hda_pcm_trigger(struct snd_pcm_substream *substream, int cmd,
@@ -552,24 +507,6 @@ static int soc_hda_be_link_hw_free(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int soc_hda_be_link_startup(struct snd_pcm_substream *substream,
-		struct snd_soc_dai *dai)
-{
-	struct azx *chip = dev_get_drvdata(dai->dev);
-
-	pm_runtime_get_sync(dai->dev);
-	/*dsp is running*/
-	if (azx_is_dsp_running(chip))
-		return 0;
-	return -EAGAIN;
-}
-
-static void soc_hda_be_link_shutdown(struct snd_pcm_substream *substream,
-		struct snd_soc_dai *dai)
-{
-	pm_runtime_put_sync(dai->dev);
-}
-
 static struct snd_soc_dai_ops hda_pcm_dai_ops = {
 	.startup = soc_hda_pcm_open,
 	.shutdown = soc_hda_pcm_close,
@@ -580,9 +517,7 @@ static struct snd_soc_dai_ops hda_pcm_dai_ops = {
 };
 
 static struct snd_soc_dai_ops hda_be_dmic_dai_ops = {
-	.startup = hda_be_dmic_startup,
 	.prepare = hda_be_dmic_prepare,
-	.shutdown = hda_be_dmic_shutdown,
 };
 
 static struct snd_soc_dai_ops hda_be_dai_ops = {
@@ -590,20 +525,15 @@ static struct snd_soc_dai_ops hda_be_dai_ops = {
 };
 
 static struct snd_soc_dai_ops hda_be_ssp_dai_ops = {
-	.startup = hda_be_ssp_startup,
 	.hw_params = hda_be_ssp_hw_params,
-	.shutdown = hda_be_ssp_shutdown,
 };
 
 static struct snd_soc_dai_ops hda_be_link_dai_ops = {
-	.startup = soc_hda_be_link_startup,
 	.prepare = soc_hda_be_link_pcm_prepare,
 	.hw_params = soc_hda_be_link_hw_params,
 	.hw_free = soc_hda_be_link_hw_free,
 	.trigger = soc_hda_be_link_pcm_trigger,
-	.shutdown = soc_hda_be_link_shutdown,
 };
-
 static struct snd_soc_dai_driver soc_hda_platform_dai[] = {
 {
 	.name = "System Pin",
