@@ -264,7 +264,7 @@ static int hda_sst_src_bind_unbind_modules(struct snd_soc_dapm_widget *w,
 			&& (is_hda_widget_type(w)))
 			continue;
 		dev_dbg(ctx->dev, "%s: SINK for  sink widget = %s\n", __func__, w->name);
-		if (p->connect && (p->source->power == bind) &&
+		if (p->connect && (p->source->new_power == bind) &&
 			(p->source->priv != NULL) &&
 			 (!is_hda_widget_type(p->source))) {
 			src_module = p->source->priv;
@@ -300,7 +300,7 @@ static int hda_sst_src_bind_unbind_modules(struct snd_soc_dapm_widget *w,
 			continue;
 
 		dev_dbg(ctx->dev, "%s: SRC for  sink widget = %s\n", __func__, w->name);
-		if (p->connect && (p->sink->power == bind) &&
+		if (p->connect && (p->sink->new_power == bind) &&
 			(p->sink->priv != NULL) &&
 			(!is_hda_widget_type(p->sink))) {
 			src_module = p->sink->priv;
