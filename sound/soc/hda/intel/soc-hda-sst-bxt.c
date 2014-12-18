@@ -27,6 +27,7 @@
 #include <asm/cacheflush.h>
 #include <sound/soc-hda-sst-ipc.h>
 #include <sound/soc-hda-sst-dsp.h>
+#include <sound/soc-hda-sst-ipc.h>
 #include "soc-hda-sst-bxt-fw.h"
 
 #define BXT_FW_ROM_BASEFW_ENTERED_TIMEOUT	300
@@ -45,11 +46,13 @@
 #define BXT_HDA_ADSP_REG_FW_STATUS	BXT_HDA_ADSP_SRAM0_BASE
 
 static int sst_bxt_load_base_firmware(struct sst_dsp_ctx *ctx);
+static int sst_bxt_set_dsp_D0(struct sst_dsp_ctx *ctx);
+static int sst_bxt_set_dsp_D3(struct sst_dsp_ctx *ctx);
 
 static struct sst_ops bxt_ops = {
-	/*.parse_fw = sst_bxt_parse_fw_image,
+	/*.parse_fw = sst_bxt_parse_fw_image,*/
 	.set_state_D0 = sst_bxt_set_dsp_D0,
-	.set_state_D3 = sst_bxt_set_dsp_D3,*/
+	.set_state_D3 = sst_bxt_set_dsp_D3,
 	.load_fw = sst_bxt_load_base_firmware,
 };
 
@@ -208,6 +211,74 @@ static int sst_transfer_fw_host_dma(struct sst_dsp_ctx *ctx, const void *fwdata,
 	ctx->dsp_ops.cleanup(ctx->dev, &dmab);
 
 	return ret;
+}
+
+#define INSTANCE_ID 0
+#define FW_MODULE_ID 0
+
+static int sst_bxt_set_dsp_D0(struct sst_dsp_ctx *ctx)
+{
+	int ret = 0;
+	struct dxstate_info dx;
+
+	dev_dbg(ctx->dev, "In %s:\n", __func__);
+
+	ctx->ipc->boot_complete = false;
+	dx.core_mask = DSP_CORES_MASK;
+	dx.dx_mask = ADSP_IPC_D0_MASK;
+
+	dev_dbg(ctx->dev, "core mask=%x dx_mask=%x\n",
+				dx.core_mask, dx.dx_mask);
+	ret = sst_enable_dsp_core(ctx);
+	if (ret < 0) {
+		dev_err(ctx->dev, "enable dsp core failed ret: %d\n", ret);
+		return ret;
+	}
+
+	/*enable interrupt*/
+	ipc_int_enable(ctx);
+	ipc_op_int_enable(ctx);
+
+	ret = wait_event_timeout(ctx->ipc->boot_wait, ctx->ipc->boot_complete,
+					msecs_to_jiffies(IPC_BOOT_MSECS));
+	if (ret == 0) {
+		dev_err(ctx->dev, "ipc: error DSP boot timeout\n");
+		return -EIO;
+	}
+
+	ret = ipc_set_dx(ctx->ipc, INSTANCE_ID, FW_MODULE_ID, &dx);
+	if (ret < 0) {
+		dev_err(ctx->dev, "Failed to set DSP to D0 state\n");
+		sst_disable_dsp_core(ctx);
+		return ret;
+	}
+	return ret;
+}
+
+static int sst_bxt_set_dsp_D3(struct sst_dsp_ctx *ctx)
+{
+	int ret = 0;
+	struct dxstate_info dx;
+
+	dev_dbg(ctx->dev, "In %s:\n", __func__);
+
+	dx.core_mask = DSP_CORES_MASK;
+	dx.dx_mask = ADSP_IPC_D3_MASK;
+
+	dev_dbg(ctx->dev, "core mask=%x dx_mask=%x\n",
+				 dx.core_mask, dx.dx_mask);
+	ret = ipc_set_dx(ctx->ipc, INSTANCE_ID, FW_MODULE_ID, &dx);
+	if (ret < 0) {
+		dev_err(ctx->dev, "Failed to set DSP to D0 state\n");
+		return ret;
+	}
+
+	ret = sst_disable_dsp_core(ctx);
+	if (ret < 0) {
+		dev_err(ctx->dev, "disbale dsp core failed ret: %d\n", ret);
+		ret = -EIO;
+	}
+	return 0;
 }
 
 static int sst_bxt_load_base_firmware(struct sst_dsp_ctx *ctx)

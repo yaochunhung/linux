@@ -407,6 +407,20 @@ int sst_dsp_free(struct sst_dsp_ctx *dsp)
 }
 EXPORT_SYMBOL_GPL(sst_dsp_free);
 
+int sst_dsp_set_power_state(struct sst_dsp_ctx *ctx, int state)
+{
+	int ret = 0;
+
+	if (state == SST_DSP_POWER_D0)
+		ret = ctx->ops.set_state_D0(ctx);
+	else if (state == SST_DSP_POWER_D3)
+		ret = ctx->ops.set_state_D3(ctx);
+	else
+		dev_err(ctx->dev, "Power State=%x not supported", state);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(sst_dsp_set_power_state);
+
 /*
  * interrupt handler
  */

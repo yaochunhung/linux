@@ -89,6 +89,9 @@ struct dxstate_info {
 	u32 dx_mask;
 };
 
+#define ADSP_IPC_D3_MASK   0
+#define ADSP_IPC_D0_MASK   3
+
 irqreturn_t sst_irq_thread_handler(int irq, void *context);
 
 int ipc_tx_message_wait(struct ipc *sst_ipc,

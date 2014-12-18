@@ -330,6 +330,9 @@
 #define HDA_ADSP_REG_ADSPCS_IMR_CACHED_TLB_START 0x100
 #define HDA_ADSP_REG_ADSPCS_IMR_UNCACHED_TLB_START 0x200
 
+#define SST_DSP_POWER_D0              0x0  /* full On */
+#define SST_DSP_POWER_D3              0x3  /* Off */
+
 /* sst definition */
 struct ipc;
 struct sst_dsp_ctx;
@@ -362,6 +365,8 @@ struct sst_ops {
 	int (*load_fw)(struct sst_dsp_ctx  *ctx);
 	/* FW module parser/loader */
 	int (*parse_fw)(struct sst_dsp_ctx *ctx);
+	int (*set_state_D0) (struct sst_dsp_ctx *ctx);
+	int (*set_state_D3) (struct sst_dsp_ctx *ctx);
 };
 
 struct sst_dsp_ctx {
@@ -422,5 +427,6 @@ int sst_register_poll(struct sst_dsp_ctx  *ctx, u32 offset, u32 mask,
 			 u32 expected_value, u32 timeout, char *operation);
 int sst_enable_dsp_core(struct sst_dsp_ctx  *ctx);
 int sst_disable_dsp_core(struct sst_dsp_ctx  *ctx);
+int sst_dsp_set_power_state(struct sst_dsp_ctx *ctx, int state);
 
 #endif /*__HDA_SST_DSP_H__*/
