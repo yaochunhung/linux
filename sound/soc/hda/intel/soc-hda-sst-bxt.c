@@ -224,8 +224,15 @@ static int sst_bxt_set_dsp_D0(struct sst_dsp_ctx *ctx)
 	dev_dbg(ctx->dev, "In %s:\n", __func__);
 
 	ctx->ipc->boot_complete = false;
-	dx.core_mask = DSP_CORES_MASK;
+	/*FIXME - setting both cores FW returns error, This will be
+	removed once we have the FW Fix. now we have to set core 1 to D0
+
+	dx.core_mask =  DSP_CORES_MASK;
 	dx.dx_mask = ADSP_IPC_D0_MASK;
+	*/
+
+	dx.core_mask =  2;
+	dx.dx_mask = 2;
 
 	dev_dbg(ctx->dev, "core mask=%x dx_mask=%x\n",
 				dx.core_mask, dx.dx_mask);
@@ -293,6 +300,8 @@ static int sst_bxt_load_base_firmware(struct sst_dsp_ctx *ctx)
 	u32 fw_preload_page_count = 0;
 	u32 base_fw_size = 0;
 	struct sst_fw_image_manifest *manifest;
+	struct dxstate_info dx;
+
 	ctx->ipc->boot_complete = false;
 
 	ret = request_firmware(&fw, "dsp_fw_release.bin", ctx->dev);
@@ -328,6 +337,19 @@ static int sst_bxt_load_base_firmware(struct sst_dsp_ctx *ctx)
 			dev_err(ctx->dev, "DSP boot failed, FW Ready timed-out\n");
 			sst_disable_dsp_core(ctx);
 			ret = -EIO;
+		}
+
+		/*FIXME - after firmware download is done, set the COre 1 to D0,
+		need to set it to D0, before setting the core 1 to D3
+		Need to removed once we have the FW Fix. now we have to set core 1 to D0 */
+		dx.core_mask = 2;
+		dx.dx_mask = 2;
+
+		ret = ipc_set_dx(ctx->ipc, INSTANCE_ID, FW_MODULE_ID, &dx);
+		if (ret < 0) {
+			dev_err(ctx->dev, "Failed to set DSP to D0 state\n");
+			release_firmware(fw);
+			return ret;
 		}
 		sst_dsp_set_state_locked(ctx, SST_DSP_RUNNING);
 	}
