@@ -52,6 +52,7 @@
 #include <sound/hda_dma.h>
 #include <sound/hda_verbs.h>
 #include <sound/soc-hda-bus.h>
+#include <sound/soc-hda-sst-dsp.h>
 #include "soc-hda-controller.h"
 
 static char *model;
@@ -455,6 +456,10 @@ static int azx_runtime_suspend(struct device *dev)
 	struct pci_dev *pci = to_pci_dev(dev);
 	struct azx *chip = pci_get_drvdata(pci);
 
+	struct snd_soc_azx *schip =
+			container_of(chip, struct snd_soc_azx, hda_azx);
+
+	dev_dbg(chip->dev, "in %s\n", __func__);
 	if (chip->disabled)
 		return 0;
 	if (!(chip->driver_caps & AZX_DCAPS_PM_RUNTIME))
@@ -463,7 +468,10 @@ static int azx_runtime_suspend(struct device *dev)
 	/* enable controller wake up event */
 	azx_writew(chip, WAKEEN, azx_readw(chip, WAKEEN) |
 		  STATESTS_INT_MASK);
-
+	if (chip->ppcap_offset) {
+		sst_dsp_set_power_state(schip->dsp, SST_DSP_POWER_D3);
+		azx_ppcap_int_enable(chip, false);
+	}
 	azx_stop_chip(chip);
 	azx_enter_link_reset(chip);
 	azx_clear_irq_pending(chip);
@@ -475,16 +483,15 @@ static int azx_runtime_resume(struct device *dev)
 	struct pci_dev *pci = to_pci_dev(dev);
 	struct azx *chip = pci_get_drvdata(pci);
 	int status;
+	struct snd_soc_azx *schip =
+			container_of(chip, struct snd_soc_azx, hda_azx);
 
+	dev_dbg(chip->dev, "in %s\n", __func__);
 	if (chip->disabled)
 		return 0;
 
 	if (!(chip->driver_caps & AZX_DCAPS_PM_RUNTIME))
 		return 0;
-
-	/*FIXME
-	if (chip->driver_caps & AZX_DCAPS_I915_POWERWELL)
-		hda_display_power(true);*/
 
 	/* Read STATESTS before controller reset */
 	status = azx_readw(chip, STATESTS);
@@ -495,6 +502,10 @@ static int azx_runtime_resume(struct device *dev)
 	azx_writew(chip, WAKEEN, azx_readw(chip, WAKEEN) &
 			~STATESTS_INT_MASK);
 
+	if (chip->ppcap_offset) {
+		azx_ppcap_int_enable(chip, true);
+		sst_dsp_set_power_state(schip->dsp, SST_DSP_POWER_D0);
+	}
 	return 0;
 }
 
@@ -1463,9 +1474,10 @@ static int azx_probe_continue(struct azx *chip)
 	chip->running = 1;
 	azx_notifier_register(chip);
 
-	if ((chip->driver_caps & AZX_DCAPS_PM_RUNTIME) || chip->use_vga_switcheroo)
+	if (chip->driver_caps & AZX_DCAPS_PM_RUNTIME) {
 		pm_runtime_put_noidle(&pci->dev);
-
+		pm_runtime_allow(&pci->dev);
+	}
 	complete_all(&chip->probe_wait);
 	return 0;
 
@@ -1571,6 +1583,10 @@ static DEFINE_PCI_DEVICE_TABLE(azx_ids) = {
 	{ PCI_DEVICE(0x8086, 0x3a6e),
 	  .driver_data = AZX_DRIVER_ICH | AZX_DCAPS_OLD_SSYNC |
 	  AZX_DCAPS_BUFSIZE },  /* ICH10 */
+	/* Brxtn */
+	{ PCI_DEVICE(0x8086, 0x0a98),
+	.driver_data = AZX_DRIVER_PCH | AZX_DCAPS_INTEL_PCH },
+	/* Haswell */
 	/* ValleyView FIXME
 	{ PCI_DEVICE(0x8086, 0x0f04),
 	  .driver_data = AZX_DRIVER_SCH | AZX_DCAPS_INTEL_VLV2 },*/

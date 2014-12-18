@@ -74,6 +74,14 @@ void azx_dsp_unregister(struct azx *chip)
 	return;
 }
 
+bool azx_is_dsp_running(struct azx *chip)
+{
+	struct snd_soc_azx *schip =
+			container_of(chip, struct snd_soc_azx, hda_azx);
+
+	return sst_dsp_is_running(schip->dsp);
+
+}
 int azx_load_i2s_machine(struct azx *chip)
 {
 	struct platform_device *pdev;

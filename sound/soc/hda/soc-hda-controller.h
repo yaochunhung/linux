@@ -89,5 +89,6 @@ int azx_free_dma_buf(struct device *dev,
 		struct snd_dma_buffer *dmab);
 
 int azx_load_dsp_init(struct device *dev);
+bool azx_is_dsp_running(struct azx *chip);
 
 #endif /* __SOUND_HDA_CONTROLLER_H */
