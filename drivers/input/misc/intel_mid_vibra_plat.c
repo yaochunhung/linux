@@ -15,7 +15,7 @@
 #include <linux/gpio.h>
 #include <linux/sfi.h>
 #include <linux/platform_device.h>
-#include <linux/input/intel_mid_vibra.h>
+#include "intel_mid_vibra.h"
 
 static struct mid_vibra_data bxtn_vibra_pdata = {
 	.time_divisor = 0x40,
