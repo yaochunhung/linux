@@ -369,6 +369,13 @@ struct sst_ops {
 	int (*set_state_D3) (struct sst_dsp_ctx *ctx);
 };
 
+struct sst_dsp_debug {
+#ifdef CONFIG_DEBUG_FS
+	struct dentry           *root;
+#endif
+	bool ipc_debug_enable;
+	int ipc_debug_count;
+};
 struct sst_dsp_ctx {
 	struct device *dev;
 	struct ipc *ipc;
@@ -382,7 +389,8 @@ struct sst_dsp_ctx {
 	struct mutex sst_lock;
 	spinlock_t reg_lock;
 	const struct firmware *fw;
-
+	/* Structure for handling debug related context */
+	struct sst_dsp_debug sst_dsp_debug;
 };
 
 enum sst_states {
@@ -446,4 +454,18 @@ int sst_enable_dsp_core(struct sst_dsp_ctx  *ctx);
 int sst_disable_dsp_core(struct sst_dsp_ctx  *ctx);
 int sst_dsp_set_power_state(struct sst_dsp_ctx *ctx, int state);
 bool sst_dsp_is_running(struct sst_dsp_ctx *ctx);
+#ifdef CONFIG_DEBUG_FS
+int sst_dsp_debugfs_init(struct sst_dsp_ctx *dsp);
+int sst_dsp_debugfs_uninit(struct sst_dsp_ctx *dsp);
+#else
+int sst_dsp_debugfs_init(struct sst_dsp_ctx *dsp)
+{
+	return 0;
+}
+int sst_dsp_debugfs_uninit(struct sst_dsp_ctx *dsp)
+{
+	return 0;
+}
+#endif
+
 #endif /*__HDA_SST_DSP_H__*/

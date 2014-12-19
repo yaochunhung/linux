@@ -351,6 +351,18 @@ int ipc_tx_message_wait(struct ipc *ipc,
 	struct header header, void *tx_data, size_t tx_bytes, void *rx_data,
 	size_t rx_bytes)
 {
+	struct sst_dsp_ctx *ctx = ipc->dsp;
+	int prev_count = ctx->sst_dsp_debug.ipc_debug_count;
+
+	/* If debug is enabled, code will sleep here before sending next
+	 * IPC to the DSP till debugfs is written with value other than
+	 * what its read.
+	 */
+	if (ctx->sst_dsp_debug.ipc_debug_enable) {
+		dev_info(ipc->dev, "IPC send waiting at count %d\n", prev_count);
+		while (ctx->sst_dsp_debug.ipc_debug_count == prev_count)
+			msleep(100);
+	}
 	return ipc_tx_message(ipc, header, tx_data, tx_bytes, rx_data,
 	rx_bytes, 1);
 }
@@ -665,6 +677,11 @@ struct ipc *ipc_init(struct device *dev,
 	}
 	init_kthread_work(&ipc->kwork, ipc_tx_msgs);
 
+	err = sst_dsp_debugfs_init(dsp);
+	if (err) {
+		dev_err(ipc->dev, "Error failed to init debugfs\n");
+		goto list_err;
+	}
 	return ipc;
 
 list_err:
@@ -674,6 +691,7 @@ list_err:
 
 void ipc_free(struct ipc *ipc)
 {
+	sst_dsp_debugfs_uninit(ipc->dsp);
 	/* Disable  IPC DONE interrupt */
 	sst_updatel_bits(ipc->dsp, HDA_ADSP_REG_HIPCCTL,
 		HDA_ADSP_REG_HIPCCTL_DONE, 0);
