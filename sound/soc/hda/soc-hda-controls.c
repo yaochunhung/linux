@@ -432,11 +432,13 @@ static void hda_dump_mconfig(struct sst_dsp_ctx *ctx,
 	dev_dbg(ctx->dev, "Input Format:\n");
 	dev_dbg(ctx->dev, "channels = %d\n", mcfg->in_fmt.channels);
 	dev_dbg(ctx->dev, "sampling_freq = %d\n", mcfg->in_fmt.sampling_freq);
+	dev_dbg(ctx->dev, "channel_config = %d\n", mcfg->in_fmt.channel_config);
 	dev_dbg(ctx->dev, "valid bit depth = %d\n", mcfg->in_fmt.valid_bit_depth);
 	dev_dbg(ctx->dev, "Output Format:\n");
 	dev_dbg(ctx->dev, "channels = %d\n", mcfg->out_fmt.channels);
 	dev_dbg(ctx->dev, "sampling_freq = %d\n", mcfg->out_fmt.sampling_freq);
 	dev_dbg(ctx->dev, "valid bit depth = %d\n", mcfg->out_fmt.valid_bit_depth);
+	dev_dbg(ctx->dev, "channel_config = %d\n", mcfg->out_fmt.channel_config);
 }
 static void hda_dump_dai_config(struct sst_dsp_ctx *ctx,
 					struct azx_dai_config *cfg)
@@ -465,6 +467,29 @@ static void hda_update_mconfig(struct module_format *fmt,
 		fmt->channels = ssp_cfg->num_channels;
 	if (params_fixup & CH_FIXUP_MASK)
 		fmt->channels = ssp_cfg->num_channels;
+
+}
+
+static void hda_update_ch_config(struct module_config *m_cfg)
+{
+	struct module_format *in_fmt, *out_fmt;
+
+	in_fmt = &m_cfg->in_fmt;
+	out_fmt = &m_cfg->out_fmt;
+
+	if (in_fmt->channels == 2) {
+		in_fmt->channel_config =  CHANNEL_CONFIG_STEREO;
+		if (out_fmt->channels == 1)
+			out_fmt->channel_config = CHANNEL_CONFIG_MONO;
+		if (out_fmt->channels == 2)
+			out_fmt->channel_config = CHANNEL_CONFIG_STEREO;
+	} else if (in_fmt->channels == 1) {
+		in_fmt->channel_config =  CHANNEL_CONFIG_MONO;
+			if (out_fmt->channels == 1)
+				out_fmt->channel_config = CHANNEL_CONFIG_MONO;
+			if (out_fmt->channels == 2)
+				out_fmt->channel_config = CHANNEL_CONFIG_STEREO;
+	}
 
 }
 
@@ -565,6 +590,8 @@ static void hda_sst_configure_widget(struct snd_soc_dapm_widget *w,
 		hda_update_mconfig(&m_cfg->out_fmt, dai_config,
 				(~m_cfg->converter) & m_cfg->params_fixup);
 	}
+
+	hda_update_ch_config(m_cfg);
 	hda_update_buffer_size(ctx, m_cfg);
 	if (regs)
 		azx_calculate_ssp_regs(ctx, dai_config,
