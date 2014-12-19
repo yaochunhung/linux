@@ -271,6 +271,70 @@ static void hda_sst_setup_cpr_out_format(struct sst_dsp_ctx *ctx,
 	return;
 }
 
+static int hda_sst_set_src_format(struct sst_dsp_ctx *ctx,
+	struct module_config *mconfig,
+	struct sst_src_module_config *src_mconfig,
+	u16 *config_size)
+{
+	int i = 0;
+	u32 *byte;
+	struct module_format *fmt = &mconfig->out_fmt;
+
+	hda_sst_set_base_module_format(ctx,
+		mconfig,
+		(struct sst_base_module_config *)src_mconfig,
+		config_size);
+
+	src_mconfig->src_config.s_freq = fmt->sampling_freq;
+
+	*config_size += sizeof(struct sst_src_config);
+
+	dev_dbg(ctx->dev, "SRC module config size: %d bytes\n", *config_size);
+	for (i = 0, byte = (u32 *) src_mconfig;
+		i < (*config_size)/sizeof(u32);
+		i++, byte++) {
+		dev_dbg(ctx->dev, "0x%x: %08x\n", i, *byte);
+	}
+	return 0;
+}
+
+static int hda_sst_set_updown_mixer_format(struct sst_dsp_ctx *ctx,
+	struct module_config *mconfig,
+	struct sst_up_down_mixer_module_config *mixer_mconfig,
+	u16 *config_size)
+{
+	int i = 0;
+	u32 *byte;
+	struct module_format *fmt = &mconfig->out_fmt;
+
+	hda_sst_set_base_module_format(ctx,
+		mconfig,
+		(struct sst_base_module_config *)mixer_mconfig,
+		config_size);
+	mixer_mconfig->out_channel_config = fmt->channel_config;
+
+	*config_size += sizeof(enum channel_config);
+
+	/* Select F/W defatult coefficient */
+	mixer_mconfig->coeff_sel = 0x0;
+	*config_size += sizeof(mixer_mconfig->coeff_sel);
+
+	/* User coeff, dont care since we are selecting F/W defaults */
+	for (i = 0; i < UP_DOWN_MIXER_MAX_COEFF; i++)
+		mixer_mconfig->coeff[i] = 0xDEADBEEF;
+
+	*config_size += sizeof(mixer_mconfig->coeff);
+
+	dev_dbg(ctx->dev, "Up Down mixer module config size: %d bytes\n",
+								*config_size);
+	for (i = 0, byte = (u32 *) mixer_mconfig;
+		i < (*config_size)/sizeof(u32);
+		i++, byte++) {
+		dev_dbg(ctx->dev, "0x%x: %08x\n", i, *byte);
+	}
+	return 0;
+}
+
 /*
  * copier_module_config is sent as input buffer with INIT_INSTANCE IPC msg
  */
@@ -317,15 +381,18 @@ static int hda_sst_set_module_format(struct sst_dsp_ctx *ctx,
 
 	memset(*param_data, 0, WINDOW1_SIZE);
 
-	if (module_config->id.module_id == COPIER_MODULE) {
+	if (module_config->id.module_id == COPIER_MODULE)
 		ret = hda_sst_set_copier_format(ctx, module_config,
 			*param_data, module_config_size);
-		if (ret < 0)
-			return ret;
-	} else {
+	else if (module_config->id.module_id == SRCINT_MODULE)
+		ret = hda_sst_set_src_format(ctx, module_config,
+			*param_data, module_config_size);
+	else if (module_config->id.module_id == UPDWMIX_MODULE)
+		ret = hda_sst_set_updown_mixer_format(ctx, module_config,
+			*param_data, module_config_size);
+	else
 		hda_sst_set_base_module_format(ctx,
 			module_config, *param_data, module_config_size);
-	}
 
 	return ret;
 }

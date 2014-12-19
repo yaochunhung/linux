@@ -26,6 +26,9 @@
 
 #define BITS_PER_BYTE 8
 
+/* Maximum number of coefficients up down mixer module */
+#define UP_DOWN_MIXER_MAX_COEFF		6
+
 enum channel_index {
 	CHANNEL_LEFT = 0,
 	CHANNEL_CENTER = 1,
@@ -108,6 +111,24 @@ struct sst_copier_module_config {
 	struct audio_data_format out_fmt;
 	u32 cpr_feature_mask;
 	struct sst_copiergateway_cfg gtw_cfg;
+} __packed;
+
+struct sst_src_config {
+	enum sampling_frequency s_freq;
+} __packed;
+
+struct sst_src_module_config {
+	struct sst_base_module_config base_module_config;
+	struct sst_src_config src_config;
+} __packed;
+
+struct sst_up_down_mixer_module_config {
+	struct sst_base_module_config base_module_config;
+	enum channel_config out_channel_config;
+	/* This should be set to 1 if user coefficients are required */
+	u32 coeff_sel;
+	/* Pass the user coeff in this array */
+	s32 coeff[UP_DOWN_MIXER_MAX_COEFF];
 } __packed;
 
 enum dma_type {
