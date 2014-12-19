@@ -636,14 +636,16 @@ static int hda_sst_dapm_post_pmu_event(struct snd_soc_dapm_widget *w,
 	struct sst_pipeline *ppl, *__ppl;
 	int ret = 0;
 	int bind_done = 0;
+	enum sst_module_state prev_m_state;
 
 	dev_dbg(ctx->dev, "%s: widget = %s\n", __func__, w->name);
 
 	/*bind modules pipes*/
 	if (w_type == HDA_SST_WIDGET_PGA) {
 		/*bind module */
+		prev_m_state = mconfig->m_state;
 		ret = hda_sst_src_bind_unbind_modules(w, ctx, true, true);
-		if (mconfig->m_state == BIND_DONE)
+		if (mconfig->m_state == BIND_DONE && prev_m_state != BIND_DONE)
 			bind_done = 1;
 	}
 
