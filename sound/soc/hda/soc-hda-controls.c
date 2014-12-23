@@ -470,6 +470,35 @@ static void hda_update_mconfig(struct module_format *fmt,
 
 }
 
+static void hda_update_slot_map(struct sst_dsp_ctx *ctx,
+					struct module_config *m_cfg)
+{
+	int slot_map = 0xFFFFFFFF;
+	int num_slots = 0, i;
+	int start_slot;
+
+	start_slot = m_cfg->formats_config.caps[(1 << (m_cfg->time_slot)) - 1];
+	start_slot &= 0xF;
+
+	if (m_cfg->hw_conn_type == SOURCE)
+		num_slots = m_cfg->in_fmt.channels;
+	else
+		num_slots = m_cfg->out_fmt.channels;
+
+	for (i = 0; i < num_slots; i++) {
+		/*
+		 * For 2 channels with starting slot as 0, slot map will
+		 * look like 0xFFFFFF10, for 4 channels with starting slot
+		 * as 2, slot map will look like 0xFFFF5432
+		 *
+		 */
+		slot_map &= (~(0xF << (4 * i)) | (start_slot << (4 * i)));
+		start_slot++;
+	}
+	dev_dbg(ctx->dev, "slot_map = %x\n", slot_map);
+	m_cfg->formats_config.caps[(1 << (m_cfg->time_slot)) - 1] = slot_map;
+}
+
 static void hda_update_ch_config(struct module_config *m_cfg)
 {
 	struct module_format *in_fmt, *out_fmt;
@@ -598,9 +627,12 @@ static void hda_sst_configure_widget(struct snd_soc_dapm_widget *w,
 
 	hda_update_ch_config(m_cfg);
 	hda_update_buffer_size(ctx, m_cfg);
-	if (regs)
+	if (regs) {
+		/* Slot map only needs to be updated for copier */
+		hda_update_slot_map(ctx, m_cfg);
 		azx_calculate_ssp_regs(ctx, dai_config,
 				&regs[REGS_OFFSET_CPR_BLOB]);
+	}
 	dev_dbg(ctx->dev, "Mconfig for widget  %s AFTER updation\n", w->name);
 	hda_dump_mconfig(ctx, m_cfg);
 	hda_dump_dai_config(ctx, dai_config);
