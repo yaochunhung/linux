@@ -672,6 +672,9 @@ struct snd_soc_dai_link {
 	unsigned int symmetric_channels:1;
 	unsigned int symmetric_samplebits:1;
 
+	/* Mark this pcm with non atomic trigger */
+	bool nonatomic;
+
 	/* Do not create a PCM for this DAI link (Backend link) */
 	unsigned int no_pcm:1;
 
