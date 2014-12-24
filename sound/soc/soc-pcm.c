@@ -252,10 +252,10 @@ static void soc_pcm_init_runtime_hw(struct snd_pcm_runtime *runtime,
 
 	snd_pcm_limit_hw_rates(runtime);
 
-	/*hw->rate_min = max(hw->rate_min, cpu_stream->rate_min);
+	hw->rate_min = max(hw->rate_min, cpu_stream->rate_min);
 	hw->rate_min = max(hw->rate_min, codec_stream->rate_min);
 	hw->rate_max = min_not_zero(hw->rate_max, cpu_stream->rate_max);
-	hw->rate_max = min_not_zero(hw->rate_max, codec_stream->rate_max);*/
+	hw->rate_max = min_not_zero(hw->rate_max, codec_stream->rate_max);
 }
 
 /*
