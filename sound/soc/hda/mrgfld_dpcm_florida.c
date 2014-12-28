@@ -1032,6 +1032,7 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 		.platform_name = "0000:02:18.0",
 		.ignore_suspend = 1,
 		.no_pcm = 1,
+		.dpcm_capture = 1,
 	},
 	{
 		.name = "dmic23",
@@ -1042,6 +1043,7 @@ struct snd_soc_dai_link morg_florida_msic_dailink[] = {
 		.platform_name = "0000:02:18.0",
 		.ignore_suspend = 1,
 		.no_pcm = 1,
+		.dpcm_capture = 1,
 	},
 };
 
