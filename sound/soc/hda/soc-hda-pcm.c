@@ -469,7 +469,7 @@ static void hda_be_ssp_shutdown(struct snd_pcm_substream *substream,
 static int hda_be_dmic_prepare(struct snd_pcm_substream *substream,
 				struct snd_soc_dai *dai)
 {
-	struct snd_pcm_hw_params params;
+	struct snd_pcm_hw_params params = {0};
 	struct snd_interval *channels, *rate;
 	struct azx *chip = dev_get_drvdata(dai->dev);
 
