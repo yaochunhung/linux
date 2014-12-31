@@ -434,11 +434,13 @@ static int hda_be_ssp_set_tdm_slot(struct snd_soc_dai *dai,
 	struct azx_dai_config *cfg = hda_be_get_dai_config(dai);
 	struct azx_ssp_dai_config *ssp_cfg = &cfg->ssp_dai_config;
 
+#if 0
 	if (tx_mask || rx_mask) {
 		dev_err(dai->dev, "%s Channel remapping not supported %s\n",
 			__func__, dai->name);
 		return -EINVAL;
 	}
+#endif
 	ssp_cfg->slots = slots;
 	ssp_cfg->slot_width = slot_width;
 
