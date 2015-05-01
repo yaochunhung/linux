@@ -3441,7 +3441,7 @@ snd_soc_dapm_new_control_unlocked(struct snd_soc_dapm_context *dapm,
 	INIT_LIST_HEAD(&w->sinks);
 	INIT_LIST_HEAD(&w->list);
 	INIT_LIST_HEAD(&w->dirty);
-	list_add(&w->list, &dapm->card->widgets);
+	list_add_tail(&w->list, &dapm->card->widgets);
 
 	w->inputs = -1;
 	w->outputs = -1;
