@@ -160,7 +160,7 @@ err_vma:
 	return ERR_PTR(-E2BIG);
 }
 
-static struct i915_vma *
+struct i915_vma *
 vma_lookup(struct drm_i915_gem_object *obj,
 	   struct i915_address_space *vm,
 	   const struct i915_ggtt_view *view)
