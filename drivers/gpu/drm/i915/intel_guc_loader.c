@@ -737,6 +737,7 @@ void intel_guc_init(struct drm_i915_private *dev_priv)
 {
 	struct intel_uc_fw *guc_fw = &dev_priv->guc.fw;
 	const char *fw_path;
+	unsigned long long start;
 
 	if (!HAS_GUC(dev_priv)) {
 		i915.enable_guc_loading = 0;
@@ -779,10 +780,12 @@ void intel_guc_init(struct drm_i915_private *dev_priv)
 	if (*fw_path == '\0')
 		return;
 
+	start = sched_clock();
 	guc_fw->fetch_status = INTEL_UC_FIRMWARE_PENDING;
 	DRM_DEBUG_DRIVER("GuC firmware pending, path %s\n", fw_path);
 	intel_uc_fw_fetch(dev_priv, guc_fw);
 	/* status must now be FAIL or SUCCESS */
+	dev_priv->profile.guc_load = sched_clock() - start;
 }
 
 /**

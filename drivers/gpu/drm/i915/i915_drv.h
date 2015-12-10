@@ -1828,6 +1828,13 @@ struct intel_pipe_crc {
 	int skipped;
 };
 
+struct intel_load_profiles {
+	unsigned long long driver_load;
+	unsigned long long fbdev_load;
+	unsigned long long guc_load;
+	unsigned long long csr_load;
+};
+
 struct i915_frontbuffer_tracking {
 	spinlock_t lock;
 
@@ -2233,6 +2240,7 @@ struct drm_i915_private {
 #ifdef CONFIG_DEBUG_FS
 	struct intel_pipe_crc pipe_crc[I915_MAX_PIPES];
 #endif
+	struct intel_load_profiles profile;
 
 	/* dpll and cdclk state is protected by connection_mutex */
 	int num_shared_dpll;

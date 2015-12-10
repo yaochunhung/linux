@@ -1186,6 +1186,9 @@ int i915_driver_load(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	struct drm_i915_private *dev_priv;
 	int ret;
+	unsigned long long start_tm;
+
+	start_tm = sched_clock();
 
 	if (i915.nuclear_pageflip)
 		driver.driver_features |= DRIVER_ATOMIC;
@@ -1255,6 +1258,8 @@ int i915_driver_load(struct pci_dev *pdev, const struct pci_device_id *ent)
 		DRM_INFO("DRM_I915_DEBUG_GEM enabled\n");
 
 	intel_runtime_pm_put(dev_priv);
+
+	dev_priv->profile.driver_load = sched_clock() - start_tm;
 
 	printk(KERN_INFO "IOTG i915 forklift 2017-03-04\n");
 

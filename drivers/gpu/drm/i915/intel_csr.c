@@ -397,6 +397,7 @@ static void csr_load_work_fn(struct work_struct *work)
 	struct intel_csr *csr;
 	const struct firmware *fw = NULL;
 	int ret;
+	unsigned long long start = sched_clock();
 
 	dev_priv = container_of(work, typeof(*dev_priv), csr.work);
 	csr = &dev_priv->csr;
@@ -423,6 +424,7 @@ static void csr_load_work_fn(struct work_struct *work)
 	}
 
 	release_firmware(fw);
+	dev_priv->profile.csr_load = sched_clock() - start;
 }
 
 /**
