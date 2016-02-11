@@ -224,10 +224,10 @@ intel_splash_screen_init(struct drm_device *dev)
 	 */
 	fw_npages = DIV_ROUND_UP_ULL(splash_info->fw->size, PAGE_SIZE);
 	if (splash_info->fw->pages == NULL)
-		splash_info->obj = i915_gem_object_create_splash(dev,
+		splash_info->obj = i915_gem_object_create_splash(dev_priv,
 				   splash_info->fw->data, fw_npages);
 	else
-		splash_info->obj = i915_gem_object_create_splash_pages(dev,
+		splash_info->obj = i915_gem_object_create_splash_pages(dev_priv,
 				   splash_info->fw->pages, fw_npages);
 
 	kfree(splash_dup);
@@ -308,7 +308,7 @@ static int update_crtc_state(struct drm_atomic_state *state,
 
 	crtc_state->active = true;
 
-	if (!IS_GEN9(state->dev))
+	if (!IS_GEN9(to_i915(state->dev)))
 	    return 0;
 
 	/* Set the background color based on module parameter */
@@ -363,7 +363,7 @@ static int update_primary_plane_state(struct drm_atomic_state *state,
 	ret = drm_atomic_set_crtc_for_plane(primary_state, crtc);
 	if (ret)
 		return ret;
-	drm_crtc_get_hv_timing(mode, &hdisplay, &vdisplay);
+	drm_mode_get_hv_timing(mode, &hdisplay, &vdisplay);
 	drm_atomic_set_fb_for_plane(primary_state, fb);
 
 	primary_state->crtc_x = splash_info->crtc_x;
@@ -437,7 +437,7 @@ static int disable_planes(struct drm_device *dev,
 		}
 
 		ret = drm_atomic_plane_set_property(plane, plane_state,
-					dev->mode_config.rotation_property,
+					plane->rotation_property,
 					BIT(DRM_ROTATE_0));
 		WARN_ON(ret);
 
@@ -562,7 +562,7 @@ early_fail:
 		drm_atomic_state_clear(state);
 		goto retry;
 	}
-	drm_atomic_state_free(state);
+	drm_atomic_state_put(state);
 
 out:
 	if (!ret) {

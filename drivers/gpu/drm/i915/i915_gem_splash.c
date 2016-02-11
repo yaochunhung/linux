@@ -35,13 +35,15 @@
  * was created, nothing more needs to be done here, return 0 to
  * indicate sg is ready.
  */
-static int i915_gem_object_get_pages_splash(struct drm_i915_gem_object *obj)
+static struct sg_table *
+i915_gem_object_get_pages_splash(struct drm_i915_gem_object *obj)
 {
-	return 0;
+	return NULL;
 }
 
 /* The sg is going to be freed when the gem obj itself is released. */
-static void i915_gem_object_put_pages_splash(struct drm_i915_gem_object *obj)
+static void i915_gem_object_put_pages_splash(struct drm_i915_gem_object *obj,
+					     struct sg_table *pages)
 {
 }
 
@@ -49,13 +51,13 @@ static void i915_gem_object_put_pages_splash(struct drm_i915_gem_object *obj)
 	static void
 i915_gem_object_release_splash(struct drm_i915_gem_object *obj)
 {
-	if (obj->pages) {
+	if (obj->mm.pages) {
 		dma_unmap_sg(&obj->base.dev->pdev->dev,
-			     obj->pages->sgl, obj->pages->nents,
+			     obj->mm.pages->sgl, obj->mm.pages->nents,
 			     DMA_TO_DEVICE);
-		sg_free_table(obj->pages);
-		kfree(obj->pages);
-		obj->pages = NULL;
+		sg_free_table(obj->mm.pages);
+		kfree(obj->mm.pages);
+		obj->mm.pages = NULL;
 	}
 }
 
@@ -67,7 +69,7 @@ static const struct drm_i915_gem_object_ops i915_gem_object_splash_ops = {
 
 /* create a gem obj from a list of pages */
 struct drm_i915_gem_object *
-i915_gem_object_create_splash_pages(struct drm_device *dev,
+i915_gem_object_create_splash_pages(struct drm_i915_private *dev_priv,
 				    struct page **pages, u32 n_pages)
 {
 	struct drm_i915_gem_object *obj;
@@ -77,7 +79,7 @@ i915_gem_object_create_splash_pages(struct drm_device *dev,
 	if (n_pages == 0)
 		return NULL;
 
-	obj = i915_gem_object_alloc(dev);
+	obj = i915_gem_object_alloc(dev_priv);
 	if (obj == NULL)
 		return NULL;
 
@@ -85,22 +87,22 @@ i915_gem_object_create_splash_pages(struct drm_device *dev,
 	if (st == NULL)
 		goto cleanup;
 
-	drm_gem_private_object_init(dev, &obj->base, size);
+	drm_gem_private_object_init(&dev_priv->drm, &obj->base, size);
 	i915_gem_object_init(obj, &i915_gem_object_splash_ops);
 
 	if (sg_alloc_table_from_pages(st, pages, n_pages,
 				     0, size, GFP_KERNEL))
 		goto cleanup_st;
 
-	obj->pages = st;
+	obj->mm.pages = st;
 	obj->base.read_domains = I915_GEM_DOMAIN_GTT;
-	obj->cache_level = HAS_LLC(dev) ? I915_CACHE_LLC : I915_CACHE_NONE;
+	obj->cache_level = HAS_LLC(dev_priv) ? I915_CACHE_LLC : I915_CACHE_NONE;
 
 	if (!dma_map_sg(&obj->base.dev->pdev->dev,
-		       obj->pages->sgl, obj->pages->nents,
+		       obj->mm.pages->sgl, obj->mm.pages->nents,
 		       DMA_TO_DEVICE)) {
-		sg_free_table(obj->pages);
-		obj->pages = NULL;
+		sg_free_table(obj->mm.pages);
+		obj->mm.pages = NULL;
 		goto cleanup_st;
 	}
 	return obj;
@@ -114,7 +116,7 @@ cleanup:
 
 /* create a gem obj from a virtual address */
 struct drm_i915_gem_object *
-i915_gem_object_create_splash(struct drm_device *dev,
+i915_gem_object_create_splash(struct drm_i915_private *dev_priv,
 			      const u8 *ptr, u32 n_pages)
 {
 	struct page **pvec;
@@ -136,7 +138,7 @@ i915_gem_object_create_splash(struct drm_device *dev,
 		ptr += PAGE_SIZE;
 	}
 
-	obj = i915_gem_object_create_splash_pages(dev, pvec, n_pages);
+	obj = i915_gem_object_create_splash_pages(dev_priv, pvec, n_pages);
 	kfree(pvec);
 	return obj;
 }

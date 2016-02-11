@@ -3176,10 +3176,10 @@ i915_gem_object_create_from_data(struct drm_i915_private *dev_priv,
 				 const void *data, size_t size);
 void i915_gem_close_object(struct drm_gem_object *gem, struct drm_file *file);
 struct drm_i915_gem_object *i915_gem_object_create_splash_pages(
-					struct drm_device *dev,
+					struct drm_i915_private *dev_priv,
 					struct page **pages, u32 n_pages);
 struct drm_i915_gem_object *i915_gem_object_create_splash(
-					struct drm_device *dev,
+					struct drm_i915_private *dev_priv,
 					const u8 *ptr, u32 n_pages);
 void i915_gem_free_object(struct drm_gem_object *obj);
 
