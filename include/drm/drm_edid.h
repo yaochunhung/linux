@@ -464,4 +464,16 @@ struct drm_display_mode *drm_mode_find_dmt(struct drm_device *dev,
 					   int hsize, int vsize, int fresh,
 					   bool rb);
 
+/**
+ * drm_eld_get_conn_type - Get device type hdmi/dp connected
+ * @eld: pointer to an ELD memory structure
+ *
+ * The caller need to use %DRM_ELD_CONN_TYPE_HDMI or %DRM_ELD_CONN_TYPE_DP to
+ * identify the display type connected.
+ */
+static inline u8 drm_eld_get_conn_type(const uint8_t *eld)
+{
+	return eld[DRM_ELD_SAD_COUNT_CONN_TYPE] & DRM_ELD_CONN_TYPE_MASK;
+}
+
 #endif /* __DRM_EDID_H__ */
