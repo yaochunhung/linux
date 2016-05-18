@@ -1516,6 +1516,7 @@ static int default_bdl_pos_adj(struct azx *chip)
 		switch (chip->pci->device) {
 		case 0x0f04: /* Baytrail */
 		case 0x2284: /* Braswell */
+		case 0x5a98: /* Broxton-P */
 			return 32;
 		}
 	}
