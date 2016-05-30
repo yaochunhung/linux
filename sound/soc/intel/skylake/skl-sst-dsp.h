@@ -249,4 +249,6 @@ int bxt_sst_dsp_init_fw(struct device *dev, struct skl_sst *ctx);
 void skl_sst_dsp_cleanup(struct device *dev, struct skl_sst *ctx);
 void bxt_sst_dsp_cleanup(struct device *dev, struct skl_sst *ctx);
 
+int skl_dsp_strip_extended_manifest(struct firmware *fw);
+
 #endif /*__SKL_SST_DSP_H__*/
