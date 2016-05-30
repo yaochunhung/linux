@@ -17,9 +17,10 @@
 #define __SKL_SST_DSP_H__
 
 #include <linux/interrupt.h>
+#include <linux/time.h>
 #include <sound/memalloc.h>
 #include "skl-sst-cldma.h"
-#include <linux/time.h>
+#include "skl-tplg-interface.h"
 
 struct sst_dsp;
 struct skl_sst;
@@ -248,6 +249,11 @@ int skl_sst_dsp_init_fw(struct device *dev, struct skl_sst *ctx);
 int bxt_sst_dsp_init_fw(struct device *dev, struct skl_sst *ctx);
 void skl_sst_dsp_cleanup(struct device *dev, struct skl_sst *ctx);
 void bxt_sst_dsp_cleanup(struct device *dev, struct skl_sst *ctx);
+
+int snd_skl_get_module_info(struct skl_sst *ctx, u8 *uuid,
+		struct skl_dfw_module *dfw_config);
+int snd_skl_parse_uuids(struct sst_dsp *ctx, unsigned int offset);
+void skl_freeup_uuid_list(struct skl_sst *ctx);
 
 int skl_dsp_strip_extended_manifest(struct firmware *fw);
 

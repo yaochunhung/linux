@@ -136,6 +136,8 @@ struct skl_sst {
 	/* is first boot yet to be done? */
 	bool is_first_boot;
 	struct list_head notify_kctls;
+	/* Populate module information */
+	struct list_head uuid_list;
 };
 
 struct skl_ipc_init_instance_msg {

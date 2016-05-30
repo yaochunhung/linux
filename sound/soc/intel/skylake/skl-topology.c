@@ -2439,6 +2439,12 @@ static int skl_tplg_widget_load(struct snd_soc_component *cmpnt,
 		return -ENOMEM;
 
 	w->priv = mconfig;
+	memcpy(&mconfig->guid, &dfw_config->uuid, 16);
+
+	ret = snd_skl_get_module_info(skl->skl_sst, mconfig->guid, dfw_config);
+	if (ret < 0)
+		return ret;
+
 	mconfig->id.module_id = dfw_config->module_id;
 	skl_load_widget_params(dfw_config, mconfig);
 
