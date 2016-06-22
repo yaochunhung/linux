@@ -779,9 +779,7 @@ static const struct intel_forcewake_range __chv_fw_ranges[] = {
 static const struct intel_forcewake_range __gen9_fw_ranges[] = {
 	GEN_FW_RANGE(0x0, 0xaff, FORCEWAKE_BLITTER),
 	GEN_FW_RANGE(0xb00, 0x1fff, 0), /* uncore range */
-	GEN_FW_RANGE(0x2000, 0x26ff, FORCEWAKE_RENDER),
-	GEN_FW_RANGE(0x2700, 0x2fff, FORCEWAKE_BLITTER),
-	GEN_FW_RANGE(0x3000, 0x3fff, FORCEWAKE_RENDER),
+	GEN_FW_RANGE(0x2000, 0x3fff, FORCEWAKE_RENDER),
 	GEN_FW_RANGE(0x4000, 0x51ff, FORCEWAKE_BLITTER),
 	GEN_FW_RANGE(0x5200, 0x7fff, FORCEWAKE_RENDER),
 	GEN_FW_RANGE(0x8000, 0x812f, FORCEWAKE_BLITTER),
