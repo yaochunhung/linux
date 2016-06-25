@@ -183,7 +183,7 @@ static void ipc_tx_msgs(struct kthread_work *work)
 
 	dev_dbg(ipc->dev, "sending message, header - %#.16lx\n",
 				(unsigned long)msg->header);
-	print_hex_dump(KERN_DEBUG, "Params:", DUMP_PREFIX_OFFSET, 8, 4,
+	print_hex_dump_debug("Params:", DUMP_PREFIX_OFFSET, 8, 4,
 			     msg->tx_data, msg->tx_size, false);
 	if (ipc->ops.tx_msg != NULL)
 		ipc->ops.tx_msg(ipc, msg);
