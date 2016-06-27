@@ -4160,6 +4160,9 @@ static void __i915_gem_free_objects(struct drm_i915_private *i915,
 		trace_i915_gem_object_destroy(obj);
 
 		GEM_BUG_ON(i915_gem_object_is_active(obj));
+
+		kfree(obj->userdata_blk);
+
 		list_for_each_entry_safe(vma, vn,
 					 &obj->vma_list, obj_link) {
 			GEM_BUG_ON(!i915_vma_is_ggtt(vma));

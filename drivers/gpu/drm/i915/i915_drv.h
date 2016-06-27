@@ -88,6 +88,8 @@
 
 #include "intel_gvt.h"
 
+#include "i915_gem_userdata.h"
+
 /* General customization:
  */
 
