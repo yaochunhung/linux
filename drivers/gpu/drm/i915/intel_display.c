@@ -15002,7 +15002,9 @@ static int skl_check_compression(struct drm_i915_private *dev_priv,
 	}
 
 	if ((fb->format->format != DRM_FORMAT_XBGR8888) &&
-			(fb->format->format != DRM_FORMAT_ABGR8888)) {
+	    (fb->format->format != DRM_FORMAT_ABGR8888) &&
+	    (fb->format->format != DRM_FORMAT_ARGB8888) &&
+	    (fb->format->format != DRM_FORMAT_XRGB8888)) {
 		DRM_DEBUG_KMS("RC supported only with RGB8888 formats\n");
 		return -EINVAL;
 	}
