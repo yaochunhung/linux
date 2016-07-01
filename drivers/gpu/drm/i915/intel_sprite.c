@@ -212,6 +212,7 @@ skl_update_plane(struct drm_plane *drm_plane,
 	unsigned int rotation = plane_state->base.rotation;
 	u32 stride = skl_plane_stride(fb, 0, rotation);
 	u32 aux_stride = skl_plane_stride(fb, 1, rotation);
+	unsigned int render_comp = plane_state->render_comp_enable;
 	int crtc_x = plane_state->base.dst.x1;
 	int crtc_y = plane_state->base.dst.y1;
 	uint32_t crtc_w = drm_rect_width(&plane_state->base.dst);
@@ -231,6 +232,9 @@ skl_update_plane(struct drm_plane *drm_plane,
 	plane_ctl |= skl_plane_ctl_tiling(fb->modifier);
 
 	plane_ctl |= skl_plane_ctl_rotation(rotation);
+
+	if (render_comp)
+		plane_ctl |= PLANE_CTL_DECOMPRESSION_ENABLE;
 
 	if (key->flags) {
 		I915_WRITE(PLANE_KEYVAL(pipe, plane_id), key->min_value);
@@ -254,6 +258,19 @@ skl_update_plane(struct drm_plane *drm_plane,
 	I915_WRITE(PLANE_SIZE(pipe, plane_id), (src_h << 16) | src_w);
 	I915_WRITE(PLANE_AUX_DIST(pipe, plane_id), aux_offset | aux_stride);
 	I915_WRITE(PLANE_AUX_OFFSET(pipe, plane_id), (aux_y << 16) | aux_x);
+
+	/*
+	 * Per bspec, for SKL C and BXT A steppings, when render compression
+	 * is enabled, the CHICKEN_PIPESL_1 register bit 22 must be set to 0.
+	 */
+	if ((IS_SKL_REVID(dev_priv, 0, SKL_REVID_C0) ||
+	     IS_BXT_REVID(dev_priv, 0, BXT_REVID_A1)) && render_comp) {
+		u32 temp = I915_READ(CHICKEN_PIPESL_1(pipe));
+
+		if ((temp & HSW_FBCQ_DIS) == HSW_FBCQ_DIS)
+			I915_WRITE(CHICKEN_PIPESL_1(pipe),
+				   temp & ~HSW_FBCQ_DIS);
+	}
 
 	/* program plane scaler */
 	if (plane_state->scaler_id >= 0) {
@@ -1139,6 +1156,9 @@ intel_sprite_plane_create(struct drm_i915_private *dev_priv,
 	drm_plane_create_rotation_property(&intel_plane->base,
 					   DRM_ROTATE_0,
 					   supported_rotations);
+
+	if (INTEL_GEN(dev_priv) >= 9)
+		intel_create_render_comp_property(&dev_priv->drm, intel_plane);
 
 	drm_plane_helper_add(&intel_plane->base, &intel_plane_helper_funcs);
 
