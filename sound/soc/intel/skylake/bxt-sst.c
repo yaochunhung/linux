@@ -129,6 +129,7 @@ int bxt_sst_dsp_init_hw(struct device *dev, struct skl_sst **dsp,
 
 	skl->dev = dev;
 	skl_dev.thread_context = skl;
+	INIT_LIST_HEAD(&skl->uuid_list);
 
 	skl->dsp = skl_dsp_ctx_init(dev, &skl_dev, d->irq);
 	if (!skl->dsp) {
@@ -605,6 +606,8 @@ static int bxt_set_dsp_D3(struct sst_dsp *ctx, unsigned int core_id)
 
 }
 
+#define BXT_ADSP_FW_BIN_HDR_OFFSET 0x2000
+
 static int bxt_load_base_firmware(struct sst_dsp *ctx)
 {
 	struct skl_ext_manifest_header *hdr;
@@ -623,6 +626,10 @@ static int bxt_load_base_firmware(struct sst_dsp *ctx)
 		dev_err(ctx->dev, "Request firmware failed %d\n", ret);
 		goto sst_load_base_firmware_failed;
 	}
+
+	ret = snd_skl_parse_uuids(ctx, BXT_ADSP_FW_BIN_HDR_OFFSET);
+	if (ret < 0)
+		goto sst_load_base_firmware_failed;
 
 	size = fw->size;
 	data = fw->data;
@@ -754,6 +761,7 @@ load_library_failed:
 
 void bxt_sst_dsp_cleanup(struct device *dev, struct skl_sst *ctx)
 {
+	skl_freeup_uuid_list(ctx);
 	skl_ipc_free(&ctx->ipc);
 	ctx->dsp->ops->free(ctx->dsp);
 }
