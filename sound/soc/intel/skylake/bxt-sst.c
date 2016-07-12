@@ -610,18 +610,15 @@ static int bxt_set_dsp_D3(struct sst_dsp *ctx, unsigned int core_id)
 
 static int bxt_load_base_firmware(struct sst_dsp *ctx)
 {
-	struct skl_ext_manifest_header *hdr;
-	u32 size;
-	const void *data;
-	int ret = 0;
-	const struct firmware *fw = NULL;
+	struct firmware stripped_fw;
 	struct skl_sst *skl = ctx->thread_context;
+	int ret;
 
 	dev_dbg(ctx->dev, "In %s\n", __func__);
 
 	skl->boot_complete = false;
 
-	ret = request_firmware(&fw, "dsp_fw_release.bin", ctx->dev);
+	ret = request_firmware(&ctx->fw, "dsp_fw_release.bin", ctx->dev);
 	if (ret < 0) {
 		dev_err(ctx->dev, "Request firmware failed %d\n", ret);
 		goto sst_load_base_firmware_failed;
@@ -631,24 +628,15 @@ static int bxt_load_base_firmware(struct sst_dsp *ctx)
 	if (ret < 0)
 		goto sst_load_base_firmware_failed;
 
-	size = fw->size;
-	data = fw->data;
-	hdr = (struct skl_ext_manifest_header *)fw->data;
-	if (hdr->ext_manifest_id == SKL_EXT_MANIFEST_MAGIC_HEADER_ID) {
-		dev_dbg(ctx->dev, "Found Extended manifest in FW Binary\n");
-		if (hdr->ext_manifest_len >= fw->size) {
-			ret = -EINVAL;
-			goto sst_load_base_firmware_failed;
-		}
-		size = fw->size - hdr->ext_manifest_len;
-		data = fw->data + hdr->ext_manifest_len;
-	}
+	stripped_fw.data = ctx->fw->data;
+	stripped_fw.size = ctx->fw->size;
+	skl_dsp_strip_extended_manifest(&stripped_fw);
 
-	ret = sst_bxt_prepare_fw(ctx, data, size);
+	ret = sst_bxt_prepare_fw(ctx, stripped_fw.data, stripped_fw.size);
 	/* FIXME: Retry Enabling core and ROM load. Retry seemed to help during
 	   A0 Power On.So retain it for now. */
 	if (ret < 0) {
-		ret = sst_bxt_prepare_fw(ctx, data, size);
+		ret = sst_bxt_prepare_fw(ctx, stripped_fw.data, stripped_fw.size);
 		if (ret < 0) {
 			dev_err(ctx->dev, "Core En/ROM load fail:%d\n", ret);
 			goto sst_load_base_firmware_failed;
@@ -683,7 +671,7 @@ static int bxt_load_base_firmware(struct sst_dsp *ctx)
 		}
 	}
 sst_load_base_firmware_failed:
-	release_firmware(fw);
+	release_firmware(ctx->fw);
 	dev_dbg(ctx->dev, "Exit %s\n", __func__);
 	return ret;
 }
@@ -694,9 +682,7 @@ static int bxt_load_library(struct sst_dsp *ctx)
 	struct skl_sst *skl = ctx->thread_context;
 	struct skl_dfw_manifest *minfo = &skl->manifest;
 	const struct firmware *fw = NULL;
-	struct skl_ext_manifest_header *hdr;
-	u32 size;
-	const void *data;
+	struct firmware stripped_fw;
 	int ret = 0, i, dma_id, stream_tag;
 
 	for (i = 1; i < minfo->lib_count; i++) {
@@ -707,24 +693,13 @@ static int bxt_load_library(struct sst_dsp *ctx)
 			goto load_library_failed;
 		}
 
-		size = fw->size;
-		data = fw->data;
-		hdr = (struct skl_ext_manifest_header *)fw->data;
-		if (hdr->ext_manifest_id == SKL_EXT_MANIFEST_MAGIC_HEADER_ID) {
-			dev_dbg(ctx->dev, "Found Extended manifest in Library Binary\n");
-			/* Check for extended manifest is not grater than FW size*/
-			if (hdr->ext_manifest_len >= fw->size) {
-				ret = -EINVAL;
-				goto load_library_failed;
-			}
+		stripped_fw.size = fw->size;
+		stripped_fw.data = fw->data;
+		skl_dsp_strip_extended_manifest(&stripped_fw);
 
-			size = fw->size - hdr->ext_manifest_len;
-			data = (u8 *)fw->data + hdr->ext_manifest_len;
-		}
-
-		dev_dbg(ctx->dev, "Starting to preapre host dma for library name : %s of size:%zx\n",
-						minfo->lib[i].name, (size_t)size);
-		stream_tag = ctx->dsp_ops.prepare(ctx->dev, 0x40, size,
+		dev_dbg(ctx->dev, "Starting to preapre host dma for library name \
+			: %s of size:%zx\n", minfo->lib[i].name, stripped_fw.size);
+		stream_tag = ctx->dsp_ops.prepare(ctx->dev, 0x40, stripped_fw.size,
 						&dmab);
 		if (stream_tag <= 0) {
 			dev_err(ctx->dev, "Failed to prepare DMA engine for FW loading, err: %x\n",
@@ -733,10 +708,10 @@ static int bxt_load_library(struct sst_dsp *ctx)
 			goto load_library_failed;
 		}
 		dma_id = stream_tag - 1;
-		memcpy(dmab.area, data, size);
+		memcpy(dmab.area, stripped_fw.data, stripped_fw.size);
 
 		/* make sure Library is flushed to DDR */
-		clflush_cache_range(dmab.area, size);
+		clflush_cache_range(dmab.area, stripped_fw.size);
 
 		ctx->dsp_ops.trigger(ctx->dev, true, stream_tag);
 		ret = skl_sst_ipc_load_library(&skl->ipc, dma_id, i);
