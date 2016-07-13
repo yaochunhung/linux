@@ -44,6 +44,8 @@
 
 #define NO_OF_INJECTOR 6
 #define NO_OF_EXTRACTOR 8
+#define OUTPUT_PIN     0
+#define INPUT_PIN      1
 
 enum skl_channel_index {
 	SKL_CHANNEL_LEFT = 0,
@@ -97,6 +99,13 @@ enum skl_widget_type {
 	SKL_WIDGET_PGA = 3,
 	SKL_WIDGET_MUX = 4
 };
+
+enum skl_pipe_type {
+	SKL_PIPE_SOURCE = 0,
+	SKL_PIPE_INTERMEDIATE = 3,
+	SKL_PIPE_SINK = 7
+};
+
 struct probe_pt_param {
 	u32 params;
 	u32 connection;
@@ -280,14 +289,48 @@ struct skl_pipe_params {
 	int stream;
 };
 
+struct skl_pipe_fmt {
+	u32 freq;
+	u8 channels;
+	u8 bps;
+};
+
+struct skl_pipe_mcfg {
+	uuid_le uuid;
+	u8 instance_id;
+	u8 res_idx;
+	u8 fmt_idx;
+};
+
+struct skl_path_config {
+	char name[SKL_MAX_NAME_LENGTH];
+	u8 idx;
+	u8 mem_pages;
+	struct skl_pipe_mcfg mod_cfg[SKL_MAX_MODULES_IN_PIPE];
+	struct skl_pipe_fmt in_fmt;
+	struct skl_pipe_fmt out_fmt;
+};
+
 struct skl_pipe {
 	u8 ppl_id;
 	u8 pipe_priority;
 	u16 conn_type;
 	u32 memory_pages;
 	u8 lp_mode;
+	char name[SKL_MAX_NAME_LENGTH];
+	char device[32];
+	u8 create_priority;
+	u8 order;
+	u8 direction;
+	u8 link_type;
+	u8 vbus_id;
+	u8 pipe_mode;
 	struct skl_pipe_params *p_params;
 	enum skl_pipe_state state;
+	u8 nr_modules;
+	u8 cur_config_idx;
+	u8 nr_cfgs;
+	struct skl_path_config **configs;
 	struct list_head w_list;
 	bool passthru;
 };
@@ -306,9 +349,74 @@ struct skl_gain_data {
 	u32 volume[STEREO];
 };
 
+struct skl_module_pin_fmt {
+	u8	pin_id;
+	struct	skl_module_fmt	pin_fmt;
+};
+
+struct skl_module_intf {
+	u8 fmt_idx;
+	u8 nr_input_fmt;
+	u8 nr_output_fmt;
+	struct	skl_module_pin_fmt	input[SKL_MAX_IN_QUEUE];
+	struct	skl_module_pin_fmt	output[SKL_MAX_OUT_QUEUE];
+};
+
+struct skl_module_pin_resources {
+	u8 pin_index;
+	u32 buf_size;
+};
+
+struct skl_module_res {
+	u8 res_idx;
+	u32 is_pages;
+	u32 cps;
+	u32 ibs;
+	u32 obs;
+	u32 dma_buffer_size;
+	u32 cpc;
+	u32 module_flags;
+	u32 obls;
+	u8 nr_input_pins;
+	u8 nr_output_pins;
+	struct skl_module_pin_resources input[SKL_MAX_IN_QUEUE];
+	struct skl_module_pin_resources output[SKL_MAX_OUT_QUEUE];
+};
+
+struct skl_module {
+	u16 major_version;
+	u16 minor_version;
+	u16 hotfix_version;
+	u16 build_version;
+	uuid_le	uuid;
+	u8 loadable;
+	u8 input_pin_type;
+	u8 output_pin_type;
+	u8 auto_start;
+	u8 max_input_pins;
+	u8 max_output_pins;
+	u8 max_instance_count;
+	char library_name[LIB_NAME_LENGTH];
+	u8 nr_resources;
+	u8 nr_interfaces;
+	struct skl_module_res resources[SKL_MAX_MODULE_RESOURCES];
+	struct skl_module_intf formats[SKL_MAX_MODULE_FORMATS];
+};
+
+struct skl_manifest {
+	struct fw_cfg_info cfg;
+	u8 nr_modules;
+	struct skl_module **modules;
+	u8 lib_count;
+	struct  lib_info lib[HDA_MAX_LIB];
+};
+
 struct skl_module_cfg {
 	u8 guid[16];
 	struct skl_module_inst_id id;
+	struct skl_module *module;
+	u8 res_idx;
+	u8 fmt_idx;
 	u8 domain;
 	bool homogenous_inputs;
 	bool homogenous_outputs;

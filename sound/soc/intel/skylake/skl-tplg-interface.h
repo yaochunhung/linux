@@ -30,8 +30,14 @@
 #define SKL_CONTROL_TYPE_BYTE_PROBE	0x101
 
 #define HDA_SST_CFG_MAX	900 /* size of copier cfg*/
-#define MAX_IN_QUEUE 8
-#define MAX_OUT_QUEUE 8
+#define SKL_MAX_IN_QUEUE 8
+#define SKL_MAX_OUT_QUEUE 8
+#define SKL_MAX_MODULES	32
+#define SKL_MAX_MODULE_RESOURCES 8
+#define SKL_MAX_MODULE_FORMATS 8
+#define SKL_MAX_PATH_CONFIGS	8
+#define SKL_MAX_MODULES_IN_PIPE	8
+#define SKL_MAX_NAME_LENGTH	16
 #define SKL_MOD_NAME 40 /* Length of GUID string */
 #define STEREO 2
 
@@ -213,13 +219,84 @@ struct skl_dfw_module_caps {
 	u32 caps[HDA_SST_CFG_MAX];
 };
 
+struct skl_dfw_pipe_fmt {
+	u32 freq;
+	u8 channels;
+	u8 bps;
+} __packed;
+
+struct skl_dfw_pipe_mcfg {
+	u8 uuid[16];
+	u8 instance_id;
+	u8 res_idx;
+	u8 fmt_idx;
+} __packed;
+
+/*
+ * For each pipe config i.e., the combination of input and output format,
+ * module resource and format may be different. This strucuture contains
+ * module reseource and format index for each pipe config.
+ */
+struct dfw_pipe_module_cfg {
+	u8		uuid[16];
+	u8		instance_id;
+	u8		res_idx;
+	u8		fmt_idx;
+} __packed;
+
+/*
+ * Multiple path configurations are possible for a pipeline depending on the
+ * input and outpput formats supported by the pipepile. This structure stores
+ * all unique configurations supported by a pipeline.
+ */
+struct skl_dfw_path_config {
+	char	config_name[SKL_MAX_NAME_LENGTH];
+	u8	config_idx;
+	u8	mem_pages;
+	struct dfw_pipe_module_cfg mod_cfg[SKL_MAX_MODULES_IN_PIPE];
+	struct skl_dfw_pipe_fmt	in_pcm_format;
+	struct skl_dfw_pipe_fmt	out_pcm_format;
+} __packed;
+
+/*
+ * This represents a pipe from the topology.
+ * name: Name of the pipe
+ * pipe_id: unique pipe number across topology
+ * pipe_priority: priority of the pipe task
+ * order: Source to Sink in ascending order. For example, for a playback path,
+	order will be 0 for pipe connected to Host DMA and N for pipe connected
+	to LINK DMA.
+ * create_priority: pipeline gets schedule based on “priority”.
+	For the same ordered pipeline, they are scheduled based on the order.
+ * direction: playback or capture
+ * conn_type: Indicates pipe is connected to -HOST_DMA, LINK_DMA,
+	NONE (if pipe is loop), INTERNAL_SRC (like tone generator)
+	and INTERNAL_SINK (like aware or wov)
+ * device: Device name, if pipeline is connected to the host dma. It should
+	match the FE DAI stream name
+ * port: Port name, if pipeline is connected to the link dma. If should match
+	BE AIF widget name in machine driver
+ * lp_mode: what it will continue running in low power mode
+ */
 struct skl_dfw_pipe {
-	u8 pipe_id;
-	u8 pipe_priority;
-	u16 conn_type:4;
-	u16 lp_mode:1;
-	u16 rsvd:3;
-	u16 memory_pages:8;
+	char name[SKL_MAX_NAME_LENGTH];
+	u32 pipe_id:8;
+	u32 pipe_priority:8;
+	u32 create_priority:8;
+	u32 rsvd1:8;
+	char device[32];
+	u32 memory_pages:8;
+	u32 order:3;
+	u32 direction:2;
+	u32 conn_type:3;
+	u32 link_type:3;
+	u32 vbus_id:3;
+	u32 pipe_mode:2;
+	u32 lp_mode:1;
+	u32 nr_modules:4;
+	u32 nr_cfgs:3;
+	u32 rsvd:8;
+	struct skl_dfw_path_config configs[SKL_MAX_PATH_CONFIGS];
 } __packed;
 
 struct skl_dfw_module {
@@ -262,10 +339,10 @@ struct skl_dfw_module {
 	u32 rsvd4:24;
 
 	struct skl_dfw_pipe pipe;
-	struct skl_dfw_module_fmt in_fmt[MAX_IN_QUEUE];
-	struct skl_dfw_module_fmt out_fmt[MAX_OUT_QUEUE];
-	struct skl_dfw_module_pin in_pin[MAX_IN_QUEUE];
-	struct skl_dfw_module_pin out_pin[MAX_OUT_QUEUE];
+	struct skl_dfw_module_fmt in_fmt[SKL_MAX_IN_QUEUE];
+	struct skl_dfw_module_fmt out_fmt[SKL_MAX_OUT_QUEUE];
+	struct skl_dfw_module_pin in_pin[SKL_MAX_IN_QUEUE];
+	struct skl_dfw_module_pin out_pin[SKL_MAX_OUT_QUEUE];
 	struct skl_dfw_module_caps caps;
 } __packed;
 
@@ -322,11 +399,109 @@ struct fw_cfg_info {
 	struct skl_dma_buff_cfg dmacfg;
 } __packed;
 
-struct skl_dfw_manifest {
+/*
+ * This represents the pin format of a module.
+ */
+struct skl_dfw_pin_fmt {
+	u8	pin_id;
+	struct	skl_dfw_module_fmt	pin_fmt;
+} __packed;
 
+/*
+ * Global structure to hold all module interface related information in a
+ * single place. It contains information such as channel config, sample size,
+ * channel map etc. for each module pin.
+ */
+struct skl_dfw_module_intf {
+	u8 fmt_idx;
+	u8 nr_input_fmt;
+	u8 nr_output_fmt;
+	struct	skl_dfw_pin_fmt	input[SKL_MAX_IN_QUEUE];
+	struct	skl_dfw_pin_fmt	output[SKL_MAX_OUT_QUEUE];
+} __packed;
+
+/*
+ * Each pin resources whether it is input pin or output pin.
+ * pin_index: Index of the pin of a module
+ * buf_size: input/output frame size
+ */
+struct module_pin_resources {
+	u8	pin_index;
+	u32	buf_size;
+} __packed;
+
+/*
+ * This represents module resources:
+ * res_idx: index of res in the array of module resources
+ * is_pages: memory pages to be allocated for this module instance
+ * cps: DSP cycles needed to process one second of data
+ * ibs: size of the module instance input frame (in bytes)
+ * obs: Size of the module instance output frame (in bytes)
+ * dma_buffer_size: buffer size allocated for gateway DMA (in bytes)
+ * module_flags: flags for the module
+ * cpc: DSP cycles required to process one input frame
+ * obls: Output block size
+ */
+struct skl_dfw_module_res {
+	u8	res_idx;
+	u32	is_pages;
+	u32	cps;
+	u32	ibs;
+	u32	obs;
+	u32	dma_buffer_size;
+	u32	cpc;
+	u32	module_flags;
+	u32	obls;
+	u8	nr_input_pins;
+	u8	nr_output_pins;
+	struct module_pin_resources	input[SKL_MAX_IN_QUEUE];
+	struct module_pin_resources	output[SKL_MAX_OUT_QUEUE];
+} __packed;
+
+/*
+ * Previously, much of the common information for a module was getting
+ * dupliated across all instances of a module. This structure is a common
+ * placeholder for global information for each module.
+ *
+ * uuid: Unique identifier for the module
+ * loadable:  is this module loadable
+ * input_pin_type: Whether all the input pins take same PCM params
+ * output_pin_type: Whether all the output pins take same PCM params
+ * auto_start: whether a module instance can be created at base-fw startup
+ *		without a parent pipeline
+ * max_input_pins: Maximum number of input pins
+ * max_output_pins: Maximum number of output pins
+ * max_instance_count: Maximum instances that can co-exist simultanesouly
+ * nr_resources: number of resources for the module
+ * nr_interfaces: number of module interfaces
+ */
+struct skl_dfw_module_type {
+	u16	major_version;
+	u16	minor_version;
+	u16	hotfix_version;
+	u16	build_version;
+	u8	uuid[16];
+	u32	loadable:1;
+	u32	input_pin_type:1;
+	u32	output_pin_type:1;
+	u32	auto_start:1;
+	u32	max_input_pins:8;
+	u32	max_output_pins:8;
+	u32	max_instance_count:8;
+	u32	rsvd:4;
+	char	library_name[LIB_NAME_LENGTH];
+	u8	nr_resources;
+	u8	nr_interfaces;
+	struct skl_dfw_module_res	resources[SKL_MAX_MODULE_RESOURCES];
+	struct skl_dfw_module_intf	formats[SKL_MAX_MODULE_FORMATS];
+} __packed;
+
+struct skl_dfw_manifest {
 	/* fw config info */
 	struct fw_cfg_info cfg;
 
+	u8	nr_modules;
+	struct	skl_dfw_module_type	module[SKL_MAX_MODULES];
 	/* library info */
 	u8 lib_count;
 	struct lib_info lib[HDA_MAX_LIB];
