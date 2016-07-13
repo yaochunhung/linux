@@ -231,7 +231,7 @@ struct skl_gain_module_config {
 };
 
 struct skl_module_inst_id {
-	u32 module_id;
+	int module_id;
 	u32 instance_id;
 };
 
@@ -476,4 +476,5 @@ int skl_unload_modules(struct skl_sst *ctx, struct skl_module_cfg *mcfg);
 int is_skl_dsp_widget_type(struct snd_soc_dapm_widget *w);
 
 enum skl_bitdepth skl_get_bit_depth(int params);
+int snd_skl_get_module_info(struct skl_sst *ctx, struct skl_module_cfg *mconfig);
 #endif

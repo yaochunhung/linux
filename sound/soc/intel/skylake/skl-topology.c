@@ -885,6 +885,16 @@ skl_tplg_init_pipe_modules(struct skl *skl, struct skl_pipe *pipe)
 		w = w_module->w;
 		mconfig = w->priv;
 
+		/* check if module ids are populated */
+		if (mconfig->id.module_id < 0) {
+			ret = snd_skl_get_module_info(ctx, mconfig);
+			if (ret < 0) {
+				dev_err(skl->skl_sst->dev,
+					"query module info failed: %d\n", ret);
+				return ret;
+			}
+		}
+
 		/* check resource available */
 		if (!skl_is_pipe_mcps_avail(skl, mconfig))
 			return -ENOMEM;
@@ -2441,13 +2451,13 @@ static int skl_tplg_widget_load(struct snd_soc_component *cmpnt,
 	w->priv = mconfig;
 	memcpy(&mconfig->guid, &dfw_config->uuid, 16);
 
-	ret = snd_skl_get_module_info(skl->skl_sst, mconfig->guid, dfw_config);
-	if (ret < 0)
-		return ret;
-
-	mconfig->id.module_id = dfw_config->module_id;
 	skl_load_widget_params(dfw_config, mconfig);
 
+	/*
+	 * module binary is loaded later so set it to query on module
+	 * load
+	 */
+	mconfig->id.module_id = -1;
 	mconfig->id.instance_id = dfw_config->instance_id;
 	mconfig->mcps = dfw_config->max_mcps;
 	mconfig->ibs = dfw_config->ibs;
@@ -2455,7 +2465,6 @@ static int skl_tplg_widget_load(struct snd_soc_component *cmpnt,
 	mconfig->core_id = dfw_config->core_id;
 	mconfig->max_in_queue = dfw_config->max_in_queue;
 	mconfig->max_out_queue = dfw_config->max_out_queue;
-	mconfig->is_loadable = dfw_config->is_loadable;
 	mconfig->domain = dfw_config->proc_domain;
 
 	skl_tplg_fill_fmt(mconfig->in_fmt, dfw_config->in_fmt,
