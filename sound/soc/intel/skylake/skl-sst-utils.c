@@ -108,6 +108,7 @@ struct uuid_module {
 	int id;
 	int is_loadable;
 
+	struct skl_module *mod_data;
 	struct list_head list;
 	u8 hash1[DEFAULT_HASH_SHA256_LEN];
 };
@@ -137,6 +138,7 @@ int snd_skl_get_module_info(struct skl_sst *ctx,
 		if (uuid_le_cmp(*uuid_mod, module->uuid) == 0) {
 			mconfig->id.module_id = module->id;
 			mconfig->is_loadable = module->is_loadable;
+			mconfig->module = module->mod_data;
 
 			return 0;
 		}
@@ -234,13 +236,14 @@ int snd_skl_parse_uuids(struct sst_dsp *ctx, const struct firmware *fw,
 {
 	struct adsp_fw_hdr *adsp_hdr;
 	struct adsp_module_entry *mod_entry;
-	int i, num_entry;
-	uuid_le *uuid_bin;
+	int i, j, num_entry, num_modules;
+	uuid_le *uuid_bin_fw, *uuid_bin_tplg;
 	const char *buf;
 	struct skl_sst *skl = ctx->thread_context;
 	struct uuid_module *module;
 	struct firmware stripped_fw;
 	unsigned int safe_file;
+	struct skl_module *mod_data;
 
 	/* Get the FW pointer to derive ADSP header */
 	stripped_fw.data = fw->data;
@@ -278,7 +281,7 @@ int snd_skl_parse_uuids(struct sst_dsp *ctx, const struct firmware *fw,
 		return -EINVAL;
 	}
 
-
+	num_modules = skl->manifest.nr_modules;
 	/*
 	 * Read the UUID(GUID) from FW Manifest.
 	 *
@@ -292,14 +295,23 @@ int snd_skl_parse_uuids(struct sst_dsp *ctx, const struct firmware *fw,
 		if (!module)
 			return -ENOMEM;
 
-		uuid_bin = (uuid_le *)mod_entry->uuid.id;
-		memcpy(&module->uuid, uuid_bin, sizeof(module->uuid));
+		uuid_bin_fw = (uuid_le *)mod_entry->uuid.id;
+		memcpy(&module->uuid, uuid_bin_fw, sizeof(module->uuid));
 
 		module->id = (i | (index << 12));
 		module->is_loadable = mod_entry->type.load_type;
 		memcpy(&module->hash1, mod_entry->hash1,
 					sizeof(module->hash1));
 
+		/* copy the module data in the parsed module uuid list */
+		for (j = 0; j < num_modules; j++) {
+			mod_data = skl->manifest.modules[j];
+			uuid_bin_tplg = &mod_data->uuid;
+			if (uuid_le_cmp(*uuid_bin_fw, *uuid_bin_tplg) == 0) {
+				module->mod_data = mod_data;
+				break;
+			}
+		}
 
 		list_add_tail(&module->list, &skl->uuid_list);
 
