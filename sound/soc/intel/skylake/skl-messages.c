@@ -436,6 +436,23 @@ enum skl_bitdepth skl_get_bit_depth(int params)
 	}
 }
 
+static struct
+skl_module_fmt *skl_get_pin_format(struct skl_module_cfg *mconfig,
+					u8 pin_direction, u8 pin_idx)
+{
+	struct skl_module *module = mconfig->module;
+	u8 fmt_idx = mconfig->fmt_idx;
+	struct skl_module_intf *intf = &module->formats[fmt_idx];
+	struct skl_module_fmt *pin_fmt;
+
+	if (pin_direction == INPUT_PIN)
+		pin_fmt = &intf->input[pin_idx].pin_fmt;
+	else
+		pin_fmt = &intf->output[pin_idx].pin_fmt;
+
+	return pin_fmt;
+}
+
 /*
  * Each module in DSP expects a base module configuration, which consists of
  * PCM format information, which we calculate in driver and resource values
@@ -446,9 +463,14 @@ static void skl_set_base_module_format(struct skl_sst *ctx,
 			struct skl_module_cfg *mconfig,
 			struct skl_base_cfg *base_cfg)
 {
-	struct skl_module_fmt *format = &mconfig->in_fmt[0];
+	struct skl_module *module = mconfig->module;
+	u8 res_idx = mconfig->res_idx;
+	struct skl_module_res *res = &module->resources[res_idx];
+	struct  skl_module_fmt *format;
 
-	base_cfg->audio_fmt.number_of_channels = (u8)format->channels;
+	format = skl_get_pin_format(mconfig, INPUT_PIN, 0);
+
+	base_cfg->audio_fmt.number_of_channels = format->channels;
 
 	base_cfg->audio_fmt.s_freq = format->s_freq;
 	base_cfg->audio_fmt.bit_depth = format->bit_depth;
@@ -464,10 +486,10 @@ static void skl_set_base_module_format(struct skl_sst *ctx,
 
 	base_cfg->audio_fmt.interleaving = format->interleaving_style;
 
-	base_cfg->cps = mconfig->mcps;
-	base_cfg->ibs = mconfig->ibs;
-	base_cfg->obs = mconfig->obs;
-	base_cfg->is_pages = mconfig->mem_pages;
+	base_cfg->cps = res->cpc;
+	base_cfg->ibs = res->ibs;
+	base_cfg->obs = res->obs;
+	base_cfg->is_pages = res->is_pages;
 }
 
 /*
@@ -500,7 +522,7 @@ static void skl_setup_cpr_gateway_cfg(struct skl_sst *ctx,
 	union skl_connector_node_id node_id = {0};
 	union skl_ssp_dma_node ssp_node  = {0};
 	struct skl_pipe_params *params = mconfig->pipe->p_params;
-	u32 dma_io_buf;
+	struct skl_module_res *res;
 
 	switch (mconfig->dev_type) {
 	case SKL_DEVICE_BT:
@@ -551,28 +573,8 @@ static void skl_setup_cpr_gateway_cfg(struct skl_sst *ctx,
 	}
 
 	cpr_mconfig->gtw_cfg.node_id = node_id.val;
-
-	switch (mconfig->hw_conn_type) {
-	case SKL_CONN_SOURCE:
-		if (mconfig->dev_type == SKL_DEVICE_HDAHOST)
-			dma_io_buf =  mconfig->ibs;
-		else
-			dma_io_buf =  mconfig->obs;
-		break;
-
-	case SKL_CONN_SINK:
-		if (mconfig->dev_type == SKL_DEVICE_HDAHOST)
-			dma_io_buf =  mconfig->obs;
-		else
-			dma_io_buf =  mconfig->ibs;
-		break;
-
-	default: /* This should not occur */
-		dma_io_buf =  mconfig->obs;
-	}
-
-	cpr_mconfig->gtw_cfg.dma_buffer_size = mconfig->dma_buffer_size * dma_io_buf;
-
+	res = &mconfig->module->resources[mconfig->res_idx];
+	cpr_mconfig->gtw_cfg.dma_buffer_size = res->dma_buffer_size;
 	cpr_mconfig->cpr_feature_mask = mconfig->fast_mode;
 	cpr_mconfig->gtw_cfg.config_length  = 0;
 
@@ -583,7 +585,9 @@ static void skl_setup_out_format(struct skl_sst *ctx,
 			struct skl_module_cfg *mconfig,
 			struct skl_audio_data_format *out_fmt)
 {
-	struct skl_module_fmt *format = &mconfig->out_fmt[0];
+	struct  skl_module_fmt *format;
+
+	format = skl_get_pin_format(mconfig, OUTPUT_PIN, 0);
 
 	out_fmt->number_of_channels = (u8)format->channels;
 	out_fmt->s_freq = format->s_freq;
@@ -625,7 +629,9 @@ static void skl_set_src_format(struct skl_sst *ctx,
 			struct skl_module_cfg *mconfig,
 			struct skl_src_module_cfg *src_mconfig)
 {
-	struct skl_module_fmt *fmt = &mconfig->out_fmt[0];
+	struct  skl_module_fmt *fmt;
+
+	fmt = skl_get_pin_format(mconfig, OUTPUT_PIN, 0);
 
 	skl_set_base_module_format(ctx, mconfig,
 		(struct skl_base_cfg *)src_mconfig);
@@ -642,8 +648,10 @@ static void skl_set_updown_mixer_format(struct skl_sst *ctx,
 			struct skl_module_cfg *mconfig,
 			struct skl_up_down_mixer_cfg *mixer_mconfig)
 {
-	struct skl_module_fmt *fmt = &mconfig->out_fmt[0];
+	struct  skl_module_fmt *fmt;
 	int i = 0;
+
+	fmt = skl_get_pin_format(mconfig, OUTPUT_PIN, 0);
 
 	skl_set_base_module_format(ctx,	mconfig,
 		(struct skl_base_cfg *)mixer_mconfig);
