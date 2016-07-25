@@ -695,6 +695,12 @@ static int bxt_load_library(struct sst_dsp *ctx)
 			dev_err(ctx->dev, "Request firmware failed %d for library: %s\n", ret, minfo->lib[i].name);
 			goto load_library_failed;
 		}
+		if (skl->is_first_boot) {
+			ret = snd_skl_parse_uuids(ctx, fw,
+					BXT_ADSP_FW_BIN_HDR_OFFSET, i);
+			if (ret < 0)
+				goto load_library_failed;
+		}
 
 		stripped_fw.size = fw->size;
 		stripped_fw.data = fw->data;
