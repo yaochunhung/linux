@@ -250,7 +250,8 @@ int bxt_sst_dsp_init_fw(struct device *dev, struct skl_sst *ctx);
 void skl_sst_dsp_cleanup(struct device *dev, struct skl_sst *ctx);
 void bxt_sst_dsp_cleanup(struct device *dev, struct skl_sst *ctx);
 
-int snd_skl_parse_uuids(struct sst_dsp *ctx, unsigned int offset);
+int snd_skl_parse_uuids(struct sst_dsp *ctx, const struct firmware *fw,
+					unsigned int offset, int index);
 void skl_freeup_uuid_list(struct skl_sst *ctx);
 
 int skl_dsp_strip_extended_manifest(struct firmware *fw);
