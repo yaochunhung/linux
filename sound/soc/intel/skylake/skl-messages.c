@@ -282,6 +282,7 @@ int skl_init_dsp_hw(struct skl *skl, u32 num_ssp)
 	d->dsp_ops = loader_ops;
 	d->num_ssp = num_ssp;
 	ret = dsp_ops[index].init_hw(bus->dev, &skl->skl_sst, d);
+	INIT_LIST_HEAD(&skl->skl_sst->notify_kctls);
 	kfree(d);
 dsp_init_exit:
 	dev_dbg(bus->dev, "dsp registration status=%d\n", ret);

@@ -194,7 +194,10 @@
 
 #define SET_LARGE_CFG_FW_CONFIG		7
 #define SKL_FW_CONFIG_DMA_CFG_SET       4
-#define SKL_FW_RSRCE_EVNT_DATA_SZ		6
+#define SKL_FW_RSRCE_EVNT_DATA_SZ	6
+
+/* Offset to get the event data for module notification */
+#define MOD_DATA_OFFSET		12
 
 enum skl_ipc_msg_target {
 	IPC_FW_GEN_MSG = 0,
@@ -271,7 +274,8 @@ enum skl_ipc_notification_type {
 	IPC_GLB_NOTIFY_TIMESTAMP_CAPTURED = 7,
 	IPC_GLB_NOTIFY_FW_READY = 8,
 	IPC_GLB_NOTIFY_FW_AUD_CLASS_RESULT = 9,
-	IPC_GLB_NOTIFY_EXCEPTION_CAUGHT = 10
+	IPC_GLB_NOTIFY_EXCEPTION_CAUGHT = 10,
+	IPC_GLB_MODULE_NOTIFICATION = 12
 };
 
 enum skl_ipc_resource_event_type {
@@ -522,6 +526,9 @@ int skl_ipc_process_notification(struct sst_generic_ipc *ipc,
 	struct skl_sst *skl = container_of(ipc, struct skl_sst, ipc);
 	struct skl_notify_data *notify_data;
 	struct skl_hwd_event hwd_data;
+	struct skl_module_notify mod_notif;
+	u32 i, notify_data_sz;
+	char *module_data;
 
 	if (IPC_GLB_NOTIFY_MSG_TYPE(header.primary)) {
 		switch (IPC_GLB_NOTIFY_TYPE(header.primary)) {
@@ -574,6 +581,44 @@ int skl_ipc_process_notification(struct sst_generic_ipc *ipc,
 			fw_exception_dump_read(skl->dsp);
 			break;
 
+		case IPC_GLB_MODULE_NOTIFICATION:
+			dev_dbg(ipc->dev, "***** Module Notification ******\n");
+			/* read module notification structure from mailbox */
+			sst_dsp_inbox_read(skl->dsp, &mod_notif,
+					sizeof(struct skl_module_notify));
+
+			notify_data_sz = sizeof(mod_notif)
+					  + mod_notif.event_data_size;
+			notify_data = kzalloc((sizeof(*notify_data)
+					  + notify_data_sz), GFP_KERNEL);
+			if (!notify_data)
+				return -ENOMEM;
+
+			/* read the complete notification message */
+			sst_dsp_inbox_read(skl->dsp, notify_data->data,
+						notify_data_sz);
+
+			notify_data->length = notify_data_sz;
+			notify_data->type = 0xFF;
+
+			/* Module notification data to console */
+			dev_dbg(ipc->dev, "Module Id	= %#x\n",
+					(mod_notif.unique_id >> 16));
+			dev_dbg(ipc->dev, "Instanse Id	= %#x\n",
+				(mod_notif.unique_id & 0x0000FFFF));
+			dev_dbg(ipc->dev, "Data Size	= %d bytes\n",
+						mod_notif.event_data_size);
+
+			module_data = notify_data->data;
+			for (i = MOD_DATA_OFFSET; i < notify_data->length; i++)
+				dev_dbg(ipc->dev, "DATA[%d] = %#x\n",
+				(i - MOD_DATA_OFFSET), module_data[i]);
+
+			mdelay(1);
+			skl->notify_ops.notify_cb(skl,
+				IPC_GLB_MODULE_NOTIFICATION, notify_data);
+			kfree(notify_data);
+			break;
 		default:
 			dev_err(ipc->dev, "ipc: Unhandled error msg=%x",
 						header.primary);

@@ -100,6 +100,12 @@ struct skl_probe_config {
 	struct extractor_data eprobe[NO_OF_EXTRACTOR];
 };
 
+struct skl_notify_kctrl_info {
+	struct list_head list;
+	u32 notify_id;
+	struct snd_kcontrol *notify_kctl;
+};
+
 struct skl_sst {
 	struct device *dev;
 	struct sst_dsp *dsp;
@@ -127,9 +133,9 @@ struct skl_sst {
 	void (*enable_miscbdcge)(struct device *dev, bool enable);
 	/*Is CGCTL.MISCBDCGE disabled*/
 	bool miscbdcg_disabled;
-
 	/* is first boot yet to be done? */
 	bool is_first_boot;
+	struct list_head notify_kctls;
 };
 
 struct skl_ipc_init_instance_msg {
@@ -205,6 +211,13 @@ struct skl_dsp_core_dump {
 	u16 type2;
 	u16 length2;
 	u32 fwreg[FW_REG_SZ];
+} __packed;
+
+struct skl_module_notify {
+	u32 unique_id;
+	u32 event_id;
+	u32 event_data_size;
+	u32 event_data[0];
 } __packed;
 
 /* Timeout values in milliseconds for response from FW */

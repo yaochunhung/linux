@@ -1647,7 +1647,7 @@ static int skl_tplg_tlv_control_get(struct snd_kcontrol *kcontrol,
 	dev_dbg(dapm->dev, "In%s control_name=%s, id=%u\n", __func__, kcontrol->id.name, bc->param_id);
 	dev_dbg(dapm->dev, "size = %u (%#x), max = %#x\n", size, size, bc->max);
 
-	if (w->power) {
+	if ((w->power) && (!bc->notification_ctrl)) {
 		if (bc->param_id == 0xFF) {
 			msg.module_id = mconfig->id.module_id;
 			msg.instance_id = mconfig->id.instance_id;
@@ -2553,7 +2553,6 @@ static int skl_init_algo_data(struct device *dev, struct soc_bytes_ext *be,
 	ac->access_type = dfw_ac->access_type;
 	ac->value_cacheable = dfw_ac->value_cacheable;
 	ac->notification_ctrl = dfw_ac->notification_ctrl;
-
 
 	if (ac->max) {
 		ac->params = (char *) devm_kzalloc(dev, ac->max, GFP_KERNEL);
