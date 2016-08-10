@@ -2558,27 +2558,29 @@ int skl_tplg_control_load(struct snd_soc_component *cmpnt,
 static int skl_manifest_load(struct snd_soc_component *cmpnt,
 				struct snd_soc_tplg_manifest *manifest)
 {
-	struct skl_dfw_manifest *minfo;
+	struct skl_manifest *dest;
+	struct skl_dfw_manifest *src;
 	struct hdac_ext_bus *ebus = snd_soc_component_get_drvdata(cmpnt);
 	struct hdac_bus *bus = ebus_to_hbus(ebus);
 	struct skl *skl = ebus_to_skl(ebus);
-	int ret = 0;
-	u8 *mdata;
+	int size;
 
-	minfo = &skl->skl_sst->manifest;
-	mdata = manifest->priv.data;
-	memcpy(minfo, mdata, sizeof(*minfo));
-	if (minfo->lib_count > HDA_MAX_LIB) {
+	src = (struct skl_dfw_manifest *)manifest->priv.data;
+	dest = &skl->skl_sst->manifest;
+
+	memcpy(&dest->cfg, &src->cfg, sizeof(struct fw_cfg_info));
+
+	dest->lib_count = src->lib_count;
+	size = sizeof(struct lib_info) * HDA_MAX_LIB;
+	memcpy(&dest->lib, &src->lib, size);
+
+	if (src->lib_count > HDA_MAX_LIB) {
 		dev_err(bus->dev, "Exceeding max Library count. Got:%d\n",
-				minfo->lib_count);
-		ret = -EINVAL;
-		goto exit_manifest;
+				src->lib_count);
+		return -EINVAL;
 	}
-
-exit_manifest:
-	return ret;
+	return 0;
 }
-
 
 static struct snd_soc_tplg_ops skl_tplg_ops  = {
 	.widget_load = skl_tplg_widget_load,

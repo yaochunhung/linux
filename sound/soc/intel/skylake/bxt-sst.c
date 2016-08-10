@@ -673,7 +673,7 @@ static int bxt_load_library(struct sst_dsp *ctx)
 {
 	struct snd_dma_buffer dmab;
 	struct skl_sst *skl = ctx->thread_context;
-	struct skl_dfw_manifest *minfo = &skl->manifest;
+	struct skl_manifest *minfo = &skl->manifest;
 	const struct firmware *fw = NULL;
 	struct firmware stripped_fw;
 	int ret = 0, i, dma_id, stream_tag;

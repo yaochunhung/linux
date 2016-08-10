@@ -502,7 +502,7 @@ static int cnl_load_library(struct sst_dsp *ctx)
 {
 	struct snd_dma_buffer dmab;
 	struct skl_sst *cnl = ctx->thread_context;
-	struct skl_dfw_manifest *minfo = &cnl->manifest;
+	struct skl_manifest *minfo = &cnl->manifest;
 	const struct firmware *fw = NULL;
 	struct skl_ext_manifest_header *hdr;
 	u32 size;

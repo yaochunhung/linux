@@ -82,7 +82,7 @@ struct skl_sst {
 	struct skl_d0i3_data d0i3_data;
 
 	struct skl_probe_config probe_config;
-	struct skl_dfw_manifest manifest;
+	struct skl_manifest manifest;
 
 	/* Callback to update D0i3C register */
 	void (*update_d0i3c)(struct device *dev,  bool enable);
