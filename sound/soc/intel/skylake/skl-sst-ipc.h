@@ -21,13 +21,12 @@
 #include "../common/sst-ipc.h"
 #include "skl-sst-dsp.h"
 #include "skl-tplg-interface.h"
+#include "skl-topology.h"
 
 struct sst_dsp;
 struct skl_sst;
 struct sst_generic_ipc;
 
-#define NO_OF_INJECTOR 6
-#define NO_OF_EXTRACTOR 8
 #define MAX_FW_REG_SZ 4096
 #define FW_REG_SZ 1024
 #define TYPE0_EXCEPTION 0
@@ -59,47 +58,6 @@ struct skl_d0i3_data {
 	int d0i3_stream_count;
 	int non_d0i3_stream_count;
 	struct delayed_work d0i3_work;
-};
-
-struct injector_data {
-	/* connect or disconnect */
-	u8 operation;
-	/* Specifies EXTRACTOR or INJECTOR or INJECT_REEXTRACT */
-	u32 purpose;
-	/* Injector probe param */
-	u32 probe_point_id;
-	struct hdac_ext_stream *stream;
-	int dma_id;
-	int dma_buf_size;
-	enum skl_probe_state_inj state;
-};
-
-struct extractor_data {
-	/* Probe connect or disconnect */
-	u8 operation;
-	/* Specifies EXTRACTOR or INJECTOR or INJECT_REEXTRACT */
-	u32 purpose;
-	/* Extractor probe param */
-	u32 probe_point_id;
-	enum skl_probe_state_ext state;
-};
-
-struct skl_probe_config {
-	struct snd_soc_dapm_widget *w;
-	/* Number of extractor DMA's used */
-	int e_refc;
-
-	/* Number of injector DMA's used */
-	int i_refc;
-
-	int edma_id;
-	int edma_type;
-	int edma_buffsize;
-	int no_extractor;
-	int no_injector;
-	struct hdac_ext_stream *estream;
-	struct injector_data iprobe[NO_OF_INJECTOR];
-	struct extractor_data eprobe[NO_OF_EXTRACTOR];
 };
 
 struct skl_notify_kctrl_info {

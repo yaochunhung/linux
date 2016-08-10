@@ -27,7 +27,6 @@
 #include <sound/soc.h>
 #include "skl.h"
 #include "skl-tplg-interface.h"
-#include "skl-sst-ipc.h"
 
 #define BITS_PER_BYTE 8
 #define MAX_TS_GROUPS 8
@@ -42,6 +41,9 @@
 #define MODULE_MAX_IN_PINS	8
 #define MODULE_MAX_OUT_PINS	8
 #define SKL_TPLG_CHG_NOTIFY	3
+
+#define NO_OF_INJECTOR 6
+#define NO_OF_EXTRACTOR 8
 
 enum skl_channel_index {
 	SKL_CHANNEL_LEFT = 0,
@@ -411,6 +413,47 @@ struct fw_ipc_data {
 	u32 adsp_id;
 	u32 mailbx[MAX_ADSP_SZ];
 	struct mutex mutex;
+};
+
+struct injector_data {
+	/* connect or disconnect */
+	u8 operation;
+	/* Specifies EXTRACTOR or INJECTOR or INJECT_REEXTRACT */
+	u32 purpose;
+	/* Injector probe param */
+	u32 probe_point_id;
+	struct hdac_ext_stream *stream;
+	int dma_id;
+	int dma_buf_size;
+	enum skl_probe_state_inj state;
+};
+
+struct extractor_data {
+	/* Probe connect or disconnect */
+	u8 operation;
+	/* Specifies EXTRACTOR or INJECTOR or INJECT_REEXTRACT */
+	u32 purpose;
+	/* Extractor probe param */
+	u32 probe_point_id;
+	enum skl_probe_state_ext state;
+};
+
+struct skl_probe_config {
+	struct snd_soc_dapm_widget *w;
+	/* Number of extractor DMA's used */
+	int e_refc;
+
+	/* Number of injector DMA's used */
+	int i_refc;
+
+	int edma_id;
+	int edma_type;
+	int edma_buffsize;
+	int no_extractor;
+	int no_injector;
+	struct hdac_ext_stream *estream;
+	struct injector_data iprobe[NO_OF_INJECTOR];
+	struct extractor_data eprobe[NO_OF_EXTRACTOR];
 };
 
 int skl_tplg_be_update_params(struct snd_soc_dai *dai,
