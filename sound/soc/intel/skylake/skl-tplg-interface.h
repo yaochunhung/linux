@@ -285,7 +285,6 @@ struct skl_dfw_pipe {
 	u32 create_priority:8;
 	u32 rsvd1:8;
 	char device[32];
-	u32 memory_pages:8;
 	u32 order:3;
 	u32 direction:2;
 	u32 conn_type:3;
@@ -302,45 +301,24 @@ struct skl_dfw_pipe {
 struct skl_dfw_module {
 	u8 uuid[16];
 
-	u16 module_id;
-	u16 instance_id;
-	u32 max_mcps;
-	u32 mem_pages;
-	u32 obs;
-	u32 ibs;
+	u32 module_id:16;
+	u32 instance_id:16;
 	u32 vbus_id;
-	u32 dma_buffer_size; /* in milli sec */
 
-	u32 max_in_queue:8;
-	u32 max_out_queue:8;
 	u32 time_slot:8;
 	u32 core_id:4;
-	u32 rsvd1:4;
-
 	u32 module_type:8;
 	u32 conn_type:4;
 	u32 dev_type:4;
 	u32 hw_conn_type:4;
-	u32 rsvd2:12;
 
-	u32 params_fixup:8;
-	u32 converter:8;
-	u32 in_frame_size:8;
-	u32 input_pin_type:1;
-	u32 output_pin_type:1;
 	u32 is_dynamic_in_pin:1;
 	u32 is_dynamic_out_pin:1;
-	u32 is_loadable:1;
 	u32 fast_mode:1;
 	u32 proc_domain:1;
-	u32 rsvd3:1;
-
-	u32 out_frame_size:8;
-	u32 rsvd4:24;
+	u32 rsvd:28;
 
 	struct skl_dfw_pipe pipe;
-	struct skl_dfw_module_fmt in_fmt[SKL_MAX_IN_QUEUE];
-	struct skl_dfw_module_fmt out_fmt[SKL_MAX_OUT_QUEUE];
 	struct skl_dfw_module_pin in_pin[SKL_MAX_IN_QUEUE];
 	struct skl_dfw_module_pin out_pin[SKL_MAX_OUT_QUEUE];
 	struct skl_dfw_module_caps caps;

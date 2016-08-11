@@ -742,7 +742,7 @@ skl_tplg_init_pipe_modules(struct skl *skl, struct skl_pipe *pipe)
 		if (!skl_is_pipe_mcps_avail(skl, mconfig))
 			return -ENOMEM;
 
-		if (mconfig->is_loadable && ctx->dsp->fw_ops.load_mod) {
+		if (mconfig->module->loadable && ctx->dsp->fw_ops.load_mod) {
 			ret = ctx->dsp->fw_ops.load_mod(ctx->dsp,
 				mconfig->id.module_id, mconfig->guid);
 			if (ret < 0)
@@ -789,7 +789,7 @@ static int skl_tplg_unload_pipe_modules(struct skl_sst *ctx,
 		mconfig  = w_module->w->priv;
 		dev_dbg(ctx->dev, "unload module_id=%d\n", mconfig->id.module_id);
 
-		if (mconfig->is_loadable && ctx->dsp->fw_ops.unload_mod &&
+		if (mconfig->module->loadable && ctx->dsp->fw_ops.unload_mod &&
 			mconfig->m_state > SKL_MODULE_UNINIT)
 			return ctx->dsp->fw_ops.unload_mod(ctx->dsp,
 						mconfig->id.module_id);
@@ -946,12 +946,12 @@ static int skl_tplg_set_module_bind_params(struct snd_soc_dapm_widget *w,
 	 * check all out/in pins are in bind state.
 	 * if so set the module param
 	 */
-	for (i = 0; i < mcfg->max_out_queue; i++) {
+	for (i = 0; i < mcfg->module->max_output_pins; i++) {
 		if (mcfg->m_out_pin[i].pin_state != SKL_PIN_BIND_DONE)
 			return 0;
 	}
 
-	for (i = 0; i < mcfg->max_in_queue; i++) {
+	for (i = 0; i < mcfg->module->max_input_pins; i++) {
 		if (mcfg->m_in_pin[i].pin_state != SKL_PIN_BIND_DONE)
 			return 0;
 	}
@@ -1189,7 +1189,7 @@ static int skl_tplg_mixer_dapm_pre_pmd_event(struct snd_soc_dapm_widget *w,
 	if (ret)
 		return ret;
 
-	for (i = 0; i < sink_mconfig->max_in_queue; i++) {
+	for (i = 0; i < sink_mconfig->module->max_input_pins; i++) {
 		if (sink_mconfig->m_in_pin[i].pin_state == SKL_PIN_BIND_DONE) {
 			src_mconfig = sink_mconfig->m_in_pin[i].tgt_mcfg;
 			if (!src_mconfig)
@@ -1265,7 +1265,7 @@ static int skl_tplg_pga_dapm_post_pmd_event(struct snd_soc_dapm_widget *w,
 	if (ret)
 		return ret;
 
-	for (i = 0; i < src_mconfig->max_out_queue; i++) {
+	for (i = 0; i < src_mconfig->module->max_output_pins; i++) {
 		if (src_mconfig->m_out_pin[i].pin_state == SKL_PIN_BIND_DONE) {
 			sink_mconfig = src_mconfig->m_out_pin[i].tgt_mcfg;
 			if (!sink_mconfig)
@@ -2098,8 +2098,7 @@ static const struct snd_soc_tplg_kcontrol_ops skl_tplg_kcontrol_ops[] = {
  * info passed into module instance
  */
 static void skl_fill_module_pin_info(struct skl_dfw_module_pin *dfw_pin,
-						struct skl_module_pin *m_pin,
-						bool is_dynamic, int max_pin)
+		struct skl_module_pin *m_pin, bool is_dynamic, int max_pin)
 {
 	int i;
 
@@ -2230,24 +2229,6 @@ static struct skl_pipe *skl_tplg_add_pipe(struct device *dev,
 	return ppl->pipe;
 }
 
-static void skl_tplg_fill_fmt(struct skl_module_fmt *dst_fmt,
-				struct skl_dfw_module_fmt *src_fmt,
-				int pins)
-{
-	int i;
-
-	for (i = 0; i < pins; i++) {
-		dst_fmt[i].channels  = src_fmt[i].channels;
-		dst_fmt[i].s_freq = src_fmt[i].freq;
-		dst_fmt[i].bit_depth = src_fmt[i].bit_depth;
-		dst_fmt[i].valid_bit_depth = src_fmt[i].valid_bit_depth;
-		dst_fmt[i].ch_cfg = src_fmt[i].ch_cfg;
-		dst_fmt[i].ch_map = src_fmt[i].ch_map;
-		dst_fmt[i].interleaving_style = src_fmt[i].interleaving_style;
-		dst_fmt[i].sample_type = src_fmt[i].sample_type;
-	}
-}
-
 #define SKL_CURVE_NONE 0
 #define SKL_MAX_GAIN 0x7FFFFFFF
 
@@ -2276,11 +2257,11 @@ static void skl_clear_pin_config(struct snd_soc_platform *platform,
 					strlen(platform->component.name))) {
 		mconfig = w->priv;
 		pipe = mconfig->pipe;
-		for (i = 0; i < mconfig->max_in_queue; i++) {
+		for (i = 0; i < mconfig->module->max_input_pins; i++) {
 			mconfig->m_in_pin[i].in_use = false;
 			mconfig->m_in_pin[i].pin_state = SKL_PIN_UNBIND;
 		}
-		for (i = 0; i < mconfig->max_out_queue; i++) {
+		for (i = 0; i < mconfig->module->max_output_pins; i++) {
 			mconfig->m_out_pin[i].in_use = false;
 			mconfig->m_out_pin[i].pin_state = SKL_PIN_UNBIND;
 		}
@@ -2353,28 +2334,12 @@ static int skl_tplg_widget_load(struct snd_soc_component *cmpnt,
 	 */
 	mconfig->id.module_id = -1;
 	mconfig->id.instance_id = dfw_config->instance_id;
-	mconfig->mcps = dfw_config->max_mcps;
-	mconfig->ibs = dfw_config->ibs;
-	mconfig->obs = dfw_config->obs;
 	mconfig->core_id = dfw_config->core_id;
-	mconfig->max_in_queue = dfw_config->max_in_queue;
-	mconfig->max_out_queue = dfw_config->max_out_queue;
 	mconfig->domain = dfw_config->proc_domain;
 
-	skl_tplg_fill_fmt(mconfig->in_fmt, dfw_config->in_fmt,
-						MODULE_MAX_IN_PINS);
-	skl_tplg_fill_fmt(mconfig->out_fmt, dfw_config->out_fmt,
-						MODULE_MAX_OUT_PINS);
-
-	mconfig->params_fixup = dfw_config->params_fixup;
-	mconfig->converter = dfw_config->converter;
 	mconfig->m_type = dfw_config->module_type;
 	mconfig->vbus_id = dfw_config->vbus_id;
-	mconfig->mem_pages = dfw_config->mem_pages;
 	mconfig->fast_mode = dfw_config->fast_mode;
-	mconfig->in_frame_size = dfw_config->in_frame_size;
-	mconfig->out_frame_size = dfw_config->out_frame_size;
-	mconfig->dma_buffer_size = dfw_config->dma_buffer_size;
 
 	pipe = skl_tplg_add_pipe(bus->dev, skl, &dfw_config->pipe);
 	if (pipe)
@@ -2385,25 +2350,23 @@ static int skl_tplg_widget_load(struct snd_soc_component *cmpnt,
 	mconfig->time_slot = dfw_config->time_slot;
 	mconfig->formats_config.caps_size = dfw_config->caps.caps_size;
 
-	mconfig->m_in_pin = devm_kzalloc(bus->dev, (mconfig->max_in_queue) *
-						sizeof(*mconfig->m_in_pin),
-						GFP_KERNEL);
+	mconfig->m_in_pin = devm_kzalloc(bus->dev, SKL_MAX_IN_QUEUE *
+				sizeof(*mconfig->m_in_pin), GFP_KERNEL);
 	if (!mconfig->m_in_pin)
 		return -ENOMEM;
 
-	mconfig->m_out_pin = devm_kzalloc(bus->dev, (mconfig->max_out_queue) *
-						sizeof(*mconfig->m_out_pin),
-						GFP_KERNEL);
+	mconfig->m_out_pin = devm_kzalloc(bus->dev, SKL_MAX_OUT_QUEUE *
+				sizeof(*mconfig->m_out_pin), GFP_KERNEL);
 	if (!mconfig->m_out_pin)
 		return -ENOMEM;
 
 	skl_fill_module_pin_info(dfw_config->in_pin, mconfig->m_in_pin,
-						dfw_config->is_dynamic_in_pin,
-						mconfig->max_in_queue);
+				dfw_config->is_dynamic_in_pin,
+				SKL_MAX_IN_QUEUE);
 
 	skl_fill_module_pin_info(dfw_config->out_pin, mconfig->m_out_pin,
-						 dfw_config->is_dynamic_out_pin,
-							mconfig->max_out_queue);
+				dfw_config->is_dynamic_out_pin,
+				SKL_MAX_OUT_QUEUE);
 
 	if (mconfig->formats_config.caps_size == 0)
 		goto bind_event;
