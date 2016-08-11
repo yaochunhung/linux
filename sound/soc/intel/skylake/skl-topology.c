@@ -2240,6 +2240,67 @@ static void skl_fill_module_pin_info(struct skl_dfw_module_pin *dfw_pin,
 	}
 }
 
+static int skl_fill_pipe_configs(struct device *dev, struct skl_pipe *pipe,
+			struct skl_dfw_pipe *dfw_pipe)
+{
+	int i = 0, j;
+	struct skl_dfw_path_config *dfw_config;
+	struct skl_path_config **configs, *config;
+
+	if (dfw_pipe->nr_cfgs > SKL_MAX_PATH_CONFIGS) {
+		dev_err(dev, "path configs exceeded: %d\n", pipe->ppl_id);
+		return -EINVAL;
+	}
+	configs = kcalloc(pipe->nr_cfgs, sizeof(*config), GFP_KERNEL);
+	if (!configs)
+		goto failed;
+
+	pipe->configs = configs;
+
+	for (i = 0; i < dfw_pipe->nr_cfgs; i++) {
+		dfw_config = &dfw_pipe->configs[i];
+		configs[i] = kzalloc(sizeof(*config), GFP_KERNEL);
+		if (!configs[i])
+			goto failed;
+
+		config = pipe->configs[i];
+
+		memcpy(config->name, dfw_config->config_name,
+			SKL_MAX_NAME_LENGTH);
+		config->idx = dfw_config->config_idx;
+		config->mem_pages = dfw_config->mem_pages;
+		config->in_fmt.freq = dfw_config->in_pcm_format.freq;
+		config->in_fmt.channels = dfw_config->in_pcm_format.channels;
+		config->in_fmt.bps = dfw_config->in_pcm_format.bps;
+		config->out_fmt.freq = dfw_config->out_pcm_format.freq;
+		config->out_fmt.channels = dfw_config->out_pcm_format.channels;
+		config->out_fmt.bps = dfw_config->out_pcm_format.bps;
+		if (pipe->nr_modules > SKL_MAX_MODULES_IN_PIPE) {
+			dev_err(dev, "nr modules overflow in pipe: %d\n",
+								pipe->ppl_id);
+			return -EINVAL;
+		}
+		for (j = 0; j < pipe->nr_modules; j++) {
+			memcpy(&config->mod_cfg[j].uuid,
+				dfw_config->mod_cfg[j].uuid, 16);
+			config->mod_cfg[j].instance_id =
+				dfw_config->mod_cfg[j].instance_id;
+			config->mod_cfg[j].res_idx =
+				dfw_config->mod_cfg[j].res_idx;
+			config->mod_cfg[j].fmt_idx =
+				dfw_config->mod_cfg[j].fmt_idx;
+		}
+	}
+	return 0;
+failed:
+	for (--i; i >= 0; --i)
+		kzfree(configs[i]);
+
+	kfree(configs);
+	dev_err(dev, "no memory for pipe configs: %d\n", pipe->ppl_id);
+	return -ENOMEM;
+}
+
 /*
  * Add pipeline from topology binary into driver pipeline list
  *
@@ -2271,11 +2332,23 @@ static struct skl_pipe *skl_tplg_add_pipe(struct device *dev,
 		return NULL;
 
 	pipe->ppl_id = dfw_pipe->pipe_id;
-	pipe->memory_pages = dfw_pipe->memory_pages;
 	pipe->pipe_priority = dfw_pipe->pipe_priority;
 	pipe->conn_type = dfw_pipe->conn_type;
 	pipe->lp_mode = dfw_pipe->lp_mode;
 	pipe->state = SKL_PIPE_INVALID;
+	pipe->create_priority = dfw_pipe->create_priority;
+	pipe->order = dfw_pipe->order;
+	pipe->direction = dfw_pipe->direction;
+	pipe->link_type = dfw_pipe->link_type;
+	pipe->vbus_id = dfw_pipe->vbus_id;
+	pipe->pipe_mode = dfw_pipe->pipe_mode;
+	pipe->nr_cfgs = dfw_pipe->nr_cfgs;
+	pipe->nr_modules = dfw_pipe->nr_modules;
+	memcpy(&pipe->device[0], &dfw_pipe->device[0], sizeof(pipe->device));
+
+	if (skl_fill_pipe_configs(dev, pipe, dfw_pipe))
+		return NULL;
+
 	pipe->p_params = params;
 	INIT_LIST_HEAD(&pipe->w_list);
 
