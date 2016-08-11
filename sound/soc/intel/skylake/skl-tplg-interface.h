@@ -45,6 +45,7 @@
 #define HDA_MAX_LIB    16
 #define MAX_DMA_CFG    24
 #define SKL_UUID_STR_SZ 40
+#define MAX_LL_SRC_CFG  8
 /* Event types goes here */
 /* Reserve event type 0 for no event handlers */
 enum skl_event_types {
@@ -370,11 +371,22 @@ struct skl_dma_buff_cfg {
 	struct skl_dma_config dma_cfg[MAX_DMA_CFG];
 } __packed;
 
+struct skl_sch_config {
+	u32 type;
+	u32 length;
+	u32 sys_tick_mul;
+	u32 sys_tick_div;
+	u32 ll_src;
+	u32 num_cfg;
+	u32 node_info[MAX_LL_SRC_CFG];
+} __packed;
+
 struct fw_cfg_info {
 	struct skl_mem_status mem_sts;
 	struct skl_dsp_freq slw_frq;
 	struct skl_dsp_freq fst_frq;
 	struct skl_dma_buff_cfg dmacfg;
+	struct skl_sch_config sch_cfg;
 } __packed;
 
 /*

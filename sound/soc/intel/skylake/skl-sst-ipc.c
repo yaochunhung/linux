@@ -199,6 +199,9 @@
 
 /* Offset to get the event data for module notification */
 #define MOD_DATA_OFFSET		12
+#define SKL_FW_CONFIG_SCHED_CFG_SET       18
+#define TYPE_OFFSET			0
+#define SIZE_OFFSET			1
 
 enum skl_ipc_msg_target {
 	IPC_FW_GEN_MSG = 0,
@@ -1311,3 +1314,39 @@ int skl_ipc_set_dma_cfg(struct sst_generic_ipc *ipc, u8 instance_id,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(skl_ipc_set_dma_cfg);
+
+int skl_ipc_set_sched_cfg(struct sst_generic_ipc *ipc, u8 instance_id,
+			u16 module_id, u32 *data)
+{
+	struct skl_ipc_header header = {0};
+	u64 *ipc_header = (u64 *)(&header);
+	int ret;
+	u32 tx_size;
+
+	/* size of total message = size of payload + size of headers*/
+	tx_size = data[SIZE_OFFSET] + (2 * sizeof(u32));
+	header.primary = IPC_MSG_TARGET(IPC_MOD_MSG);
+	header.primary |= IPC_MSG_DIR(IPC_MSG_REQUEST);
+	header.primary |= IPC_GLB_TYPE(IPC_MOD_LARGE_CONFIG_SET);
+	header.primary |= IPC_MOD_INSTANCE_ID(instance_id);
+	header.primary |= IPC_MOD_ID(module_id);
+
+	header.extension = IPC_DATA_OFFSET_SZ(tx_size);
+	header.extension |= IPC_LARGE_PARAM_ID(SET_LARGE_CFG_FW_CONFIG);
+	header.extension |= IPC_FINAL_BLOCK(1);
+	header.extension |= IPC_INITIAL_BLOCK(1);
+
+	/* fill the type as per ADSP requirement */
+	data[TYPE_OFFSET] = SKL_FW_CONFIG_SCHED_CFG_SET;
+	dev_dbg(ipc->dev, "In %s primary =%x ext=%x\n", __func__,
+			header.primary, header.extension);
+
+	ret = skl_ipc_tx_message(ipc, *ipc_header,
+				(char *)data,
+				tx_size, NULL, 0, true,
+				SKL_IPC_DEFAULT_TIMEOUT);
+	if (ret < 0)
+		dev_err(ipc->dev, "ipc: set scheduler config failed, err %d\n", ret);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(skl_ipc_set_sched_cfg);

@@ -546,6 +546,12 @@ int bxt_set_dsp_D0(struct sst_dsp *ctx, unsigned int core_id)
 					BXT_BASE_FW_MODULE_ID,
 					(u32 *)(&skl->manifest.cfg.dmacfg));
 		}
+		/* set scheduler config if available for CORE0 boot only */
+		if (skl->manifest.cfg.sch_cfg.length) {
+			skl_ipc_set_sched_cfg(&skl->ipc, BXT_INSTANCE_ID,
+					BXT_BASE_FW_MODULE_ID,
+					(u32 *)(&skl->manifest.cfg.sch_cfg));
+		}
 	}
 
 	ctx->core_info.core_state[core_id] = SKL_DSP_RUNNING;
@@ -660,6 +666,13 @@ static int bxt_load_base_firmware(struct sst_dsp *ctx)
 					BXT_INSTANCE_ID,
 					BXT_BASE_FW_MODULE_ID,
 					(u32 *)(&skl->manifest.cfg.dmacfg));
+			}
+			/* set scheduler config if available */
+			if (skl->manifest.cfg.sch_cfg.length) {
+				skl_ipc_set_sched_cfg(&skl->ipc,
+					BXT_INSTANCE_ID,
+					BXT_BASE_FW_MODULE_ID,
+					(u32 *)(&skl->manifest.cfg.sch_cfg));
 			}
 		}
 	}
