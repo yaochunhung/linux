@@ -381,6 +381,9 @@ static ssize_t module_read(struct file *file, char __user *user_buf,
 		size_t count, loff_t *ppos)
 {
 	struct skl_module_cfg *mconfig = file->private_data;
+	struct skl_module *module = mconfig->module;
+	struct skl_module_res *res = &module->resources[mconfig->res_idx];
+	struct skl_module_intf *m_intf;
 	char *buf;
 	ssize_t ret;
 
@@ -393,20 +396,17 @@ static ssize_t module_read(struct file *file, char __user *user_buf,
 
 	ret += snprintf(buf + ret, MOD_BUF - ret,
 			"Resources\n\tMCPS %x\n\tIBS %x\n\tOBS %x\t\n",
-			mconfig->mcps, mconfig->ibs, mconfig->obs);
+			res->cps, res->ibs, res->obs);
 
 	ret += snprintf(buf + ret, MOD_BUF - ret,
 			"Module data:\n\tCore %d\n\tIN queue %d\n\tOut queue %d\n\t%s\n",
-			mconfig->core_id, mconfig->max_in_queue,
-			mconfig->max_out_queue,
-			mconfig->is_loadable ? "loadable" : "inbuilt");
+			mconfig->core_id, mconfig->module->max_input_pins,
+			mconfig->module->max_output_pins,
+			mconfig->module->loadable ? "loadable" : "inbuilt");
 
-	ret += skl_print_fmt(mconfig->in_fmt, buf, ret, true);
-	ret += skl_print_fmt(mconfig->out_fmt, buf, ret, false);
-
-	ret += snprintf(buf + ret, MOD_BUF - ret,
-			"Fixup:\n\tParams %x\n\tConverter %x\n",
-			mconfig->params_fixup, mconfig->converter);
+	m_intf = &module->formats[mconfig->fmt_idx];
+	ret += skl_print_fmt(&m_intf->input[0].pin_fmt, buf, ret, true);
+	ret += skl_print_fmt(&m_intf->output[0].pin_fmt, buf, ret, false);
 
 	ret += snprintf(buf + ret, MOD_BUF - ret,
 			"Module Gateway\n\tType %x\n\tInstance %d\n\tHW conn %x\n\tSlot %x\n",
@@ -435,9 +435,9 @@ static ssize_t module_read(struct file *file, char __user *user_buf,
 			mconfig->pipe->p_params->stream);
 
 	ret += skl_print_pins(mconfig->m_in_pin, buf,
-			mconfig->max_in_queue, ret, true);
+			mconfig->module->max_input_pins, ret, true);
 	ret += skl_print_pins(mconfig->m_out_pin, buf,
-			mconfig->max_out_queue, ret, false);
+			mconfig->module->max_output_pins, ret, false);
 
 	ret = simple_read_from_buffer(user_buf, count, ppos, buf, ret);
 
