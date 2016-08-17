@@ -2555,31 +2555,189 @@ int skl_tplg_control_load(struct snd_soc_component *cmpnt,
 	return 0;
 }
 
+static int skl_fill_module_res(struct device *dev, struct skl_module_res *dest,
+					struct skl_dfw_module_res *src)
+{
+	int i;
+
+	if (src->nr_input_pins > SKL_MAX_IN_QUEUE) {
+		dev_err(dev, "i/p pins exceeded: %d\n", src->nr_input_pins);
+		return -EINVAL;
+	}
+	if (src->nr_output_pins > SKL_MAX_OUT_QUEUE) {
+		dev_err(dev, "o/p pins exceeded: %d\n", src->nr_output_pins);
+		return -EINVAL;
+	}
+
+	dest->res_idx = src->res_idx;
+	dest->is_pages = src->is_pages;
+	dest->cps = src->cps;
+	dest->ibs = src->ibs;
+	dest->obs = src->obs;
+	dest->dma_buffer_size = src->dma_buffer_size;
+	dest->cpc = src->cpc;
+	dest->module_flags = src->module_flags;
+	dest->obls = src->obls;
+	dest->nr_input_pins = src->nr_input_pins;
+	dest->nr_output_pins = src->nr_output_pins;
+
+	for (i = 0; i < dest->nr_input_pins; i++) {
+		dest->input[i].pin_index = src->input[i].pin_index;
+		dest->input[i].buf_size = src->input[i].buf_size;
+	}
+
+	for (i = 0; i < dest->nr_output_pins; i++) {
+		dest->output[i].pin_index = src->output[i].pin_index;
+		dest->output[i].buf_size = src->output[i].buf_size;
+	}
+	return 0;
+}
+
+static int skl_fill_module_intf(struct device *dev,
+		struct skl_module_intf *dest, struct skl_dfw_module_intf *src)
+{
+	int i;
+
+	if (src->nr_input_fmt > SKL_MAX_IN_QUEUE) {
+		dev_err(dev, "i/p formats exceeded: %d\n", src->nr_input_fmt);
+		return -EINVAL;
+	}
+	if (src->nr_output_fmt > SKL_MAX_OUT_QUEUE) {
+		dev_err(dev, "o/p formats exceeded: %d\n", src->nr_output_fmt);
+		return -EINVAL;
+	}
+
+
+	dest->fmt_idx = src->fmt_idx;
+	dest->nr_input_fmt = src->nr_input_fmt;
+	dest->nr_output_fmt = src->nr_output_fmt;
+
+	for (i = 0; i < dest->nr_input_fmt; i++) {
+		dest->input[i].pin_id = src->input[i].pin_id;
+		dest->input[i].pin_fmt.channels =
+					src->input[i].pin_fmt.channels;
+		dest->input[i].pin_fmt.s_freq = src->input[i].pin_fmt.freq;
+		dest->input[i].pin_fmt.bit_depth =
+					src->input[i].pin_fmt.bit_depth;
+		dest->input[i].pin_fmt.valid_bit_depth =
+					src->input[i].pin_fmt.valid_bit_depth;
+		dest->input[i].pin_fmt.ch_cfg = src->input[i].pin_fmt.ch_cfg;
+		dest->input[i].pin_fmt.interleaving_style =
+				src->input[i].pin_fmt.interleaving_style;
+		dest->input[i].pin_fmt.sample_type =
+					src->input[i].pin_fmt.sample_type;
+		dest->input[i].pin_fmt.ch_map = src->input[i].pin_fmt.ch_map;
+	}
+
+	for (i = 0; i < dest->nr_output_fmt; i++) {
+		dest->output[i].pin_id = src->output[i].pin_id;
+		dest->output[i].pin_fmt.channels =
+					src->output[i].pin_fmt.channels;
+		dest->output[i].pin_fmt.s_freq = src->output[i].pin_fmt.freq;
+		dest->output[i].pin_fmt.bit_depth =
+					src->output[i].pin_fmt.bit_depth;
+		dest->output[i].pin_fmt.valid_bit_depth =
+					src->output[i].pin_fmt.valid_bit_depth;
+		dest->output[i].pin_fmt.ch_cfg = src->output[i].pin_fmt.ch_cfg;
+		dest->output[i].pin_fmt.interleaving_style =
+				src->output[i].pin_fmt.interleaving_style;
+		dest->output[i].pin_fmt.sample_type =
+					src->output[i].pin_fmt.sample_type;
+		dest->output[i].pin_fmt.ch_map = src->output[i].pin_fmt.ch_map;
+	}
+	return 0;
+}
+
+static int skl_fill_module(struct device *dev, struct skl_module *dest,
+					struct skl_dfw_module_type *src)
+{
+	int i;
+
+	if (src->nr_resources > SKL_MAX_MODULE_RESOURCES) {
+		dev_err(dev, "mod resources exceeded:%d\n", src->nr_resources);
+		return -EINVAL;
+	}
+	if (src->nr_interfaces > SKL_MAX_MODULE_FORMATS) {
+		dev_err(dev, "interfaces exceeded: %d\n", src->nr_interfaces);
+		return -EINVAL;
+	}
+	dest->major_version = src->major_version;
+	dest->minor_version = src->minor_version;
+	dest->hotfix_version = src->hotfix_version;
+	memcpy(&dest->uuid, &src->uuid, 16);
+	dest->loadable = src->loadable;
+	dest->input_pin_type = src->input_pin_type;
+	dest->output_pin_type = src->output_pin_type;
+	dest->auto_start = src->auto_start;
+	dest->max_input_pins = src->max_input_pins;
+	dest->max_output_pins = src->max_output_pins;
+	dest->max_instance_count = src->max_instance_count;
+	memcpy(&dest->library_name, &src->library_name, LIB_NAME_LENGTH);
+	dest->nr_resources = src->nr_resources;
+	dest->nr_interfaces = src->nr_interfaces;
+
+	for (i = 0; i < dest->nr_resources; i++)
+		if (skl_fill_module_res(dev, &dest->resources[i],
+						&src->resources[i]))
+			return -EINVAL;
+
+	for (i = 0; i < dest->nr_interfaces; i++)
+		if (skl_fill_module_intf(dev, &dest->formats[i],
+						&src->formats[i]))
+			return -EINVAL;
+
+	return 0;
+}
+
 static int skl_manifest_load(struct snd_soc_component *cmpnt,
 				struct snd_soc_tplg_manifest *manifest)
 {
 	struct skl_manifest *dest;
 	struct skl_dfw_manifest *src;
+	struct skl_module **skl_modules;
 	struct hdac_ext_bus *ebus = snd_soc_component_get_drvdata(cmpnt);
 	struct hdac_bus *bus = ebus_to_hbus(ebus);
 	struct skl *skl = ebus_to_skl(ebus);
-	int size;
+	int i, nr_modules, size;
 
 	src = (struct skl_dfw_manifest *)manifest->priv.data;
 	dest = &skl->skl_sst->manifest;
 
 	memcpy(&dest->cfg, &src->cfg, sizeof(struct fw_cfg_info));
 
-	dest->lib_count = src->lib_count;
-	size = sizeof(struct lib_info) * HDA_MAX_LIB;
-	memcpy(&dest->lib, &src->lib, size);
+	nr_modules = src->nr_modules;
+	skl_modules = devm_kzalloc(bus->dev,
+			sizeof(struct skl_module *) * nr_modules, GFP_KERNEL);
 
+	if (!skl_modules)
+		goto failed;
+
+	dest->nr_modules = nr_modules;
+	dest->modules = skl_modules;
+	size = sizeof(struct skl_module);
+	for (i = 0; i < nr_modules; i++) {
+		skl_modules[i] = devm_kzalloc(bus->dev,
+					sizeof(struct skl_module), GFP_KERNEL);
+		if (!skl_modules[i])
+			goto failed;
+		dest->modules[i] = skl_modules[i];
+		if (skl_fill_module(bus->dev, dest->modules[i],
+						&src->module[i]))
+			return -EINVAL;
+	}
+
+	dest->lib_count = src->lib_count;
 	if (src->lib_count > HDA_MAX_LIB) {
 		dev_err(bus->dev, "Exceeding max Library count. Got:%d\n",
 				src->lib_count);
 		return -EINVAL;
 	}
+	size = sizeof(struct lib_info) * HDA_MAX_LIB;
+	memcpy(&dest->lib, &src->lib, size);
 	return 0;
+failed:
+	dev_err(bus->dev, "No memory for manifest\n");
+	return -ENOMEM;
 }
 
 static struct snd_soc_tplg_ops skl_tplg_ops  = {
