@@ -1284,22 +1284,22 @@ int skl_ipc_set_dma_cfg(struct sst_generic_ipc *ipc, u8 instance_id,
 	int ret;
 	u32 type_offset = 0, size_offset = 1, tx_size;
 
+	/* size of total message = size of payload + size of headers*/
+	tx_size = data[size_offset] + (2 * sizeof(u32));
+
 	header.primary = IPC_MSG_TARGET(IPC_MOD_MSG);
 	header.primary |= IPC_MSG_DIR(IPC_MSG_REQUEST);
 	header.primary |= IPC_GLB_TYPE(IPC_MOD_LARGE_CONFIG_SET);
 	header.primary |= IPC_MOD_INSTANCE_ID(instance_id);
 	header.primary |= IPC_MOD_ID(module_id);
 
-	header.extension = IPC_DATA_OFFSET_SZ(data[size_offset]);
+	header.extension = IPC_DATA_OFFSET_SZ(tx_size);
 	header.extension |= IPC_LARGE_PARAM_ID(SET_LARGE_CFG_FW_CONFIG);
 	header.extension |= IPC_FINAL_BLOCK(1);
 	header.extension |= IPC_INITIAL_BLOCK(1);
 
 	/* fill the type as per ADSP requirement */
 	data[type_offset] = SKL_FW_CONFIG_DMA_CFG_SET;
-
-	/* size of total message = size of payload + size of headers*/
-	tx_size = data[size_offset] + (2 * sizeof(u32));
 
 	dev_dbg(ipc->dev, "In %s primary =%x ext=%x\n", __func__,
 				header.primary, header.extension);
