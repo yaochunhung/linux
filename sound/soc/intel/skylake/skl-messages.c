@@ -492,6 +492,128 @@ static void skl_set_base_module_format(struct skl_sst *ctx,
 	base_cfg->is_pages = res->is_pages;
 }
 
+static void skl_fill_module_pin_format(struct skl_pin_format *pin_fmt,
+				struct skl_module_pin_resources *res,
+				struct skl_module_fmt *intf_fmt)
+{
+	pin_fmt->pin_index = res->pin_index;
+	pin_fmt->buff_size = res->buf_size;
+
+	pin_fmt->audio_fmt.s_freq = intf_fmt->s_freq;
+	pin_fmt->audio_fmt.bit_depth = intf_fmt->bit_depth;
+	pin_fmt->audio_fmt.channel_map = intf_fmt->ch_map;
+	pin_fmt->audio_fmt.ch_cfg = intf_fmt->ch_cfg;
+	pin_fmt->audio_fmt.interleaving = intf_fmt->interleaving_style;
+	pin_fmt->audio_fmt.number_of_channels = intf_fmt->channels;
+	pin_fmt->audio_fmt.valid_bit_depth = intf_fmt->valid_bit_depth;
+	pin_fmt->audio_fmt.sample_type = intf_fmt->sample_type;
+}
+
+/* Non-infrastructure modules are capable of supporting heterogenous
+ * pins. These modules needs to be initialized with Extended base
+ * module config IPC.
+ */
+static int skl_set_ext_algo_format(struct skl_sst *ctx,
+				struct skl_module_cfg *mconfig,
+				void *param_data)
+{
+	struct skl_module *mod_data = mconfig->module;
+	struct skl_module_res *res = &mod_data->resources[mconfig->res_idx];
+	struct skl_module_intf *intf = &mod_data->formats[mconfig->fmt_idx];
+	struct skl_pin_format *pin_fmt;
+	struct skl_module_pin_resources *pin_res;
+	struct skl_module_fmt *intf_fmt;
+	struct skl_base_cfg_ext *ext_cfg;
+	int i;
+
+	ext_cfg = (struct skl_base_cfg_ext *)param_data;
+	skl_set_base_module_format(ctx, mconfig, &ext_cfg->base_cfg);
+
+	if (res->nr_input_pins != intf->nr_input_fmt) {
+		dev_err(ctx->dev, "res and intf ip pins mismatch: %d, %d %d",
+				mconfig->id.module_id, res->nr_input_pins,
+				intf->nr_input_fmt);
+		return -EINVAL;
+	}
+	if (res->nr_output_pins != intf->nr_output_fmt) {
+		dev_err(ctx->dev, "res and intf op pins mismatch: %d, %d %d",
+				mconfig->id.module_id, res->nr_output_pins,
+				intf->nr_output_fmt);
+		return -EINVAL;
+	}
+
+	ext_cfg->nr_input_pins = res->nr_input_pins;
+	ext_cfg->nr_output_pins = res->nr_output_pins;
+	pin_fmt = (struct skl_pin_format *)&ext_cfg->pin_formats;
+
+	for (i = 0; i < res->nr_input_pins; i++, pin_fmt++) {
+		pin_res = &res->input[i];
+		intf_fmt = &intf->input[i].pin_fmt;
+
+		skl_fill_module_pin_format(pin_fmt, pin_res, intf_fmt);
+	}
+
+	for (i = 0; i < res->nr_output_pins; i++, pin_fmt++) {
+		pin_res = &res->output[i];
+		intf_fmt = &intf->output[i].pin_fmt;
+
+		skl_fill_module_pin_format(pin_fmt, pin_res, intf_fmt);
+	}
+
+	if (mconfig->formats_config.caps_size != 0) {
+		memcpy(ext_cfg->params, mconfig->formats_config.caps,
+				mconfig->formats_config.caps_size);
+		ext_cfg->priv_param_length = mconfig->formats_config.caps_size;
+	}
+
+	return 0;
+}
+
+/*
+ * Algo module are DSP pre processing modules. Algo
+ * module take base module configuration and params
+ */
+static int skl_set_base_algo_format(struct skl_sst *ctx,
+			struct skl_module_cfg *mconfig,
+			struct skl_algo_cfg *algo_mcfg)
+{
+	struct skl_base_cfg *base_cfg = (struct skl_base_cfg *)algo_mcfg;
+
+	skl_set_base_module_format(ctx, mconfig, base_cfg);
+
+	if (mconfig->formats_config.caps_size == 0)
+		return 0;
+
+	memcpy(algo_mcfg->params,
+			mconfig->formats_config.caps,
+			mconfig->formats_config.caps_size);
+
+	return 0;
+}
+
+static int skl_set_algo_format(struct skl_sst *ctx,
+			struct skl_module_cfg *mconfig,
+			void *param_data)
+{
+	struct skl_module *mod_data = mconfig->module;
+	struct skl_module_res *res = &mod_data->resources[mconfig->res_idx];
+	u8 module_pins;
+	int ret;
+
+	/*
+	 * Non-infrastructure modules might support heterogenous
+	 * pins. If module instance has pin specific resources
+	 * then compose extended message.
+	 */
+	module_pins = res->nr_input_pins + res->nr_output_pins;
+	if (module_pins)
+		ret = skl_set_ext_algo_format(ctx, mconfig, param_data);
+	else
+		ret = skl_set_base_algo_format(ctx, mconfig, param_data);
+
+	return ret;
+}
+
 /*
  * Copies copier capabilities into copier module and updates copier module
  * config size.
@@ -711,27 +833,6 @@ static void skl_set_probe_format(struct skl_sst *ctx,
 }
 
 /*
- * Algo module are DSP pre processing modules. Algo
- * module take base module configuration and params
- */
-static void skl_set_algo_format(struct skl_sst *ctx,
-			struct skl_module_cfg *mconfig,
-			struct skl_algo_cfg *algo_mcfg)
-{
-	struct skl_base_cfg *base_cfg = (struct skl_base_cfg *)algo_mcfg;
-
-	skl_set_base_module_format(ctx, mconfig, base_cfg);
-
-	if (mconfig->formats_config.caps_size == 0)
-		return;
-
-	memcpy(algo_mcfg->params,
-			mconfig->formats_config.caps,
-			mconfig->formats_config.caps_size);
-
-}
-
-/*
  * Some modules require base and out format configuration like mic
  * select module. These module take base module configuration and
  * out format configuration
@@ -751,7 +852,9 @@ static void skl_set_base_outfmt_format(struct skl_sst *ctx,
 static u16 skl_get_module_param_size(struct skl_sst *ctx,
 			struct skl_module_cfg *mconfig)
 {
-	u16 param_size;
+	struct skl_module *mod_data = mconfig->module;
+	struct skl_module_res *res = &mod_data->resources[mconfig->res_idx];
+	u16 param_size, module_pins;
 
 	switch (mconfig->m_type) {
 	case SKL_MODULE_TYPE_COPIER:
@@ -770,7 +873,16 @@ static u16 skl_get_module_param_size(struct skl_sst *ctx,
 		return sizeof(struct skl_up_down_mixer_cfg);
 
 	case SKL_MODULE_TYPE_ALGO:
-		param_size = sizeof(struct skl_base_cfg);
+		/*
+		 * add ext base cfg size if pin resources are found
+		 */
+		module_pins = res->nr_input_pins + res->nr_output_pins;
+		if (module_pins) {
+			param_size = sizeof(struct skl_base_cfg_ext) +
+				(sizeof(struct skl_pin_format) * module_pins);
+		} else
+			param_size = sizeof(struct skl_base_cfg);
+
 		param_size += mconfig->formats_config.caps_size;
 		return param_size;
 
@@ -780,12 +892,19 @@ static u16 skl_get_module_param_size(struct skl_sst *ctx,
 	case SKL_MODULE_TYPE_MIC_SELECT:
 		return sizeof(struct skl_base_outfmt_cfg);
 
+	case SKL_MODULE_TYPE_MIXER:
+		return sizeof(struct skl_base_cfg);
+
 	default:
 		/*
-		 * return only base cfg when no specific module type is
-		 * specified
+		 * return size of base cfg ext when no specific module
+		 * type is specified
 		 */
-		return sizeof(struct skl_base_cfg);
+		module_pins = res->nr_input_pins + res->nr_output_pins;
+		param_size =  sizeof(struct skl_base_cfg_ext) +
+			(sizeof(struct skl_pin_format) * module_pins);
+		param_size += mconfig->formats_config.caps_size;
+		return param_size;
 	}
 
 	return 0;
@@ -803,6 +922,7 @@ static int skl_set_module_format(struct skl_sst *ctx,
 			u16 *module_config_size,
 			void **param_data)
 {
+	int ret = 0;
 	u16 param_size;
 
 	param_size  = skl_get_module_param_size(ctx, module_config);
@@ -832,7 +952,7 @@ static int skl_set_module_format(struct skl_sst *ctx,
 		break;
 
 	case SKL_MODULE_TYPE_ALGO:
-		skl_set_algo_format(ctx, module_config, *param_data);
+		ret = skl_set_algo_format(ctx, module_config, *param_data);
 		break;
 
 	case SKL_MODULE_TYPE_GAIN:
@@ -843,15 +963,21 @@ static int skl_set_module_format(struct skl_sst *ctx,
 		skl_set_base_outfmt_format(ctx, module_config, *param_data);
 		break;
 
-	default:
+	case SKL_MODULE_TYPE_MIXER:
 		skl_set_base_module_format(ctx, module_config, *param_data);
 		break;
 
+	default:
+		/* Send extended base configuration. If a module accepts
+		 * base module config alone, it will ignore extra information.
+		 */
+		ret = skl_set_ext_algo_format(ctx, module_config, *param_data);
+		break;
 	}
 
 	dev_dbg(ctx->dev, "Module id = %d, type=%d config size: %d bytes\n",
 			module_config->id.module_id, module_config->m_type, param_size);
-	return 0;
+	return ret;
 }
 
 static int skl_get_queue_index(struct skl_module_pin *mpin,
