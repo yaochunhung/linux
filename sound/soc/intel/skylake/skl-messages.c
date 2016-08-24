@@ -1126,6 +1126,9 @@ int skl_init_probe_module(struct skl_sst *ctx,
 	dev_dbg(ctx->dev, "%s: module_id = %d instance=%d\n", __func__,
 		 mconfig->id.module_id, mconfig->id.instance_id);
 
+	ret = snd_skl_get_module_info(ctx, mconfig);
+	if(ret < 0)
+		return ret;
 
 	ret = skl_set_module_format(ctx, mconfig,
 			&module_config_size, &param_data);
