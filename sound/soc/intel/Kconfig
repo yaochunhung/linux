@@ -247,6 +247,20 @@ config SND_SOC_INTEL_BXT_RT298_MACH
         Say Y if you have such a device
         If unsure select "N".
 
+config SND_SOC_INTEL_BXT_ANC_MACH
+        tristate "Reference ASoC Machine driver for BXT with ANC loop"
+        select SND_SOC_INTEL_SST
+        select SND_SOC_INTEL_SKYLAKE
+        select SND_SOC_RT298
+        select SND_SOC_DMIC
+	select SND_SOC_COMPRESS
+        default n
+        help
+        This adds support for ASoC machine driver for Broxton platforms
+        with RT298 I2S audio codec.
+        Say Y if you have such a device
+        If unsure select "N".
+
 config SND_SOC_INTEL_CNL_WM8281_MACH
         tristate "ASoC Audio driver for CNL with WM8281 in I2S Mode"
         select SND_SOC_WM_ADSP
