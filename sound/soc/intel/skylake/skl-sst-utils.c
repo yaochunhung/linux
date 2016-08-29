@@ -121,6 +121,29 @@ struct skl_ext_manifest_hdr {
 	u32 entries;
 };
 
+void skl_set_pin_module_id(struct skl_sst *ctx, struct skl_module_cfg *mconfig)
+{
+	int i;
+	struct skl_module_inst_id *pin_id;
+	struct uuid_module *module;
+
+	list_for_each_entry(module, &ctx->uuid_list, list) {
+		for (i = 0; i < SKL_MAX_IN_QUEUE; i++) {
+			pin_id = &mconfig->m_in_pin[i].id;
+			if (uuid_le_cmp(pin_id->pin_uuid, module->uuid) == 0)
+				pin_id->module_id = module->id;
+		}
+	}
+
+	list_for_each_entry(module, &ctx->uuid_list, list) {
+		for (i = 0; i < SKL_MAX_OUT_QUEUE; i++) {
+			pin_id = &mconfig->m_out_pin[i].id;
+			if (uuid_le_cmp(pin_id->pin_uuid, module->uuid) == 0)
+				pin_id->module_id = module->id;
+		}
+	}
+}
+
 int snd_skl_get_module_info(struct skl_sst *ctx,
 			struct skl_module_cfg *mconfig)
 {
@@ -139,6 +162,7 @@ int snd_skl_get_module_info(struct skl_sst *ctx,
 			mconfig->id.module_id = module->id;
 			mconfig->module = module->mod_data;
 			mconfig->module->loadable = module->is_loadable;
+			skl_set_pin_module_id(ctx, mconfig);
 
 			return 0;
 		}

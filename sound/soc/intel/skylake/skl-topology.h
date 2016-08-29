@@ -258,6 +258,7 @@ struct skl_gain_module_config {
 };
 
 struct skl_module_inst_id {
+	uuid_le pin_uuid;
 	int module_id;
 	u32 instance_id;
 };

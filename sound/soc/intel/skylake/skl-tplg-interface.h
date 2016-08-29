@@ -197,6 +197,7 @@ enum skl_probe_state_ext {
 };
 
 struct skl_dfw_module_pin {
+	u8 pin_uuid[16];
 	u16 module_id;
 	u16 instance_id;
 } __packed;
