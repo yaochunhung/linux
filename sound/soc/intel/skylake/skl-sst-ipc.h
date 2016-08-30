@@ -144,8 +144,16 @@ struct skl_log_state {
 };
 
 struct skl_log_state_msg {
+	uint32_t  aging_timer_period;
+	uint32_t  fifo_full_timer_period;
+
 	u32	core_mask;
 	struct	skl_log_state logs_core[2];
+};
+
+struct SystemTime {
+	uint32_t  val_l;
+	uint32_t  val_u;
 };
 
 struct fw_version {
@@ -257,6 +265,7 @@ int skl_ipc_set_sched_cfg(struct sst_generic_ipc *ipc, u8 instance_id,
 			u16 module_id, u32 *data);
 
 int skl_dsp_enable_logging(struct sst_generic_ipc *ipc, int core, int enable);
+int skl_dsp_set_system_time(struct skl_sst *skl_sst);
 
 void skl_ipc_int_enable(struct sst_dsp *dsp);
 void skl_ipc_op_int_enable(struct sst_dsp *ctx);
