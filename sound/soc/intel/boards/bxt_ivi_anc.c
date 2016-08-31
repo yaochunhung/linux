@@ -39,6 +39,14 @@ static struct snd_soc_jack_pin broxton_headset_pins[] = {
 	},
 };
 
+static const struct snd_soc_pcm_stream bxtn_dai_params_codec = {
+	.formats = SNDRV_PCM_FMTBIT_S24_LE,
+	.rate_min = 48000,
+	.rate_max = 48000,
+	.channels_min = 8,
+	.channels_max = 8,
+};
+
 static const struct snd_kcontrol_new broxton_controls[] = {
 	SOC_DAPM_PIN_SWITCH("Speaker"),
 	SOC_DAPM_PIN_SWITCH("Headphone Jack"),
@@ -111,6 +119,18 @@ static const struct snd_soc_dapm_route broxton_rt298_map[] = {
 	{"8ch_pt_in", NULL, "ssp4 Rx" },
 	{"ssp4 Rx", NULL, "Dummy Capture4" },
 	{"Dummy Capture4", NULL, "DummyMIC4"},
+
+	/* (ANC) Codec1_in - pipe */
+	{ "codec1_in", NULL, "ssp0 Rx" },
+	{ "ssp0 Rx", NULL, "Dummy Capture" },
+
+	/* CodecX_in - pipe */
+	{ "codecX_in", NULL, "ssp2 Rx" },
+	{ "ssp2 Rx", NULL, "Dummy Capture2" },
+
+	/* Media1_out  Path */
+	{ "Dummy Playback2", NULL, "ssp2 Tx"},
+	{ "ssp2 Tx", NULL, "media1_out"},
 };
 
 static int broxton_rt298_codec_init(struct snd_soc_pcm_runtime *rtd)
@@ -378,6 +398,34 @@ static struct snd_soc_dai_link broxton_rt298_dais[] = {
 		.capture_only = true,
 		.ignore_suspend = 1,
 	},
+		/* CODEC<->CODEC link */
+	{
+		.name = "Bxtn SSP0 Port",
+		.stream_name = "Bxtn SSP0",
+		.cpu_dai_name = "SSP0 Pin",
+		.platform_name = "0000:00:0e.0",
+		.codec_name = "snd-soc-dummy",
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.params = &bxtn_dai_params_codec,
+		.dsp_loopback = true,
+		.dai_fmt = SND_SOC_DAIFMT_DSP_A |
+			SND_SOC_DAIFMT_NB_NF |
+			SND_SOC_DAIFMT_CBS_CFS,
+	},
+
+	{
+		.name = "Bxtn SSP2 port",
+		.stream_name = "Bxtn SSP2",
+		.cpu_dai_name = "SSP2 Pin",
+		.platform_name = "0000:00:0e.0",
+		.codec_name = "snd-soc-dummy",
+		.codec_dai_name = "snd-soc-dummy-dai2",
+		.params = &bxtn_dai_params_codec,
+		.dsp_loopback = true,
+		.dai_fmt = SND_SOC_DAIFMT_DSP_A |
+			SND_SOC_DAIFMT_NB_NF |
+			SND_SOC_DAIFMT_CBS_CFS,
+	},
 
 	/* Back End DAI links */
 	{
@@ -492,7 +540,7 @@ static struct snd_soc_card broxton_rt298 = {
 	.num_dapm_widgets = ARRAY_SIZE(broxton_widgets),
 	.dapm_routes = broxton_rt298_map,
 	.num_dapm_routes = ARRAY_SIZE(broxton_rt298_map),
-	.fully_routed = true,
+	.fully_routed = false,
 };
 
 static int broxton_audio_probe(struct platform_device *pdev)
