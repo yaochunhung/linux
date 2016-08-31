@@ -787,6 +787,10 @@ static int skl_tplg_unload_pipe_modules(struct skl_sst *ctx,
 	dev_dbg(ctx->dev, "%s: pipe=%d\n", __func__, pipe->ppl_id);
 	list_for_each_entry(w_module, &pipe->w_list, node) {
 		mconfig  = w_module->w->priv;
+
+		if (!mconfig->module)
+			continue;
+
 		dev_dbg(ctx->dev, "unload module_id=%d\n", mconfig->id.module_id);
 
 		if (mconfig->module->loadable && ctx->dsp->fw_ops.unload_mod &&
@@ -1189,6 +1193,9 @@ static int skl_tplg_mixer_dapm_pre_pmd_event(struct snd_soc_dapm_widget *w,
 	if (ret)
 		return ret;
 
+	if (!sink_mconfig->module)
+		return -EINVAL;
+
 	for (i = 0; i < sink_mconfig->module->max_input_pins; i++) {
 		if (sink_mconfig->m_in_pin[i].pin_state == SKL_PIN_BIND_DONE) {
 			src_mconfig = sink_mconfig->m_in_pin[i].tgt_mcfg;
@@ -1229,6 +1236,9 @@ static int skl_tplg_mixer_dapm_post_pmd_event(struct snd_soc_dapm_widget *w,
 	list_for_each_entry(w_module, &s_pipe->w_list, node) {
 		dst_module = w_module->w->priv;
 
+		if (!dst_module->module)
+			continue;
+
 		if (mconfig->m_state >= SKL_MODULE_INIT_DONE)
 			skl_tplg_free_pipe_mcps(skl, dst_module);
 		if (src_module == NULL) {
@@ -1264,6 +1274,9 @@ static int skl_tplg_pga_dapm_post_pmd_event(struct snd_soc_dapm_widget *w,
 	ret = skl_stop_pipe(ctx, src_mconfig->pipe);
 	if (ret)
 		return ret;
+
+	if (!src_mconfig->module)
+		return -EINVAL;
 
 	for (i = 0; i < src_mconfig->module->max_output_pins; i++) {
 		if (src_mconfig->m_out_pin[i].pin_state == SKL_PIN_BIND_DONE) {

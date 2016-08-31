@@ -1278,13 +1278,17 @@ int skl_unbind_modules(struct skl_sst *ctx,
 			struct skl_module_cfg *src_mcfg,
 			struct skl_module_cfg *dst_mcfg)
 {
-	int ret;
 	struct skl_ipc_bind_unbind_msg msg;
 	struct skl_module_inst_id src_id = src_mcfg->id;
 	struct skl_module_inst_id dst_id = dst_mcfg->id;
-	int in_max = dst_mcfg->module->max_input_pins;
-	int out_max = src_mcfg->module->max_output_pins;
+	int in_max, out_max, ret;
 	int src_index, dst_index, src_pin_state, dst_pin_state;
+
+	if (!dst_mcfg->module || !src_mcfg->module)
+		return -EINVAL;
+
+	in_max = dst_mcfg->module->max_input_pins;
+	out_max = src_mcfg->module->max_output_pins;
 
 	skl_dump_bind_info(ctx, src_mcfg, dst_mcfg);
 
