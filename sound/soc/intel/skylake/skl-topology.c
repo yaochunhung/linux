@@ -946,6 +946,8 @@ static int skl_tplg_set_module_bind_params(struct snd_soc_dapm_widget *w,
 	struct skl_algo_data *bc;
 	struct skl_specific_cfg *sp_cfg;
 
+	if (!mcfg->module)
+		return -EINVAL;
 	/*
 	 * check all out/in pins are in bind state.
 	 * if so set the module param
@@ -2271,6 +2273,12 @@ static void skl_clear_pin_config(struct snd_soc_platform *platform,
 					strlen(platform->component.name))) {
 		mconfig = w->priv;
 		pipe = mconfig->pipe;
+		pipe->state = SKL_PIPE_INVALID;
+		mconfig->m_state = SKL_MODULE_UNINIT;
+
+		if (!mconfig->module)
+			return;
+
 		for (i = 0; i < mconfig->module->max_input_pins; i++) {
 			mconfig->m_in_pin[i].in_use = false;
 			mconfig->m_in_pin[i].pin_state = SKL_PIN_UNBIND;
@@ -2279,8 +2287,6 @@ static void skl_clear_pin_config(struct snd_soc_platform *platform,
 			mconfig->m_out_pin[i].in_use = false;
 			mconfig->m_out_pin[i].pin_state = SKL_PIN_UNBIND;
 		}
-		pipe->state = SKL_PIPE_INVALID;
-		mconfig->m_state = SKL_MODULE_UNINIT;
 	}
 }
 
