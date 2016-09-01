@@ -72,6 +72,7 @@ enum skl_event_types {
  * @SKL_CH_CFG_I2S_DUAL_STEREO_0: Stereo(L,R) in 4 slots, 1st stream:[ L, R, -, - ]
  * @SKL_CH_CFG_I2S_DUAL_STEREO_1: Stereo(L,R) in 4 slots, 2nd stream:[ -, -, L, R ]
  * @SKL_CH_CFG_7_1:	L, C, R, Ls, Rs & LFE., LS, RS
+ * @SKL_CH_CFG_7_0:     L, C, R, Ls, Rs, LS, RS
  * @SKL_CH_CFG_INVALID:	Invalid
  */
 enum skl_ch_cfg {
@@ -88,6 +89,7 @@ enum skl_ch_cfg {
 	SKL_CH_CFG_I2S_DUAL_STEREO_0 = 10,
 	SKL_CH_CFG_I2S_DUAL_STEREO_1 = 11,
 	SKL_CH_CFG_7_1 = 12,
+	CHANNEL_CONFIG_7_0 = 13,
 	SKL_CH_CFG_INVALID
 };
 
