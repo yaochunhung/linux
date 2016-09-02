@@ -289,7 +289,9 @@ enum skl_ipc_resource_event_type {
 	SKL_PROCESS_DATA_ERR = 3,
 	SKL_BUFFERING_MODE_CHANGED = 5,
 	SKL_GATEWAY_UNDERRUN = 6,
-	SKL_GATEWAY_OVERRUN = 7
+	SKL_GATEWAY_OVERRUN = 7,
+	SKL_EDF_DOMAIN_UNSTABLE = 8,
+	SKL_WATCHDOG_EXPIRED = 9
 };
 
 /* Module Message Types */
@@ -447,10 +449,28 @@ skl_process_log_buffer(struct sst_dsp *sst, struct skl_ipc_header header)
 	skl_dsp_put_log_buff(sst, core);
 }
 
+static int
+skl_notify_ssp_clock_loss(struct skl_sst *skl, struct skl_event_notif *notif)
+{
+	struct skl_notify_data *d;
+
+	d = kzalloc((sizeof(*d) + sizeof(*notif)), GFP_KERNEL);
+	if (!d)
+		return -ENOMEM;
+
+	d->length = sizeof(*notif);
+	d->type = 0xFF;
+	memcpy(d->data, notif, d->length);
+	skl->notify_ops.notify_cb(skl,
+			EVENT_CLOCK_LOSS_NOTIFICATION, d);
+	kfree(d);
+	return 0;
+}
 static void
-skl_parse_resource_event(struct sst_dsp *sst, struct skl_ipc_header header)
+skl_parse_resource_event(struct skl_sst *skl, struct skl_ipc_header header)
 {
 	struct skl_event_notif notif;
+	struct sst_dsp *sst = skl->dsp;
 
 	/* read the message contents from mailbox */
 	sst_dsp_inbox_read(sst, &notif, sizeof(struct skl_event_notif));
@@ -486,6 +506,11 @@ skl_parse_resource_event(struct sst_dsp *sst, struct skl_ipc_header header)
 		dev_err(sst->dev, "Gateway Overrun Detected: %x\n",
 					header.primary);
 		break;
+	case SKL_WATCHDOG_EXPIRED:
+		dev_err(sst->dev, "Clock Loss Occurred: %x\n",
+					header.primary);
+		skl_notify_ssp_clock_loss(skl, &notif);
+		break;
 	default:
 		dev_err(sst->dev, "ipc: Unhandled resource event=%x",
 					header.primary);
@@ -515,7 +540,7 @@ int skl_ipc_process_notification(struct sst_generic_ipc *ipc,
 			break;
 
 		case IPC_GLB_NOTIFY_RESOURCE_EVENT:
-			skl_parse_resource_event(skl->dsp, header);
+			skl_parse_resource_event(skl, header);
 			break;
 
 		case IPC_GLB_NOTIFY_FW_READY:

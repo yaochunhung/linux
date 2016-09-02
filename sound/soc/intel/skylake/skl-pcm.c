@@ -37,6 +37,7 @@
 #define HDA_STEREO 2
 #define HDA_QUAD 4
 #define HDA_8_CH 8
+#define BASE_FW_NOTIF_ID 0
 
 static struct snd_pcm_hardware azx_pcm_hw = {
 	.info =			(SNDRV_PCM_INFO_MMAP |
@@ -1053,6 +1054,24 @@ static int skl_dsp_cb_event(struct skl_sst *skl, unsigned int event,
 					m_notification->unique_id);
 		if (!kcontrol) {
 			dev_err(skl->dev, "Module notify control not found\n");
+			return -EIO;
+		}
+
+		sb = (struct soc_bytes_ext *)kcontrol->private_value;
+		bc = (struct skl_algo_data *)sb->dobj.private;
+		param_length = sizeof(struct skl_notify_data)
+					+ notify_data->length;
+		memcpy(bc->params, (char *)notify_data, param_length);
+		snd_ctl_notify(card->snd_card,
+				SNDRV_CTL_EVENT_MASK_VALUE, &kcontrol->id);
+		break;
+
+        case EVENT_CLOCK_LOSS_NOTIFICATION:
+		card = soc_platform->component.card;
+		kcontrol = skl_get_notify_kcontrol(skl, card->snd_card,
+				BASE_FW_NOTIF_ID);
+		if (!kcontrol) {
+			dev_err(skl->dev, "Clock loss notify control not found\n");
 			return -EIO;
 		}
 

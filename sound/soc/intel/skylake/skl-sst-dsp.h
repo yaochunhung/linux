@@ -132,6 +132,7 @@ struct dsp_init;
 /*DSP notification events*/
 #define EVENT_GLB_NOTIFY_PHRASE_DETECTED  4
 #define EVENT_GLB_MODULE_NOTIFICATION  12
+#define EVENT_CLOCK_LOSS_NOTIFICATION	13
 
 /* DSP Core state */
 enum skl_dsp_states {
