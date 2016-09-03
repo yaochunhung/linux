@@ -39,12 +39,28 @@ static struct snd_soc_jack_pin broxton_headset_pins[] = {
 	},
 };
 
-static const struct snd_soc_pcm_stream bxtn_dai_params_codec = {
-	.formats = SNDRV_PCM_FMTBIT_S24_LE,
+static const struct snd_soc_pcm_stream media1_out_params = {
+	.formats = SNDRV_PCM_FMTBIT_S32_LE,
 	.rate_min = 48000,
 	.rate_max = 48000,
-	.channels_min = 8,
-	.channels_max = 8,
+	.channels_min = 3,
+	.channels_max = 3,
+};
+
+static const struct snd_soc_pcm_stream codec1_in_params = {
+	.formats = SNDRV_PCM_FMTBIT_S32_LE,
+	.rate_min = 48000,
+	.rate_max = 48000,
+	.channels_min = 6,
+	.channels_max = 6,
+};
+
+static const struct snd_soc_pcm_stream codec0_in_params = {
+	.formats = SNDRV_PCM_FMTBIT_S32_LE,
+	.rate_min = 48000,
+	.rate_max = 48000,
+	.channels_min = 1,
+	.channels_max = 1,
 };
 
 static const struct snd_kcontrol_new broxton_controls[] = {
@@ -61,6 +77,7 @@ static const struct snd_soc_dapm_widget broxton_widgets[] = {
 	SND_SOC_DAPM_MIC("SoC DMIC", NULL),
 	SND_SOC_DAPM_SPK("DummySpeaker1", NULL),
 	SND_SOC_DAPM_SPK("DummySpeaker2", NULL),
+	SND_SOC_DAPM_SPK("DummySpeaker3", NULL),
 	SND_SOC_DAPM_SPK("DummySpeaker4", NULL),
 	SND_SOC_DAPM_MIC("DummyMIC0", NULL),
 	SND_SOC_DAPM_MIC("DummyMIC2", NULL),
@@ -100,13 +117,13 @@ static const struct snd_soc_dapm_route broxton_rt298_map[] = {
 	{"ssp0 Rx", NULL, "Dummy Capture" },
 	{"Dummy Capture", NULL, "DummyMIC0"},
 
-	{"DummySpeaker1", NULL, "Dummy Playback1"},
-	{"Dummy Playback1", NULL, "ssp1 Tx"},
-	{"ssp1 Tx", NULL, "8ch_pt_out2"},
-
 	{"DummySpeaker2", NULL, "Dummy Playback2"},
 	{"Dummy Playback2", NULL, "ssp2 Tx"},
-	{"ssp2 Tx", NULL, "8ch_pt_out3"},
+	{"ssp2 Tx", NULL, "8ch_pt_out2"},
+
+	{"DummySpeaker1", NULL, "Dummy Playback1"},
+	{"Dummy Playback1", NULL, "ssp1 Tx"},
+	{"ssp1 Tx", NULL, "8ch_pt_out3"},
 
 	{"8ch_pt_in2", NULL, "ssp2 Rx" },
 	{"ssp2 Rx", NULL, "Dummy Capture2" },
@@ -120,17 +137,18 @@ static const struct snd_soc_dapm_route broxton_rt298_map[] = {
 	{"ssp4 Rx", NULL, "Dummy Capture4" },
 	{"Dummy Capture4", NULL, "DummyMIC4"},
 
-	/* (ANC) Codec1_in - pipe */
-	{ "codec1_in", NULL, "ssp0 Rx" },
-	{ "ssp0 Rx", NULL, "Dummy Capture" },
+	/* (ANC) Codec1_in - Loop pipe */
+	{ "codec1_in", NULL, "ssp0-b Rx" },
+	{ "ssp0-b Rx", NULL, "Dummy Capture" },
 
-	/* CodecX_in - pipe */
-	{ "codecX_in", NULL, "ssp2 Rx" },
-	{ "ssp2 Rx", NULL, "Dummy Capture2" },
+	/* Codec0_in - Loop pipe */
+	{ "codec0_in", NULL, "ssp2-b Rx" },
+	{ "ssp2-b Rx", NULL, "Dummy Capture2" },
 
-	/* Media1_out  Path */
-	{ "Dummy Playback2", NULL, "ssp2 Tx"},
-	{ "ssp2 Tx", NULL, "media1_out"},
+	/* Media1_out Loop Path */
+	{"DummySpeaker3", NULL, "Dummy Playback3"},
+	{ "Dummy Playback3", NULL, "ssp1-b Tx"},
+	{ "ssp1-b Tx", NULL, "media1_out"},
 };
 
 static int broxton_rt298_codec_init(struct snd_soc_pcm_runtime *rtd)
@@ -279,9 +297,9 @@ static struct snd_soc_dai_link broxton_rt298_dais[] = {
 		.dpcm_playback = 1,
 		.dpcm_capture = 1,
 	},
-	{	/* Passthrough 8-ch PB & Cap to dummy codec */
+	{
 		.name = "Bxt Audio Port 3",
-		.stream_name = "8-ch Dummy PT SSP4",
+		.stream_name = "Stereo-16K SSP4",
 		.cpu_dai_name = "System Pin 3",
 		.platform_name = "0000:00:0e.0",
 		.nonatomic = 1,
@@ -293,9 +311,9 @@ static struct snd_soc_dai_link broxton_rt298_dais[] = {
 		.dpcm_playback = 1,
 		.dpcm_capture = 1,
 	},
-        {       /* Passthrough 8-ch PB & Cap to dummy codec */
+        {
                 .name = "Bxt Audio Port 4",
-                .stream_name = "8-ch Dummy PT 2 SSP1",
+                .stream_name = "5-ch SSP1",
                 .cpu_dai_name = "System Pin 4",
                 .platform_name = "0000:00:0e.0",
                 .nonatomic = 1,
@@ -306,9 +324,9 @@ static struct snd_soc_dai_link broxton_rt298_dais[] = {
                         SND_SOC_DPCM_TRIGGER_POST},
                 .dpcm_playback = 1,
         },
-        {       /* Passthrough 8-ch PB & Cap to dummy codec */
+        {
                 .name = "Bxt Audio Port 5",
-                .stream_name = "8-ch Dummy PT 3 SSP2",
+                .stream_name = "SSP2 Stream",
                 .cpu_dai_name = "System Pin 5",
                 .platform_name = "0000:00:0e.0",
                 .nonatomic = 1,
@@ -334,7 +352,7 @@ static struct snd_soc_dai_link broxton_rt298_dais[] = {
 	},
         {
                 .name = "Bxt Audio Port 6",
-                .stream_name = "Audio Record 2 SSP0",
+                .stream_name = "8-Ch SSP0",
                 .cpu_dai_name = "System Pin 6",
                 .platform_name = "0000:00:0e.0",
                 .nonatomic = 1,
@@ -402,29 +420,34 @@ static struct snd_soc_dai_link broxton_rt298_dais[] = {
 	{
 		.name = "Bxtn SSP0 Port",
 		.stream_name = "Bxtn SSP0",
-		.cpu_dai_name = "SSP0 Pin",
+		.cpu_dai_name = "SSP0-B Pin",
 		.platform_name = "0000:00:0e.0",
 		.codec_name = "snd-soc-dummy",
 		.codec_dai_name = "snd-soc-dummy-dai",
-		.params = &bxtn_dai_params_codec,
+		.params = &codec1_in_params,
 		.dsp_loopback = true,
-		.dai_fmt = SND_SOC_DAIFMT_DSP_A |
-			SND_SOC_DAIFMT_NB_NF |
-			SND_SOC_DAIFMT_CBS_CFS,
 	},
 
 	{
 		.name = "Bxtn SSP2 port",
 		.stream_name = "Bxtn SSP2",
-		.cpu_dai_name = "SSP2 Pin",
+		.cpu_dai_name = "SSP2-B Pin",
 		.platform_name = "0000:00:0e.0",
 		.codec_name = "snd-soc-dummy",
 		.codec_dai_name = "snd-soc-dummy-dai2",
-		.params = &bxtn_dai_params_codec,
+		.params = &codec0_in_params,
 		.dsp_loopback = true,
-		.dai_fmt = SND_SOC_DAIFMT_DSP_A |
-			SND_SOC_DAIFMT_NB_NF |
-			SND_SOC_DAIFMT_CBS_CFS,
+	},
+
+	{
+		.name = "Bxtn SSP1 port",
+		.stream_name = "Bxtn SSP2",
+		.cpu_dai_name = "SSP1-B Pin",
+		.platform_name = "0000:00:0e.0",
+		.codec_name = "snd-soc-dummy",
+		.codec_dai_name = "snd-soc-dummy-dai3",
+		.params = &media1_out_params,
+		.dsp_loopback = true,
 	},
 
 	/* Back End DAI links */
