@@ -247,12 +247,10 @@ config SND_SOC_INTEL_BXT_RT298_MACH
         Say Y if you have such a device
         If unsure select "N".
 
-config SND_SOC_INTEL_BXT_ANC_MACH
-        tristate "Reference ASoC Machine driver for BXT with ANC loop"
+config SND_SOC_INTEL_BXT_ULL_MACH
+        tristate "Reference ASoC Machine driver for BXT ULL machine"
         select SND_SOC_INTEL_SST
         select SND_SOC_INTEL_SKYLAKE
-        select SND_SOC_RT298
-        select SND_SOC_DMIC
 	select SND_SOC_COMPRESS
         default n
         help
