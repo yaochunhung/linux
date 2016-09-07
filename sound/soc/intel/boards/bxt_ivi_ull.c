@@ -1,10 +1,10 @@
 /*
- * Intel Broxton-P I2S Machine Driver
+ * Intel Broxton-P I2S ULL Machine Driver
  *
- * Copyright (C) 2014-2015, Intel Corporation. All rights reserved.
+ * Copyright (C) 2015-2016, Intel Corporation. All rights reserved.
  *
  * Modified from:
- *   Intel Skylake I2S Machine driver
+ *   Intel Broxton I2S Machine driver
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License version
@@ -21,23 +21,7 @@
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/soc.h>
-#include <sound/jack.h>
 #include <sound/pcm_params.h>
-
-#include "../../codecs/rt298.h"
-
-static struct snd_soc_jack broxton_headset;
-/* Headset jack detection DAPM pins */
-static struct snd_soc_jack_pin broxton_headset_pins[] = {
-	{
-		.pin = "Mic Jack",
-		.mask = SND_JACK_MICROPHONE,
-	},
-	{
-		.pin = "Headphone Jack",
-		.mask = SND_JACK_HEADPHONE,
-	},
-};
 
 static const struct snd_soc_pcm_stream media1_out_params = {
 	.formats = SNDRV_PCM_FMTBIT_S32_LE,
@@ -63,18 +47,7 @@ static const struct snd_soc_pcm_stream codec0_in_params = {
 	.channels_max = 1,
 };
 
-static const struct snd_kcontrol_new broxton_controls[] = {
-	SOC_DAPM_PIN_SWITCH("Speaker"),
-	SOC_DAPM_PIN_SWITCH("Headphone Jack"),
-	SOC_DAPM_PIN_SWITCH("Mic Jack"),
-};
-
 static const struct snd_soc_dapm_widget broxton_widgets[] = {
-	SND_SOC_DAPM_HP("Headphone Jack", NULL),
-	SND_SOC_DAPM_SPK("Speaker", NULL),
-	SND_SOC_DAPM_MIC("Mic Jack", NULL),
-	SND_SOC_DAPM_MIC("DMIC2", NULL),
-	SND_SOC_DAPM_MIC("SoC DMIC", NULL),
 	SND_SOC_DAPM_SPK("DummySpeaker1", NULL),
 	SND_SOC_DAPM_SPK("DummySpeaker2", NULL),
 	SND_SOC_DAPM_SPK("DummySpeaker3", NULL),
@@ -84,35 +57,7 @@ static const struct snd_soc_dapm_widget broxton_widgets[] = {
 	SND_SOC_DAPM_MIC("DummyMIC4", NULL),
 };
 
-static const struct snd_soc_dapm_route broxton_rt298_map[] = {
-	/* speaker */
-	{"Speaker", NULL, "SPOR"},
-	{"Speaker", NULL, "SPOL"},
-
-	/* HP jack connectors - unknown if we have jack detect */
-	{"Headphone Jack", NULL, "HPO Pin"},
-
-	/* other jacks */
-	{"MIC1", NULL, "Mic Jack"},
-
-	/* digital mics */
-	{"DMIC1 Pin", NULL, "DMIC2"},
-	{"DMIC AIF", NULL, "SoC DMIC"},
-
-	/* CODEC BE connections */
-	{"AIF1 Playback", NULL, "ssp5 Tx"},
-	{"ssp5 Tx", NULL, "codec0_out"},
-	{"ssp5 Tx", NULL, "codec_pt_out"},
-
-	{"codec_pt_in", NULL, "ssp5 Rx" },
-	{"codec0_in", NULL, "ssp5 Rx" },
-	{"ssp5 Rx", NULL, "AIF1 Capture" },
-
-	{"dmic01_hifi", NULL, "DMIC01 Rx" },
-	{"dmic23_hifi", NULL, "DMIC23 Rx" },
-	{"DMIC01 Rx", NULL, "Capture" },
-	{"DMIC23 Rx", NULL, "Capture" },
-
+static const struct snd_soc_dapm_route bxtp_ull_map[] = {
 	{"8ch_pt_in3", NULL, "ssp0 Rx" },
 	{"ssp0 Rx", NULL, "Dummy Capture" },
 	{"Dummy Capture", NULL, "DummyMIC0"},
@@ -150,60 +95,6 @@ static const struct snd_soc_dapm_route broxton_rt298_map[] = {
 	{ "Dummy Playback3", NULL, "ssp1-b Tx"},
 	{ "ssp1-b Tx", NULL, "media1_out"},
 };
-
-static int broxton_rt298_codec_init(struct snd_soc_pcm_runtime *rtd)
-{
-	struct snd_soc_codec *codec = rtd->codec;
-	int ret = 0;
-
-	ret = snd_soc_card_jack_new(rtd->card, "Headset",
-		SND_JACK_HEADSET | SND_JACK_BTN_0,
-		&broxton_headset,
-		broxton_headset_pins, ARRAY_SIZE(broxton_headset_pins));
-
-	if (ret)
-		return ret;
-
-	rt298_mic_detect(codec, &broxton_headset);
-	return 0;
-}
-
-
-static int broxton_ssp5_fixup(struct snd_soc_pcm_runtime *rtd,
-			struct snd_pcm_hw_params *params)
-{
-	struct snd_interval *rate = hw_param_interval(params,
-			SNDRV_PCM_HW_PARAM_RATE);
-	struct snd_interval *channels = hw_param_interval(params,
-						SNDRV_PCM_HW_PARAM_CHANNELS);
-	struct snd_mask *fmt = hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT);
-
-	/* The ADSP will covert the FE rate to 48k, stereo */
-	rate->min = rate->max = 48000;
-	channels->min = channels->max = 2;
-
-	/* set SSP5 to 24 bit */
-	snd_mask_none(fmt);
-	snd_mask_set(fmt, SNDRV_PCM_FORMAT_S24_LE);
-	return 0;
-}
-
-static int broxton_rt298_hw_params(struct snd_pcm_substream *substream,
-	struct snd_pcm_hw_params *params)
-{
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *codec_dai = rtd->codec_dai;
-	int ret;
-
-	ret = snd_soc_dai_set_sysclk(codec_dai, RT298_SCLK_S_PLL, 19200000,
-		SND_SOC_CLOCK_IN);
-	if (ret < 0) {
-		dev_err(rtd->dev, "can't set codec sysclk configuration\n");
-		return ret;
-	}
-
-	return ret;
-}
 
 static int bxtp_ssp0_gpio_init(struct snd_soc_pcm_runtime *rtd)
 {
@@ -264,39 +155,9 @@ static int bxtp_ssp4_gpio_init(struct snd_soc_pcm_runtime *rtd)
 
 }
 
-static struct snd_soc_ops broxton_rt298_ops = {
-	.hw_params = broxton_rt298_hw_params,
-};
 
 /* broxton digital audio interface glue - connects codec <--> CPU */
-static struct snd_soc_dai_link broxton_rt298_dais[] = {
-	/* Front End DAI links */
-	{
-		.name = "Bxt Audio Port",
-		.stream_name = "Audio",
-		.cpu_dai_name = "System Pin",
-		.platform_name = "0000:00:0e.0",
-		.nonatomic = 1,
-		.dynamic = 1,
-		.codec_name = "snd-soc-dummy",
-		.codec_dai_name = "snd-soc-dummy-dai",
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST, SND_SOC_DPCM_TRIGGER_POST},
-		.dpcm_playback = 1,
-	},
-	{	/* Passthrough stereo PB & Cap to Codec */
-		.name = "Bxt Audio Port 2",
-		.stream_name = "Stereo-Passthrough",
-		.cpu_dai_name = "System Pin 2",
-		.platform_name = "0000:00:0e.0",
-		.nonatomic = 1,
-		.dynamic = 1,
-		.codec_name = "snd-soc-dummy",
-		.codec_dai_name = "snd-soc-dummy-dai2",
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			SND_SOC_DPCM_TRIGGER_POST},
-		.dpcm_playback = 1,
-		.dpcm_capture = 1,
-	},
+static struct snd_soc_dai_link bxtp_ull_dais[] = {
 	{
 		.name = "Bxt Audio Port 3",
 		.stream_name = "Stereo-16K SSP4",
@@ -338,18 +199,6 @@ static struct snd_soc_dai_link broxton_rt298_dais[] = {
                 .dpcm_playback = 1,
                 .dpcm_capture = 1,
         },
-	{
-		.name = "Bxt Audio Capture Port",
-		.stream_name = "Audio Record",
-		.cpu_dai_name = "System Pin",
-		.platform_name = "0000:00:0e.0",
-		.nonatomic = 1,
-		.dynamic = 1,
-		.codec_name = "snd-soc-dummy",
-		.codec_dai_name = "snd-soc-dummy-dai",
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST, SND_SOC_DPCM_TRIGGER_POST},
-		.dpcm_capture = 1,
-	},
         {
                 .name = "Bxt Audio Port 6",
                 .stream_name = "8-Ch SSP0",
@@ -362,19 +211,7 @@ static struct snd_soc_dai_link broxton_rt298_dais[] = {
                 .trigger = {SND_SOC_DPCM_TRIGGER_POST, SND_SOC_DPCM_TRIGGER_POST},
                 .dpcm_capture = 1,
         },
-	{
-		.name = "Bxt Audio Reference cap",
-		.stream_name = "refcap",
-		.cpu_dai_name = "Reference Pin",
-		.codec_name = "snd-soc-dummy",
-		.codec_dai_name = "snd-soc-dummy-dai",
-		.platform_name = "0000:00:0e.0",
-		.init = NULL,
-		.dpcm_capture = 1,
-		.ignore_suspend = 1,
-		.nonatomic = 1,
-		.dynamic = 1,
-	},
+	/* Probe DAI Links */
 	{
 		.name = "Bxt Compress Probe playback",
 		.stream_name = "Probe Playback",
@@ -452,25 +289,6 @@ static struct snd_soc_dai_link broxton_rt298_dais[] = {
 
 	/* Back End DAI links */
 	{
-		/* SSP5 - Codec */
-		.name = "SSP5-Codec",
-		.be_id = 0,
-		.cpu_dai_name = "SSP5 Pin",
-		.platform_name = "0000:00:0e.0",
-		.no_pcm = 1,
-		.codec_name = "i2c-INT343A:00",
-		.codec_dai_name = "rt298-aif1",
-		.init = broxton_rt298_codec_init,
-		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
-			SND_SOC_DAIFMT_CBS_CFS,
-		.ignore_suspend = 1,
-		.ignore_pmdown_time = 1,
-		.be_hw_params_fixup = broxton_ssp5_fixup,
-		.ops = &broxton_rt298_ops,
-		.dpcm_playback = 1,
-		.dpcm_capture = 1,
-	},
-	{
 		/* SSP4 - Codec */
 		.name = "SSP4-Codec",
 		.be_id = 3,
@@ -527,55 +345,31 @@ static struct snd_soc_dai_link broxton_rt298_dais[] = {
                 .ignore_pmdown_time = 1,
                 .dpcm_capture = 1,
         },
-	{
-		.name = "dmic01",
-		.be_id = 1,
-		.cpu_dai_name = "DMIC01 Pin",
-		.codec_name = "dmic-codec",
-		.codec_dai_name = "dmic-hifi",
-		.platform_name = "0000:00:0e.0",
-		.ignore_suspend = 1,
-		.dpcm_capture = 1,
-		.no_pcm = 1,
-	},
-	{
-		.name = "dmic23",
-		.be_id = 2,
-		.cpu_dai_name = "DMIC23 Pin",
-		.codec_name = "dmic-codec",
-		.codec_dai_name = "dmic-hifi",
-		.platform_name = "0000:00:0e.0",
-		.ignore_suspend = 1,
-		.dpcm_capture = 1,
-		.no_pcm = 1,
-	},
 };
 
 /* broxton audio machine driver for SPT + RT298S */
-static struct snd_soc_card broxton_rt298 = {
-	.name = "broxton-rt298",
+static struct snd_soc_card bxtp_ull = {
+	.name = "bxtp-ull",
 	.owner = THIS_MODULE,
-	.dai_link = broxton_rt298_dais,
-	.num_links = ARRAY_SIZE(broxton_rt298_dais),
-	.controls = broxton_controls,
-	.num_controls = ARRAY_SIZE(broxton_controls),
+	.dai_link = bxtp_ull_dais,
+	.num_links = ARRAY_SIZE(bxtp_ull_dais),
 	.dapm_widgets = broxton_widgets,
 	.num_dapm_widgets = ARRAY_SIZE(broxton_widgets),
-	.dapm_routes = broxton_rt298_map,
-	.num_dapm_routes = ARRAY_SIZE(broxton_rt298_map),
+	.dapm_routes = bxtp_ull_map,
+	.num_dapm_routes = ARRAY_SIZE(bxtp_ull_map),
 	.fully_routed = false,
 };
 
 static int broxton_audio_probe(struct platform_device *pdev)
 {
-	broxton_rt298.dev = &pdev->dev;
+	bxtp_ull.dev = &pdev->dev;
 
-	return snd_soc_register_card(&broxton_rt298);
+	return snd_soc_register_card(&bxtp_ull);
 }
 
 static int broxton_audio_remove(struct platform_device *pdev)
 {
-	snd_soc_unregister_card(&broxton_rt298);
+	snd_soc_unregister_card(&bxtp_ull);
 	return 0;
 }
 
@@ -583,7 +377,7 @@ static struct platform_driver broxton_audio = {
 	.probe = broxton_audio_probe,
 	.remove = broxton_audio_remove,
 	.driver = {
-		.name = "bxt_alc298s_i2s",
+		.name = "bxtp_i2s_ull",
 		.pm = &snd_soc_pm_ops,
 	},
 };
@@ -592,7 +386,6 @@ module_platform_driver(broxton_audio)
 
 /* Module information */
 MODULE_AUTHOR("Ramesh Babu <Ramesh.Babu@intel.com>");
-MODULE_AUTHOR("Senthilnathan Veppur <senthilnathanx.veppur@intel.com>");
-MODULE_DESCRIPTION("Intel SST Audio for Broxton");
+MODULE_DESCRIPTION("Intel SST Audio for Broxton ULL Machine");
 MODULE_LICENSE("GPL v2");
-MODULE_ALIAS("platform:bxt_alc298s_i2s");
+MODULE_ALIAS("platform:bxtp_i2s_ull");
