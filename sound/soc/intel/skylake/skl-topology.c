@@ -594,43 +594,6 @@ static void skl_tplg_update_module_params(struct snd_soc_dapm_widget *w,
 	skl_dump_mconfig(ctx, m_cfg);
 }
 
-/*
- * A pipe can have multiple modules, each of them will be a DAPM widget as
- * well. While managing a pipeline we need to get the list of all the
- * widgets in a pipelines, so this helper - skl_tplg_get_pipe_widget() helps
- * to get the SKL type widgets in that pipeline
- */
-static int skl_tplg_alloc_pipe_widget(struct device *dev,
-	struct snd_soc_dapm_widget *w, struct skl_pipe *pipe)
-{
-	struct skl_module_cfg *src_module = NULL;
-	struct snd_soc_dapm_path *p = NULL;
-	struct skl_pipe_module *p_module = NULL;
-
-	p_module = devm_kzalloc(dev, sizeof(*p_module), GFP_KERNEL);
-	if (!p_module)
-		return -ENOMEM;
-
-	p_module->w = w;
-	list_add_tail(&p_module->node, &pipe->w_list);
-
-	snd_soc_dapm_widget_for_each_sink_path(w, p) {
-		if ((p->sink->priv == NULL)
-				&& (!is_skl_dsp_widget_type(w)))
-			continue;
-
-		if ((p->sink->priv != NULL) && p->connect
-				&& is_skl_dsp_widget_type(p->sink)) {
-
-			src_module = p->sink->priv;
-			if (pipe->ppl_id == src_module->pipe->ppl_id)
-				skl_tplg_alloc_pipe_widget(dev,
-							p->sink, pipe);
-		}
-	}
-	return 0;
-}
-
 int skl_probe_get_index(struct snd_soc_dai *dai,
 				struct skl_probe_config *pconfig)
 {
@@ -1003,20 +966,6 @@ static int skl_tplg_mixer_dapm_pre_pmu_event(struct snd_soc_dapm_widget *w,
 
 	skl_tplg_alloc_pipe_mem(skl, mconfig);
 	skl_tplg_alloc_pipe_mcps(skl, mconfig);
-
-	/*
-	 * we create a w_list of all widgets in that pipe. This list is not
-	 * freed on PMD event as widgets within a pipe are static. This
-	 * saves us cycles to get widgets in pipe every time.
-	 *
-	 * So if we have already initialized all the widgets of a pipeline
-	 * we skip, so check for list_empty and create the list if empty
-	 */
-	if (list_empty(&s_pipe->w_list)) {
-		ret = skl_tplg_alloc_pipe_widget(ctx->dev, w, s_pipe);
-		if (ret < 0)
-			return ret;
-	}
 
 	/* Init all pipe modules from source to sink */
 	ret = skl_tplg_init_pipe_modules(skl, s_pipe);
@@ -2663,6 +2612,37 @@ static void skl_tplg_set_pipe_type(struct skl *skl, struct skl_pipe *pipe)
 		pipe->passthru = false;
 }
 
+/*
+ * A pipe can have multiple modules, each of them will be a DAPM widget as
+ * well. While managing a pipeline we need to get the list of all the
+ * widgets in a pipelines, so this helper - skl_tplg_create_pipe_widget_list()
+ * helps to get the SKL type widgets in that pipeline
+ */
+static int skl_tplg_create_pipe_widget_list(struct snd_soc_platform *platform)
+{
+	struct snd_soc_dapm_widget *w;
+	struct skl_module_cfg *mcfg = NULL;
+	struct skl_pipe_module *p_module = NULL;
+	struct skl_pipe *pipe;
+
+	list_for_each_entry(w, &platform->component.card->widgets, list) {
+		if (is_skl_dsp_widget_type(w) && w->priv != NULL) {
+			mcfg = w->priv;
+			pipe = mcfg->pipe;
+
+			p_module = devm_kzalloc(platform->dev,
+						sizeof(*p_module), GFP_KERNEL);
+			if (!p_module)
+				return -ENOMEM;
+
+			p_module->w = w;
+			list_add_tail(&p_module->node, &pipe->w_list);
+		}
+	}
+
+	return 0;
+}
+
 /* This will be read from topology manifest, currently defined here */
 #define SKL_MAX_MCPS 30000000
 #define SKL_FW_MAX_MEM 1000000
@@ -2701,6 +2681,11 @@ int skl_tplg_init(struct snd_soc_platform *platform, struct hdac_ext_bus *ebus)
 	skl->resource.max_mem = SKL_FW_MAX_MEM;
 
 	skl->tplg = fw;
+
+	ret = skl_tplg_create_pipe_widget_list(platform);
+	if (ret < 0)
+		return ret;
+
 	list_for_each_entry(ppl, &skl->ppl_list, node)
 		skl_tplg_set_pipe_type(skl, ppl->pipe);
 
