@@ -420,12 +420,28 @@ struct skl_module {
 	struct skl_module_intf formats[SKL_MAX_MODULE_FORMATS];
 };
 
+struct skl_fw_info {
+	char binary_name[LIB_NAME_LENGTH];
+	u32 pre_load_pages;
+	u16 man_major;
+	u16 man_minor;
+	u16 man_hotfix;
+	u16 man_build;
+	u16 ext_man_major;
+	u16 ext_man_minor;
+	u8 man_nr_modules;
+	u8 ext_man_nr_modules;
+	u8 binary_type;
+};
+
 struct skl_manifest {
-	struct fw_cfg_info cfg;
 	u8 nr_modules;
-	struct skl_module **modules;
 	u8 lib_count;
-	struct  lib_info lib[HDA_MAX_LIB];
+	u8 nr_fw_bins;
+	struct fw_cfg_info cfg;
+	struct lib_info lib[HDA_MAX_LIB];
+	struct skl_module **modules;
+	struct skl_fw_info *fw_info;
 };
 
 struct skl_module_cfg {

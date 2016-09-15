@@ -41,6 +41,8 @@
 #define SKL_MOD_NAME 40 /* Length of GUID string */
 #define STEREO 2
 
+#define SKL_MAX_FW_BINARY 8
+
 #define LIB_NAME_LENGTH 128
 #define HDA_MAX_LIB    16
 #define MAX_DMA_CFG    24
@@ -489,16 +491,32 @@ struct skl_dfw_module_type {
 	struct skl_dfw_module_intf	formats[SKL_MAX_MODULE_FORMATS];
 } __packed;
 
+struct skl_dfw_fw_info {
+	char	binary_name[LIB_NAME_LENGTH];
+	u32	man_major:16;
+	u32	man_minor:16;
+	u32	man_hotfix:16;
+	u32	man_build:16;
+	u32	ext_man_major:16;
+	u32	ext_man_minor:16;
+	u32	man_nr_modules:8;
+	u32	ext_man_nr_modules:8;
+	u32	binary_type:8;
+	u32	rsvd:8;
+	u32	pre_load_pages;
+} __packed;
+
 struct skl_dfw_manifest {
+	u32 nr_modules:8;
+	u32 lib_count:8;
+	u32 nr_fw_bins:8;
+	u32 rsvd:8;
+
 	/* fw config info */
 	struct fw_cfg_info cfg;
-
-	u8	nr_modules;
-	struct	skl_dfw_module_type	module[SKL_MAX_MODULES];
-	/* library info */
-	u8 lib_count;
 	struct lib_info lib[HDA_MAX_LIB];
-
+	struct skl_dfw_module_type module[SKL_MAX_MODULES];
+	struct skl_dfw_fw_info fw_info[SKL_MAX_FW_BINARY];
 } __packed;
 
 #endif

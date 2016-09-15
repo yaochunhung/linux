@@ -2617,6 +2617,26 @@ static int skl_fill_module(struct device *dev, struct skl_module *dest,
 	return 0;
 }
 
+static void skl_load_fwbin_info(struct skl_fw_info *dest,
+				struct skl_dfw_fw_info *src, int count)
+{
+	int i;
+
+	for (i = 0; i < count; i++, dest++, src++) {
+		memcpy(dest->binary_name, src->binary_name, LIB_NAME_LENGTH);
+		dest->man_major = src->man_major;
+		dest->man_minor = src->man_minor;
+		dest->man_hotfix = src->man_hotfix;
+		dest->man_build = src->man_build;
+		dest->man_nr_modules = src->man_nr_modules;
+		dest->ext_man_major = src->ext_man_major;
+		dest->ext_man_minor = src->ext_man_minor;
+		dest->ext_man_nr_modules = src->ext_man_nr_modules;
+		dest->binary_type = src->binary_type;
+		dest->pre_load_pages = src->pre_load_pages;
+	}
+}
+
 static int skl_manifest_load(struct snd_soc_component *cmpnt,
 				struct snd_soc_tplg_manifest *manifest)
 {
@@ -2662,6 +2682,22 @@ static int skl_manifest_load(struct snd_soc_component *cmpnt,
 	}
 	size = sizeof(struct lib_info) * HDA_MAX_LIB;
 	memcpy(&dest->lib, &src->lib, size);
+
+	if (src->nr_fw_bins > SKL_MAX_FW_BINARY) {
+		dev_err(bus->dev, "Exceeding fw bin count. Got:%d\n", nr_bins);
+		return -EINVAL;
+	}
+	dest->fw_info = kcalloc(nr_bins, sizeof(struct skl_fw_info),
+				GFP_KERNEL);
+	if (!dest->fw_info)
+		return -ENOMEM;
+
+	memcpy(&dest->cfg, &src->cfg, sizeof(struct fw_cfg_info));
+	size = sizeof(struct lib_info) * HDA_MAX_LIB;
+	memcpy(&dest->lib, &src->lib, size);
+	dest->nr_fw_bins = src->nr_fw_bins;
+	skl_load_fwbin_info(dest->fw_info, src->fw_info, src->nr_fw_bins);
+
 	return 0;
 failed:
 	dev_err(bus->dev, "No memory for manifest\n");
