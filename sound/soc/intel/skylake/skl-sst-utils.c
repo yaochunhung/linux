@@ -329,7 +329,7 @@ int snd_skl_parse_uuids(struct sst_dsp *ctx, const struct firmware *fw,
 
 		/* copy the module data in the parsed module uuid list */
 		for (j = 0; j < num_modules; j++) {
-			mod_data = skl->manifest.modules[j];
+			mod_data = &skl->manifest.modules[j];
 			uuid_bin_tplg = &mod_data->uuid;
 			if (uuid_le_cmp(*uuid_bin_fw, *uuid_bin_tplg) == 0) {
 				module->mod_data = mod_data;

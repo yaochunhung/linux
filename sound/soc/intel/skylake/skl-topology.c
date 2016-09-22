@@ -447,7 +447,7 @@ static int skl_tplg_find_module_params(struct skl_module_cfg *m_cfg,
 
 	pipe = m_cfg->pipe;
 	cfg_idx = pipe->cur_config_idx;
-	config = pipe->configs[cfg_idx];
+	config = &pipe->configs[cfg_idx];
 	m_uuid = (uuid_le *)m_cfg->guid;
 
 	for (i = 0; i < pipe->nr_modules; i++) {
@@ -822,7 +822,7 @@ skl_tplg_get_pipe_config(struct skl *skl, struct skl_module_cfg *mconfig)
 	struct skl_sst *ctx = skl->skl_sst;
 	struct skl_pipe *pipe = mconfig->pipe;
 	struct skl_pipe_params *params = pipe->p_params;
-	struct skl_path_config *pconfig = pipe->configs[0];
+	struct skl_path_config *pconfig = &pipe->configs[0];
 	struct skl_pipe_fmt *fmt = NULL;
 	int i;
 
@@ -854,7 +854,7 @@ skl_tplg_get_pipe_config(struct skl *skl, struct skl_module_cfg *mconfig)
 	}
 
 	for (i = 0; i < pipe->nr_cfgs; i++) {
-		pconfig = pipe->configs[i];
+		pconfig = &pipe->configs[i];
 		if (params->ch == fmt->channels && params->s_freq == fmt->freq
 				&& params->s_fmt == fmt->bps) {
 			pipe->cur_config_idx = i;
@@ -2132,7 +2132,7 @@ static int skl_fill_pipe_configs(struct device *dev, struct skl_pipe *pipe,
 {
 	int i = 0, j;
 	struct skl_dfw_path_config *dfw_config;
-	struct skl_path_config **configs, *config;
+	struct skl_path_config *configs, *config;
 
 	if (dfw_pipe->nr_cfgs > SKL_MAX_PATH_CONFIGS) {
 		dev_err(dev, "path configs exceeded: %d\n", pipe->ppl_id);
@@ -2146,11 +2146,7 @@ static int skl_fill_pipe_configs(struct device *dev, struct skl_pipe *pipe,
 
 	for (i = 0; i < dfw_pipe->nr_cfgs; i++) {
 		dfw_config = &dfw_pipe->configs[i];
-		configs[i] = kzalloc(sizeof(*config), GFP_KERNEL);
-		if (!configs[i])
-			goto failed;
-
-		config = pipe->configs[i];
+		config = &pipe->configs[i];
 
 		memcpy(config->name, dfw_config->config_name,
 			SKL_MAX_NAME_LENGTH);
@@ -2180,9 +2176,6 @@ static int skl_fill_pipe_configs(struct device *dev, struct skl_pipe *pipe,
 	}
 	return 0;
 failed:
-	for (--i; i >= 0; --i)
-		kzfree(configs[i]);
-
 	kfree(configs);
 	dev_err(dev, "no memory for pipe configs: %d\n", pipe->ppl_id);
 	return -ENOMEM;
@@ -2589,6 +2582,18 @@ static int skl_fill_module(struct device *dev, struct skl_module *dest,
 		dev_err(dev, "interfaces exceeded: %d\n", src->nr_interfaces);
 		return -EINVAL;
 	}
+	dest->resources = kcalloc(src->nr_resources,
+				sizeof(struct skl_module_res), GFP_KERNEL);
+	if (!dest->resources)
+		return -ENOMEM;
+
+	dest->formats = kcalloc(src->nr_interfaces,
+				sizeof(struct skl_module_intf), GFP_KERNEL);
+	if (!dest->formats) {
+		kfree(dest->resources);
+		return -ENOMEM;
+	}
+
 	dest->major_version = src->major_version;
 	dest->minor_version = src->minor_version;
 	dest->hotfix_version = src->hotfix_version;
@@ -2642,7 +2647,6 @@ static int skl_manifest_load(struct snd_soc_component *cmpnt,
 {
 	struct skl_manifest *dest;
 	struct skl_dfw_manifest *src;
-	struct skl_module **skl_modules;
 	struct hdac_ext_bus *ebus = snd_soc_component_get_drvdata(cmpnt);
 	struct hdac_bus *bus = ebus_to_hbus(ebus);
 	struct skl *skl = ebus_to_skl(ebus);
@@ -2650,47 +2654,37 @@ static int skl_manifest_load(struct snd_soc_component *cmpnt,
 
 	src = (struct skl_dfw_manifest *)manifest->priv.data;
 	dest = &skl->skl_sst->manifest;
-
-	memcpy(&dest->cfg, &src->cfg, sizeof(struct fw_cfg_info));
-
-	nr_modules = src->nr_modules;
-	skl_modules = devm_kzalloc(bus->dev,
-			sizeof(struct skl_module *) * nr_modules, GFP_KERNEL);
-
-	if (!skl_modules)
-		goto failed;
-
-	dest->nr_modules = nr_modules;
-	dest->modules = skl_modules;
-	size = sizeof(struct skl_module);
-	for (i = 0; i < nr_modules; i++) {
-		skl_modules[i] = devm_kzalloc(bus->dev,
-					sizeof(struct skl_module), GFP_KERNEL);
-		if (!skl_modules[i])
-			goto failed;
-		dest->modules[i] = skl_modules[i];
-		if (skl_fill_module(bus->dev, dest->modules[i],
-						&src->module[i]))
-			return -EINVAL;
-	}
-
 	dest->lib_count = src->lib_count;
+
 	if (src->lib_count > HDA_MAX_LIB) {
 		dev_err(bus->dev, "Exceeding max Library count. Got:%d\n",
 				src->lib_count);
 		return -EINVAL;
 	}
-	size = sizeof(struct lib_info) * HDA_MAX_LIB;
-	memcpy(&dest->lib, &src->lib, size);
 
 	if (src->nr_fw_bins > SKL_MAX_FW_BINARY) {
-		dev_err(bus->dev, "Exceeding fw bin count. Got:%d\n", nr_bins);
+		dev_err(bus->dev, "Exceeding fw bin count. Got:%d\n",
+				src->nr_fw_bins);
 		return -EINVAL;
 	}
-	dest->fw_info = kcalloc(nr_bins, sizeof(struct skl_fw_info),
+
+	nr_modules = src->nr_modules;
+	dest->modules = kcalloc(nr_modules, sizeof(struct skl_module),
+							GFP_KERNEL);
+	if (!dest->modules)
+		goto failed;
+
+	dest->fw_info = kcalloc(src->nr_fw_bins, sizeof(struct skl_fw_info),
 				GFP_KERNEL);
 	if (!dest->fw_info)
-		return -ENOMEM;
+		goto failed;
+
+	dest->nr_modules = nr_modules;
+	for (i = 0; i < nr_modules; i++) {
+		if (skl_fill_module(bus->dev, &dest->modules[i],
+						&src->module[i]))
+			goto failed;
+	}
 
 	memcpy(&dest->cfg, &src->cfg, sizeof(struct fw_cfg_info));
 	size = sizeof(struct lib_info) * HDA_MAX_LIB;
@@ -2700,7 +2694,8 @@ static int skl_manifest_load(struct snd_soc_component *cmpnt,
 
 	return 0;
 failed:
-	dev_err(bus->dev, "No memory for manifest\n");
+	kfree(dest->fw_info);
+	kfree(dest->modules);
 	return -ENOMEM;
 }
 

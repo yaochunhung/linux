@@ -347,7 +347,7 @@ struct skl_pipe {
 	u8 nr_modules;
 	u8 cur_config_idx;
 	u8 nr_cfgs;
-	struct skl_path_config **configs;
+	struct skl_path_config *configs;
 	struct list_head w_list;
 	bool passthru;
 };
@@ -416,8 +416,8 @@ struct skl_module {
 	char library_name[LIB_NAME_LENGTH];
 	u8 nr_resources;
 	u8 nr_interfaces;
-	struct skl_module_res resources[SKL_MAX_MODULE_RESOURCES];
-	struct skl_module_intf formats[SKL_MAX_MODULE_FORMATS];
+	struct skl_module_res *resources;
+	struct skl_module_intf *formats;
 };
 
 struct skl_fw_info {
@@ -440,7 +440,7 @@ struct skl_manifest {
 	u8 nr_fw_bins;
 	struct fw_cfg_info cfg;
 	struct lib_info lib[HDA_MAX_LIB];
-	struct skl_module **modules;
+	struct skl_module *modules;
 	struct skl_fw_info *fw_info;
 };
 
