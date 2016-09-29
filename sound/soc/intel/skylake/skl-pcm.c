@@ -1041,7 +1041,7 @@ static int skl_dsp_cb_event(struct skl_sst *skl, unsigned int event,
 		kcontrol = snd_soc_card_get_kcontrol(card,
 				"Topology Change Notification");
 		if (!kcontrol) {
-			dev_err(skl->dev, " NOTIFICATION Controls not found\n");
+			dev_dbg(skl->dev, " NOTIFICATION Controls not found\n");
 			return -EINVAL;
 		}
 

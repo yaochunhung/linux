@@ -1962,7 +1962,7 @@ static int skl_tplg_be_fill_pipe_params(struct snd_soc_dai *dai,
 					params->s_fmt, params->ch,
 					params->s_freq, params->stream);
 	} else {
-		dev_warn(dai->dev, "Querying NHLT blob from Debugfs!!!!\n");
+		dev_dbg(dai->dev, "Querying NHLT blob from Debugfs!!!!\n");
 		cfg = skl_nhlt_get_debugfs_blob(skl->debugfs,
 					link_type, mconfig->vbus_id,
 					params->stream);

@@ -367,7 +367,7 @@ int skl_dsp_get_core(struct sst_dsp *ctx, unsigned int core_id)
 			if (update_usage_count)
 				ctx->core_info.core_usage_count[core_id]++;
 	}
-	dev_info(ctx->dev, "%s:core id=%d:state=%d:usage_count=%d\n", __func__,
+	dev_dbg(ctx->dev, "%s:core id=%d:state=%d:usage_count=%d\n", __func__,
 			core_id, ctx->core_info.core_state[core_id],
 			ctx->core_info.core_usage_count[core_id]);
 
@@ -393,7 +393,7 @@ int skl_dsp_put_core(struct sst_dsp *ctx, unsigned int core_id)
 		else
 			ctx->core_info.core_usage_count[core_id]--;
 	}
-	dev_info(ctx->dev, "%s:core id=%d:state=%d:usage_count=%d\n", __func__,
+	dev_dbg(ctx->dev, "%s:core id=%d:state=%d:usage_count=%d\n", __func__,
 			core_id, ctx->core_info.core_state[core_id],
 			ctx->core_info.core_usage_count[core_id]);
 

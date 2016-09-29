@@ -528,7 +528,7 @@ skl_parse_resource_event(struct skl_sst *skl, struct skl_ipc_header header)
 		break;
 	}
 
-	print_hex_dump(KERN_DEBUG, "Params:", DUMP_PREFIX_OFFSET, 8, 4,
+	print_hex_dump_debug("Params:", DUMP_PREFIX_OFFSET, 8, 4,
 			&notif, sizeof(struct skl_event_notif), false);
 
 }
