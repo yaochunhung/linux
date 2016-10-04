@@ -884,47 +884,6 @@ struct snd_kcontrol *skl_search_n_get_notify_kctl(struct skl_sst *skl,
 }
 
 /*
- * This function creates notification kcontrol list by searching
- * control list present in snd_card context. It compares kcontrol
- * name with specific string "notif params" to get notification
- * kcontrols and add it up to the notification list present in
- * skl_sst context.
- * NOTE: To use module notification feature, new kcontrol named
- * "notif" should be added in topology XML for that particular
- * module.
- */
-int skl_create_notify_kctl_list(struct skl_sst *skl_sst,
-				struct snd_card *card)
-{
-	struct snd_kcontrol *kctl;
-	struct snd_soc_dapm_widget *w;
-	struct skl_module_cfg *mconfig;
-	struct skl_notify_kctrl_info *info;
-	u32 size = sizeof(*info);
-
-	list_for_each_entry(kctl, &card->controls, list) {
-		if (strstr(kctl->id.name, "notif params")) {
-			info = kzalloc(size, GFP_KERNEL);
-			if (!info) {
-				dev_err(skl_sst->dev,
-				    "Could not create notify kcontrol list\n");
-				return -ENOMEM;
-			}
-			w = snd_soc_dapm_kcontrol_widget(kctl);
-			mconfig = w->priv;
-
-			/* Module ID (MS word) + Module Instance ID (LS word) */
-			info->notify_id = ((mconfig->id.module_id << 16) |
-					   (mconfig->id.instance_id));
-			info->notify_kctl = kctl;
-
-			list_add_tail(&info->list, &skl_sst->notify_kctls);
-		}
-	}
-	return 0;
-}
-
-/*
  * This function deletes notification kcontrol list from skl_sst
  * context.
  */
@@ -939,6 +898,90 @@ void skl_delete_notify_kctl_list(struct skl_sst *skl_sst)
 }
 
 /*
+ * This function adds kcontrols of type module notification into
+ * notification kcontrol list. It derive unique identifier from
+ * module & instance id and store along with the kcontrol into the
+ * list
+ */
+int skl_add_to_notify_kctl_list(struct skl_sst *skl_sst,
+			    struct snd_kcontrol **kcontrols,
+			    int num_kcontrols,
+			    struct skl_module_cfg *mconfig)
+{
+	struct snd_kcontrol *kctl;
+	struct soc_bytes_ext *sb;
+	struct skl_algo_data *bc;
+	struct skl_notify_kctrl_info *info = NULL;
+	u32  i;
+	u32 size = sizeof(struct skl_notify_kctrl_info);
+
+	for (i = 0; i < num_kcontrols; i++) {
+		kctl = kcontrols[i];
+		sb = (struct soc_bytes_ext *)kctl->private_value;
+		if (!sb)
+			continue;
+		bc = sb->dobj.private;
+		if (!bc)
+			continue;
+
+		if (bc->notification_ctrl) {
+			info = kzalloc(size, GFP_KERNEL);
+			if (!info) {
+				dev_err(skl_sst->dev,
+				    "Could not create notify kcontrol list\n");
+				skl_delete_notify_kctl_list(skl_sst);
+				return -ENOMEM;
+			}
+
+			/* Module ID (MS word) + Module Instance ID (LS word) */
+			info->notify_id = ((mconfig->id.module_id << 16) |
+						(mconfig->id.instance_id));
+			info->notify_kctl = kctl;
+
+			list_add_tail(&info->list, &skl_sst->notify_kctls);
+		}
+	}
+	return 0;
+}
+
+/*
+ * This function creates notification kcontrol list by searching
+ * every widget controls present in ppl_list. It checks into algo
+ * params present in kcontrol for notification_ctrl value. If the
+ * kcontrol is of type notification it will be added to the notify
+ * kcontrol list list present in skl_sst context.
+ * NOTE: To use module notification feature, notification_ctrl
+ * needs to be marked as true in topology XML for that particular
+ * module control.
+ */
+int skl_create_notify_kctl_list(struct skl_sst *skl_sst)
+{
+	struct skl_pipeline *p;
+	struct skl_pipe_module *m;
+	struct snd_soc_dapm_widget *w;
+	struct skl_module_cfg *mconfig;
+	struct hdac_ext_bus *ebus = dev_get_drvdata(skl_sst->dev);
+	struct skl *skl = ebus_to_skl(ebus);
+	int ret = 0;
+
+	list_for_each_entry(p, &skl->ppl_list, node) {
+		list_for_each_entry(m, &p->pipe->w_list, node) {
+			w = m->w;
+			if (w->num_kcontrols) {
+				mconfig = w->priv;
+				ret = skl_add_to_notify_kctl_list(skl_sst,
+							      w->kcontrols,
+							      w->num_kcontrols,
+							      mconfig);
+				if (ret)
+					return ret;
+			}
+		}
+	}
+	return ret;
+}
+
+/*
  * This function creates notification kcontrol list on first module
  * notification from firmware. It also search notification kcontrol
  * list against unique notify_id sent from firmware and returns the
@@ -950,7 +993,7 @@ struct snd_kcontrol *skl_get_notify_kcontrol(struct skl_sst *skl,
 	struct snd_kcontrol *kctl = NULL;
 
 	if (list_empty(&skl->notify_kctls))
-		skl_create_notify_kctl_list(skl, card);
+		skl_create_notify_kctl_list(skl);
 
 	kctl = skl_search_n_get_notify_kctl(skl, notify_id);
 
