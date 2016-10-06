@@ -2763,7 +2763,7 @@ static int skl_tplg_create_pipe_widget_list(struct snd_soc_platform *platform)
 }
 
 /* This will be read from topology manifest, currently defined here */
-#define SKL_MAX_MCPS 30000000
+#define SKL_MAX_MCPS 350000000
 #define SKL_FW_MAX_MEM 1000000
 
 /*
