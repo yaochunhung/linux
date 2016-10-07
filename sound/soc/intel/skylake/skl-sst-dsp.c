@@ -16,7 +16,7 @@
  * General Public License for more details.
  */
 #include <sound/pcm.h>
-
+#include <linux/delay.h>
 #include "../common/sst-dsp.h"
 #include "../common/sst-ipc.h"
 #include "../common/sst-dsp-priv.h"
@@ -164,11 +164,13 @@ int skl_dsp_start_core(struct sst_dsp *ctx, unsigned int core_mask)
 	if (ret < 0)
 		return ret;
 
+	usleep_range(1000, 1500);
 	/* run core */
 	dev_dbg(ctx->dev, "unstall/run core: core_mask = %x\n", core_mask);
 	sst_dsp_shim_update_bits_unlocked(ctx, SKL_ADSP_REG_ADSPCS,
 			SKL_ADSPCS_CSTALL_MASK(core_mask), 0);
 
+	usleep_range(1000, 1500);
 	if (!is_skl_dsp_core_enable(ctx, core_mask)) {
 		skl_dsp_reset_core(ctx, core_mask);
 		dev_err(ctx->dev, "DSP start core failed: core_mask = %x\n",
