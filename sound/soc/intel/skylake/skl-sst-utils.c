@@ -16,6 +16,8 @@
 #include <linux/device.h>
 #include <linux/slab.h>
 #include <linux/uuid.h>
+#include <linux/devcoredump.h>
+#include <linux/pci.h>
 #include "skl-sst-dsp.h"
 #include "../common/sst-dsp.h"
 #include "../common/sst-dsp-priv.h"
@@ -25,6 +27,7 @@
 
 #define UUID_STR_SIZE 37
 #define DEFAULT_HASH_SHA256_LEN 32
+#define TYPE1_HEADER_ROW 7
 
 /* FW Extended Manifest Header id = $AE1 */
 #define SKL_EXT_MANIFEST_HEADER_MAGIC   0x31454124
@@ -142,6 +145,85 @@ int snd_skl_get_module_info(struct skl_sst *ctx,
 	return -EINVAL;
 }
 EXPORT_SYMBOL_GPL(snd_skl_get_module_info);
+
+void fw_exception_dump_read(struct skl_sst *ctx)
+{
+	int num_mod = 0, size, size_core_dump;
+	struct uuid_module *module, *module1;
+	void *coredump;
+	void *fw_reg_addr, *offset;
+	struct pci_dev *pci = to_pci_dev(ctx->dsp->dev);
+	u16 length0, bus_dev_id, length1, length2;
+	u32 crash_dump_ver;
+	struct type0_crash_data *type0_data;
+	struct type1_crash_data *type1_data;
+	struct type2_crash_data *type2_data;
+	struct adsp_type1_crash_data *type1_mod_info;
+
+	if (list_empty(&ctx->uuid_list)) {
+		dev_err(ctx->dev, "Module list is empty\n");
+		return;
+	}
+
+	list_for_each_entry(module1, &ctx->uuid_list, list) {
+		num_mod++;
+	}
+
+	length0 = (sizeof(struct fw_version)
+		+ sizeof(struct sw_version) + sizeof(u32)*2)/sizeof(u32);
+	length1 = num_mod * TYPE1_HEADER_ROW;
+	length2 = MAX_FW_REG_SZ/sizeof(u32);
+
+	size = (num_mod * sizeof(u32) * TYPE1_HEADER_ROW);
+	size_core_dump = sizeof(struct type0_crash_data) +
+				sizeof(struct type1_crash_data) +
+				sizeof(struct type2_crash_data) + size;
+
+	coredump = vzalloc(size_core_dump);
+	if (!coredump) {
+		dev_err(ctx->dsp->dev, "failed to allocate memory\n");
+		return;
+	}
+
+	offset = coredump;
+	bus_dev_id = pci->device;
+	crash_dump_ver = 0x1;
+
+	type0_data = (struct type0_crash_data *) offset;
+	type0_data->type = TYPE0_EXCEPTION;
+	type0_data->length = length0;
+	type0_data->crash_dump_ver = crash_dump_ver;
+	type0_data->bus_dev_id = bus_dev_id;
+	offset += sizeof(struct type0_crash_data);
+
+	type1_data = (struct type1_crash_data *) offset;
+	type1_data->type = TYPE1_EXCEPTION;
+	type1_data->length = length1;
+	type1_mod_info = offset + sizeof(struct type1_crash_data);
+
+	list_for_each_entry(module, &ctx->uuid_list, list) {
+		memcpy(type1_mod_info->mod_uuid, &(module->uuid),
+					(sizeof(type1_mod_info->mod_uuid)));
+		memcpy(type1_mod_info->hash1, &(module->hash1),
+					(sizeof(type1_mod_info->hash1)));
+		memcpy(&type1_mod_info->mod_id, &(module->id),
+					(sizeof(type1_mod_info->mod_id)));
+		type1_mod_info ++;
+	}
+
+	offset += sizeof(struct type1_crash_data) + size;
+
+	type2_data = (struct type2_crash_data *) offset;
+	type2_data->type = TYPE2_EXCEPTION;
+	type2_data->length = length2;
+	fw_reg_addr = ctx->dsp->mailbox.in_base - ctx->dsp->addr.w0_stat_sz;
+	memcpy_fromio(type2_data->fwreg, fw_reg_addr, MAX_FW_REG_SZ);
+
+	dev_coredumpv(ctx->dsp->dev, coredump,
+			(size_core_dump), GFP_KERNEL);
+
+}
+EXPORT_SYMBOL_GPL(fw_exception_dump_read);
 
 /*
  * Parse the firmware binary to get the UUID, module id

@@ -30,6 +30,8 @@ struct sst_generic_ipc;
 #define NO_OF_EXTRACTOR 8
 #define MAX_FW_REG_SZ 4096
 #define FW_REG_SZ 1024
+#define TYPE0_EXCEPTION 0
+#define TYPE1_EXCEPTION 1
 #define TYPE2_EXCEPTION 2
 
 enum skl_ipc_pipeline_state {
@@ -202,16 +204,32 @@ struct sw_version {
 	u16 build;
 } __packed;
 
-struct skl_dsp_core_dump {
-	u16 type0;
-	u16 length0;
+struct type0_crash_data {
+	u16 type;
+	u16 length;
 	u32 crash_dump_ver;
 	u16 bus_dev_id;
 	u16 cavs_hw_version;
 	struct fw_version fw_ver;
 	struct sw_version sw_ver;
-	u16 type2;
-	u16 length2;
+} __packed;
+
+struct adsp_type1_crash_data {
+	u32 mod_uuid[4];
+	u32 hash1[2];
+	u16 mod_id;
+	u16 rsvd;
+} __packed;
+
+struct type1_crash_data {
+	u16 type;
+	u16 length;
+	struct adsp_type1_crash_data type1_data[0];
+} __packed;
+
+struct type2_crash_data {
+	u16 type;
+	u16 length;
 	u32 fwreg[FW_REG_SZ];
 } __packed;
 

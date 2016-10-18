@@ -477,4 +477,6 @@ int is_skl_dsp_widget_type(struct snd_soc_dapm_widget *w);
 
 enum skl_bitdepth skl_get_bit_depth(int params);
 int snd_skl_get_module_info(struct skl_sst *ctx, struct skl_module_cfg *mconfig);
+void fw_exception_dump_read(struct skl_sst *ctx);
+
 #endif

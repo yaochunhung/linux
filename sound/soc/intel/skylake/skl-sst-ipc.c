@@ -20,6 +20,7 @@
 #include "skl-sst-dsp.h"
 #include "skl-sst-ipc.h"
 #include "skl-fwlog.h"
+#include "skl-topology.h"
 #include <linux/slab.h>
 #include <linux/devcoredump.h>
 #include <linux/pci.h>
@@ -309,34 +310,6 @@ struct skl_event_notif {
 	u32 event_data[SKL_FW_RSRCE_EVNT_DATA_SZ];
 } __packed;
 
-static void fw_exception_dump_read(struct sst_dsp *dsp)
-{
-	struct skl_dsp_core_dump *coredump;
-	void *fw_reg_addr;
-	struct pci_dev *pci = to_pci_dev(dsp->dev);
-
-	coredump = vzalloc(sizeof(struct skl_dsp_core_dump));
-	if (!coredump) {
-		dev_err(dsp->dev, "failed to allocate memory\n");
-		return;
-	}
-
-	coredump->length0 = (sizeof(struct fw_version)
-		+ sizeof(struct sw_version) + sizeof(u32)*2)/sizeof(u32);
-	coredump->bus_dev_id = pci->device;
-	coredump->crash_dump_ver = 0x1;
-
-	coredump->length2 = MAX_FW_REG_SZ/sizeof(u32);
-	coredump->type2 = TYPE2_EXCEPTION;
-
-	fw_reg_addr = dsp->mailbox.in_base - dsp->addr.w0_stat_sz;
-	memcpy_fromio(coredump->fwreg, fw_reg_addr, MAX_FW_REG_SZ);
-
-	dev_coredumpv(dsp->dev, coredump,
-			sizeof(struct skl_dsp_core_dump), GFP_KERNEL);
-}
-
-
 void skl_ipc_tx_data_copy(struct ipc_message *msg, char *tx_data,
 		size_t tx_size)
 {
@@ -389,6 +362,7 @@ static int skl_ipc_tx_message(struct sst_generic_ipc *ipc, u64 header,
 {
 	int ret;
 	struct sst_dsp *dsp = ipc->dsp;
+	struct skl_sst *skl = container_of(ipc, struct skl_sst, ipc);
 
 	/* Bring DSP to D0i0 before sending current IPC */
 	if (dsp->fw_ops.set_state_D0i0) {
@@ -401,7 +375,7 @@ static int skl_ipc_tx_message(struct sst_generic_ipc *ipc, u64 header,
 			rx_bytes, wait, timeout);
 	if (ret == -ETIMEDOUT)
 		/* code for timeout exception*/
-		fw_exception_dump_read(dsp);
+		fw_exception_dump_read(skl);
 
 	if (ret < 0)
 		return ret;
@@ -578,7 +552,7 @@ int skl_ipc_process_notification(struct sst_generic_ipc *ipc,
 		case IPC_GLB_NOTIFY_EXCEPTION_CAUGHT:
 			dev_err(ipc->dev, "*****Exception Detected **********\n");
 			/* hexdump of the fw core exception record reg */
-			fw_exception_dump_read(skl->dsp);
+			fw_exception_dump_read(skl);
 			break;
 
 		case IPC_GLB_MODULE_NOTIFICATION:
