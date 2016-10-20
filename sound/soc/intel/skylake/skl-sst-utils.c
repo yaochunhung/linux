@@ -106,6 +106,7 @@ struct uuid_module {
 	int is_loadable;
 
 	struct list_head list;
+	u8 hash1[DEFAULT_HASH_SHA256_LEN];
 };
 
 struct skl_ext_manifest_hdr {
@@ -214,6 +215,9 @@ int snd_skl_parse_uuids(struct sst_dsp *ctx, const struct firmware *fw,
 
 		module->id = (i | (index << 12));
 		module->is_loadable = mod_entry->type.load_type;
+		memcpy(&module->hash1, mod_entry->hash1,
+					sizeof(module->hash1));
+
 
 		list_add_tail(&module->list, &skl->uuid_list);
 
