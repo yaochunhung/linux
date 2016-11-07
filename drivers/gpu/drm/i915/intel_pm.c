@@ -32,6 +32,9 @@
 #include "../../../platform/x86/intel_ips.h"
 #include <linux/module.h>
 #include <drm/drm_atomic_helper.h>
+#include <linux/notifier.h>
+
+static BLOCKING_NOTIFIER_HEAD(i915_freq_notifier_list);
 
 /**
  * DOC: RC6
@@ -4948,6 +4951,9 @@ static void gen6_set_rps(struct drm_i915_private *dev_priv, u8 val)
 	 * write the limits value.
 	 */
 	if (val != dev_priv->rps.cur_freq) {
+		blocking_notifier_call_chain(&i915_freq_notifier_list,
+					     (unsigned long)val, NULL);
+
 		gen6_set_rps_thresholds(dev_priv, val);
 
 		if (IS_GEN9(dev_priv))
@@ -6529,6 +6535,26 @@ out_unlock:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(i915_gpu_turbo_disable);
+
+/**
+ * Register a notifier callback for gpu frequency changes.
+ * @nb: pointer to the notifier block for the callback
+ */
+int i915_register_freq_notify(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_register(&i915_freq_notifier_list, nb);
+}
+EXPORT_SYMBOL_GPL(i915_register_freq_notify);
+
+/**
+ * Unregister a notifier from the gpu freqency change callback.
+ * @nb: pointer to the notifier block for the callback
+ */
+int i915_unregister_freq_notify(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_unregister(&i915_freq_notifier_list, nb);
+}
+EXPORT_SYMBOL_GPL(i915_unregister_freq_notify);
 
 /**
  * Tells the intel_ips driver that the i915 driver is now loaded, if
