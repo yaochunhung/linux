@@ -58,6 +58,8 @@ static BLOCKING_NOTIFIER_HEAD(i915_freq_notifier_list);
 #define INTEL_RC6_ENABLE			(1<<0)
 #define INTEL_RC6p_ENABLE			(1<<1)
 #define INTEL_RC6pp_ENABLE			(1<<2)
+#define GEN9_TURBO_DISABLED                     0
+#define GEN9_TURBO_ENABLED                      1
 
 static void gen9_init_clock_gating(struct drm_i915_private *dev_priv)
 {
@@ -4947,6 +4949,10 @@ static void gen6_set_rps(struct drm_i915_private *dev_priv, u8 val)
 	WARN_ON(val > dev_priv->rps.max_freq);
 	WARN_ON(val < dev_priv->rps.min_freq);
 
+	if ((dev_priv->ips.fstart == GEN9_TURBO_DISABLED) &&
+	    (val > dev_priv->rps.rp1_freq))
+		val = dev_priv->rps.rp1_freq;
+
 	/* min/max delay may still have been modified so be sure to
 	 * write the limits value.
 	 */
@@ -6527,6 +6533,22 @@ bool i915_gpu_turbo_disable(void)
 
 		if (!ironlake_set_drps(dev_priv, dev_priv->ips.fstart))
 			ret = false;
+	} else if (IS_GEN9(dev_priv)) {
+		if (dev_priv->ips.fstart == GEN9_TURBO_DISABLED)
+			goto out_unlock;
+
+		dev_priv->ips.fstart = GEN9_TURBO_DISABLED;
+
+		/* If the current freq > rp1, clamp it down */
+		if (dev_priv->rps.cur_freq > dev_priv->rps.rp1_freq) {
+			intel_runtime_pm_get(dev_priv);
+			mutex_lock(&dev_priv->rps.hw_lock);
+
+			gen6_set_rps(dev_priv, dev_priv->rps.rp1_freq);
+
+			mutex_unlock(&dev_priv->rps.hw_lock);
+			intel_runtime_pm_put(dev_priv);
+		}
 	}
 
 out_unlock:
@@ -6535,6 +6557,38 @@ out_unlock:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(i915_gpu_turbo_disable);
+
+/**
+ * i915_gpu_turbo_enable - enable graphics turbo
+ *
+ * Allow GPU to use frequencies up to softmax (i.e. remove clamping
+ * to RP1 that was set by the i915_gpu_turbo_disable() function).
+ */
+bool i915_gpu_turbo_enable(void)
+{
+	struct drm_i915_private *dev_priv;
+	bool ret = true;
+
+	spin_lock_irq(&mchdev_lock);
+	if (!i915_mch_dev) {
+		ret = false;
+		goto out_unlock;
+	}
+	dev_priv = i915_mch_dev;
+
+	if (IS_GEN9(dev_priv)) {
+		if (dev_priv->ips.fstart != GEN9_TURBO_DISABLED)
+			goto out_unlock;
+
+		dev_priv->ips.fstart = GEN9_TURBO_ENABLED;
+	}
+
+out_unlock:
+	spin_unlock_irq(&mchdev_lock);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(i915_gpu_turbo_enable);
 
 /**
  * Register a notifier callback for gpu frequency changes.
@@ -6581,6 +6635,7 @@ void intel_gpu_ips_init(struct drm_i915_private *dev_priv)
 	/* We only register the i915 ips part with intel-ips once everything is
 	 * set up, to avoid intel-ips sneaking in and reading bogus values. */
 	spin_lock_irq(&mchdev_lock);
+	dev_priv->ips.fstart = GEN9_TURBO_ENABLED;
 	i915_mch_dev = dev_priv;
 	spin_unlock_irq(&mchdev_lock);
 
