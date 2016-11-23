@@ -603,13 +603,15 @@ static int bxt_load_base_firmware(struct sst_dsp *ctx)
 {
 	struct firmware stripped_fw;
 	struct skl_sst *skl = ctx->thread_context;
+	struct skl_manifest *minfo = &skl->manifest;
+	char *fw_name = minfo->fw_info->binary_name;
 	int ret, i;
 
 	dev_dbg(ctx->dev, "In %s\n", __func__);
 
 	skl->boot_complete = false;
 
-	ret = request_firmware(&ctx->fw, "dsp_fw_release.bin", ctx->dev);
+	ret = request_firmware(&ctx->fw, fw_name, ctx->dev);
 	if (ret < 0) {
 		dev_err(ctx->dev, "Request firmware failed %d\n", ret);
 		goto sst_load_base_firmware_failed;
@@ -690,12 +692,17 @@ static int bxt_load_library(struct sst_dsp *ctx)
 	const struct firmware *fw = NULL;
 	struct firmware stripped_fw;
 	int ret = 0, i, dma_id, stream_tag;
+	struct skl_fw_info *fw_info = minfo->fw_info;
 
-	for (i = 1; i < minfo->lib_count; i++) {
+	/* [0] is for base fw, skip it for libraries */
+	fw_info++;
+
+	for (i = 1; i < minfo->nr_fw_bins; i++, fw_info++) {
 		fw = NULL;
-		ret = request_firmware(&fw, minfo->lib[i].name, ctx->dev);
+		ret = request_firmware(&fw, fw_info->binary_name, ctx->dev);
 		if (ret < 0) {
-			dev_err(ctx->dev, "Request firmware failed %d for library: %s\n", ret, minfo->lib[i].name);
+			dev_err(ctx->dev, "Request firmware failed %d for library: %s\n",
+						ret, fw_info->binary_name);
 			goto load_library_failed;
 		}
 		if (skl->is_first_boot) {
@@ -709,8 +716,8 @@ static int bxt_load_library(struct sst_dsp *ctx)
 		stripped_fw.data = fw->data;
 		skl_dsp_strip_extended_manifest(&stripped_fw);
 
-		dev_dbg(ctx->dev, "Starting to preapre host dma for library name \
-			: %s of size:%zx\n", minfo->lib[i].name, stripped_fw.size);
+		dev_dbg(ctx->dev, "Starting to prepare host dma for library: %s of size:%zx\n",
+			fw_info->binary_name, stripped_fw.size);
 		stream_tag = ctx->dsp_ops.prepare(ctx->dev, 0x40, stripped_fw.size,
 						&dmab);
 		if (stream_tag <= 0) {
@@ -728,7 +735,8 @@ static int bxt_load_library(struct sst_dsp *ctx)
 		ctx->dsp_ops.trigger(ctx->dev, true, stream_tag);
 		ret = skl_sst_ipc_load_library(&skl->ipc, dma_id, i);
 		if (ret < 0) {
-			dev_err(ctx->dev, "Load Library  IPC failed: %d for library: %s\n", ret, minfo->lib[i].name);
+			dev_err(ctx->dev, "Load Library  IPC failed: %d for library: %s\n",
+						ret, fw_info->binary_name);
 			dev_info(ctx->dev, "Error code=0x%x: FW status=0x%x\n",
 					sst_dsp_shim_read(ctx, BXT_ADSP_ERROR_CODE),
 					sst_dsp_shim_read(ctx, BXT_ADSP_REG_FW_STATUS));
