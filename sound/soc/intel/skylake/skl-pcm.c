@@ -22,6 +22,7 @@
 #include <linux/pci.h>
 #include <linux/pm_runtime.h>
 #include <linux/firmware.h>
+#include <linux/delay.h>
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
 #include <asm/cacheflush.h>
@@ -1820,13 +1821,30 @@ static snd_pcm_uframes_t skl_platform_pcm_pointer
 	 * guarantee to reflect the Position of the last buffer that was
 	 * transferred. Whereas DPIB register in HAD space reflects the
 	 * actual data that is transferred.
+	 *
+	 * For capture stream following workaround is required to fix the
+	 * incorrect position reporting.
+	 *
+	 * 1. Wait for 20us before reading the DMA position in buffer once
+	 * the cAVS interrupt is generated for stream completion.
+	 * 2. Read any of the cAVS register to flush the DMA position
+	 * value. This dummy read is required to flush DMA position value.
+	 * 3. Read the DMA position value. This value now will be equal to
+	 * or greater than period boundary.
 	 */
-	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		pos = readl(ebus->bus.remap_addr + AZX_REG_VS_SDXDPIB_XBASE +
 				(AZX_REG_VS_SDXDPIB_XINTERVAL *
 				hdac_stream(hstream)->index));
-	else
+	} else {
+		udelay(20);
+		readl(ebus->bus.remap_addr +
+				AZX_REG_VS_SDXDPIB_XBASE +
+				(AZX_REG_VS_SDXDPIB_XINTERVAL *
+				 hdac_stream(hstream)->index));
 		pos = snd_hdac_stream_get_pos_posbuf(hdac_stream(hstream));
+	}
 
 	if (pos >= hdac_stream(hstream)->bufsize)
 		pos = 0;
