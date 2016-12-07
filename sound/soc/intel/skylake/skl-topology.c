@@ -38,8 +38,16 @@
  * DMA buffer size needed for 48KHz, 4 channel, 32 bit data
  * scheduled at 4ms  for 2 probe packets is
  * 2* [ 24 + (48*4*4*32/8) + 8]  = 6208.
+ * case 2:
+ * DMA Buffer needed for ULL topology, where scheduling
+ * frequency is changed to 1/3ms
+ * 2* [ 24 + (48*8*(1/3)*(32/8)) + 8] = 1088
  */
+#if IS_ENABLED(CONFIG_SND_SOC_INTEL_BXT_ULL_MACH)
+#define SKL_INJECT_PROBE_DMA_BUFF_SIZE 1088
+#else
 #define SKL_INJECT_PROBE_DMA_BUFF_SIZE 6208
+#endif
 
 /*
  * The following table provides the gain in linear scale corresponding to
