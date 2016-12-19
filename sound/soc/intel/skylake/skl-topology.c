@@ -43,11 +43,6 @@
  * frequency is changed to 1/3ms
  * 2* [ 24 + (48*8*(1/3)*(32/8)) + 8] = 1088
  */
-#if IS_ENABLED(CONFIG_SND_SOC_INTEL_BXT_ULL_MACH)
-#define SKL_INJECT_PROBE_DMA_BUFF_SIZE 1088
-#else
-#define SKL_INJECT_PROBE_DMA_BUFF_SIZE 6208
-#endif
 
 /*
  * The following table provides the gain in linear scale corresponding to
@@ -505,7 +500,7 @@ int skl_probe_attach_inj_dma(struct snd_soc_dapm_widget *w,
 		ad.node_id.node.vindex = pconfig->iprobe[index].dma_id;
 		ad.node_id.node.dma_type = SKL_DMA_HDA_HOST_OUTPUT_CLASS;
 		ad.node_id.node.rsvd = 0;
-		ad.dma_buff_size = SKL_INJECT_PROBE_DMA_BUFF_SIZE;
+		ad.dma_buff_size = pconfig->edma_buffsize;
 
 		ret = skl_set_module_params(ctx, (void *)&ad, sizeof(struct skl_probe_attach_inj_dma),
 						SKL_PROBE_INJECT_DMA_ATTACH, mconfig);

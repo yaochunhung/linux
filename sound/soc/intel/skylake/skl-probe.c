@@ -38,12 +38,9 @@
  * DMA Buffer needed for ULL topology, where scheduling
  * frequency is changed to 1/3ms
  * 2* [ 24 + (48*8*(1/3)*(32/8)) + 8] = 1088
+ * This calculation for the dma buffer size is implemented
+ * in xml.Driver will get this value from the xml.
  */
-#if IS_ENABLED(CONFIG_SND_SOC_INTEL_BXT_ULL_MACH)
-#define SKL_EXTRACT_PROBE_DMA_BUFF_SIZE 1088
-#else
-#define SKL_EXTRACT_PROBE_DMA_BUFF_SIZE 6208
-#endif
 /*
 * ========================
 * PROBE STATE TRANSITIONS:
@@ -104,7 +101,6 @@ int skl_probe_compr_open(struct snd_compr_stream *substream,
 	dev_dbg(dai->dev, "%s dev is  %s\n",  __func__, dev_name(dai->dev));
 
 	if ((pconfig->i_refc + pconfig->e_refc) == 0) {
-		pconfig->edma_buffsize = SKL_EXTRACT_PROBE_DMA_BUFF_SIZE;
 		pconfig->edma_type = SKL_DMA_HDA_HOST_INPUT_CLASS;
 		/*
 		 * Extractor DMA is to be assigned when the first probe
