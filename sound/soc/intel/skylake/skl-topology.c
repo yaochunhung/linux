@@ -829,17 +829,9 @@ skl_tplg_get_pipe_config(struct skl *skl, struct skl_module_cfg *mconfig)
 	struct skl_pipe_fmt *fmt = NULL;
 	int i;
 
-	if (pipe->conn_type == SKL_PIPE_CONN_TYPE_FE) {
-		if (pipe->direction == SNDRV_PCM_STREAM_PLAYBACK)
-			fmt = &pconfig->in_fmt;
-		else if (pipe->direction == SNDRV_PCM_STREAM_CAPTURE)
-			fmt = &pconfig->out_fmt;
-	} else if (pipe->conn_type == SKL_PIPE_CONN_TYPE_BE) {
-		if (pipe->direction == SNDRV_PCM_STREAM_PLAYBACK)
-			fmt = &pconfig->out_fmt;
-		else if (pipe->direction == SNDRV_PCM_STREAM_CAPTURE)
-			fmt = &pconfig->in_fmt;
-	} else {
+	if ((pipe->conn_type != SKL_PIPE_CONN_TYPE_FE) &&
+		(pipe->conn_type != SKL_PIPE_CONN_TYPE_BE))
+	{
 		/* Loop/intermediate pipe currently have only fixed config */
 		dev_dbg(ctx->dev,
 			"Loop/Intermediate pipe detected, so take 0th config\n");
@@ -850,14 +842,25 @@ skl_tplg_get_pipe_config(struct skl *skl, struct skl_module_cfg *mconfig)
 		return 0;
 	}
 
-	if (fmt == NULL) {
-		dev_err(ctx->dev, "Unrecognized pipe format detected: %d\n",
-				pipe->ppl_id);
-		return -EINVAL;
-	}
-
 	for (i = 0; i < pipe->nr_cfgs; i++) {
 		pconfig = &pipe->configs[i];
+
+		if (pipe->conn_type == SKL_PIPE_CONN_TYPE_FE) {
+			if (pipe->direction == SNDRV_PCM_STREAM_PLAYBACK)
+				fmt = &pconfig->in_fmt;
+			else if (pipe->direction == SNDRV_PCM_STREAM_CAPTURE)
+				fmt = &pconfig->out_fmt;
+		} else if (pipe->conn_type == SKL_PIPE_CONN_TYPE_BE) {
+			if (pipe->direction == SNDRV_PCM_STREAM_PLAYBACK)
+				fmt = &pconfig->out_fmt;
+			else if (pipe->direction == SNDRV_PCM_STREAM_CAPTURE)
+				fmt = &pconfig->in_fmt;
+		}
+		if (fmt == NULL) {
+			dev_err(ctx->dev, "Unrecognized pipe format detected: %d\n",
+				pipe->ppl_id);
+			return -EINVAL;
+		}
 		if (params->ch == fmt->channels && params->s_freq == fmt->freq
 				&& params->s_fmt == fmt->bps) {
 			pipe->cur_config_idx = i;
