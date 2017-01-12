@@ -31,14 +31,19 @@ static const struct snd_soc_dapm_widget broxton_widgets[] = {
 	SND_SOC_DAPM_SPK("Speaker", NULL),
 	SND_SOC_DAPM_SPK("Speaker2", NULL),
 	SND_SOC_DAPM_SPK("Speaker3", NULL),
+	SND_SOC_DAPM_SPK("Speaker4", NULL),
 	SND_SOC_DAPM_MIC("DMIC2", NULL),
+	SND_SOC_DAPM_MIC("DMIC4", NULL),
 };
 
 static const struct snd_soc_dapm_route broxton_rt298_map[] = {
 	{"Speaker", NULL, "Dummy Playback"},
 	{"Speaker2", NULL, "Dummy Playback2"},
 	{"Speaker3", NULL, "Dummy Playback3"},
+	{"Speaker4", NULL, "Dummy Playback4"},
 	{"Dummy Capture1", NULL, "DMIC2"},
+	{"Dummy Capture4", NULL, "DMIC4"},
+
 	/* BE connections */
 	{ "Dummy Playback2", NULL, "ssp4 Tx"},
 	{ "ssp4 Tx", NULL, "codec0_out"},
@@ -50,6 +55,11 @@ static const struct snd_soc_dapm_route broxton_rt298_map[] = {
 	{ "ssp1 Tx", NULL, "codec3_out"},
 	{ "hdmi_ssp0_in", NULL, "ssp0 Rx" },
 	{ "ssp0 Rx", NULL, "Dummy Capture1" },
+	/* Test connections */
+	{ "Dummy Playback4", NULL, "ssp3 Tx"},
+	{ "ssp3 Tx", NULL, "TestSSP3_out"},
+	{ "TestSSP3_in", NULL, "ssp3 Rx" },
+	{ "ssp3 Rx", NULL, "Dummy Capture4" },
 };
 
 static int bxtp_ssp0_gpio_init(struct snd_soc_pcm_runtime *rtd)
@@ -109,6 +119,26 @@ static int bxtp_ssp4_gpio_init(struct snd_soc_pcm_runtime *rtd)
 	iounmap(gpio_addr);
 	return 0;
 
+}
+
+static int bxtp_ssp3_gpio_init(struct snd_soc_pcm_runtime *rtd)
+{
+
+	char *gpio_addr;
+	u32 gpio_value1 = 0x44000800;
+	u32 gpio_value2 = 0x44000802;
+
+	gpio_addr = (void *)ioremap_nocache(0xd0c40638, 0x30);
+	if (gpio_addr == NULL)
+		return(-EIO);
+
+	memcpy_toio(gpio_addr, &gpio_value1, sizeof(gpio_value1));
+	memcpy_toio(gpio_addr + 0x8, &gpio_value2, sizeof(gpio_value2));
+	memcpy_toio(gpio_addr + 0x10, &gpio_value1, sizeof(gpio_value1));
+	memcpy_toio(gpio_addr + 0x18, &gpio_value1, sizeof(gpio_value1));
+
+	iounmap(gpio_addr);
+	return 0;
 }
 
 static int broxton_ssp0_fixup(struct snd_soc_pcm_runtime *rtd,
@@ -244,6 +274,20 @@ static struct snd_soc_dai_link broxton_rt298_dais[] = {
 			SND_SOC_DPCM_TRIGGER_POST},
 		.dpcm_capture = 1,
 	},
+	{
+		.name = "Test Audio Port",
+		.stream_name = "Test Stream",
+		.cpu_dai_name = "System Pin 6",
+		.platform_name = "0000:00:0e.0",
+		.nonatomic = 1,
+		.dynamic = 1,
+		.codec_name = "snd-soc-dummy",
+		.codec_dai_name = "snd-soc-dummy-dai1",
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			SND_SOC_DPCM_TRIGGER_POST},
+		.dpcm_capture = 1,
+		.dpcm_playback = 1,
+	},
 	/* Trace Buffer DAI links */
 	{
 		.name = "Bxt Trace Buffer0",
@@ -357,6 +401,23 @@ static struct snd_soc_dai_link broxton_rt298_dais[] = {
 		.ignore_pmdown_time = 1,
 		.be_hw_params_fixup = broxton_ssp4_fixup,
 		.dpcm_playback = 1,
+	},
+	{
+		/* SSP3 - Codec */
+		.name = "SSP3-Codec",
+		.be_id = 4,
+		.cpu_dai_name = "SSP3 Pin",
+		.platform_name = "0000:00:0e.0",
+		.no_pcm = 1,
+		.codec_name = "snd-soc-dummy",
+		.codec_dai_name = "snd-soc-dummy-dai4",
+		.init = bxtp_ssp3_gpio_init,
+		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
+			SND_SOC_DAIFMT_CBS_CFS,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		.dpcm_playback = 1,
+		.dpcm_capture = 1,
 	},
 };
 
