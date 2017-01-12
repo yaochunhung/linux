@@ -6611,6 +6611,27 @@ int i915_unregister_freq_notify(struct notifier_block *nb)
 EXPORT_SYMBOL_GPL(i915_unregister_freq_notify);
 
 /**
+ * Return the frequency, in KHz, represented by the opcode.
+ *
+ * This isn't an integer value.
+ */
+int i915_gpu_pstate2freq(int pstate)
+{
+	return i915_mch_dev ? intel_gpu_freq(i915_mch_dev, pstate) * 1000 : -1;
+}
+EXPORT_SYMBOL_GPL(i915_gpu_pstate2freq);
+
+/**
+ * Return the maximum pstate (or frequency opcode) avalable on
+ * the platform.
+ */
+int i915_gpu_get_max_pstate(void)
+{
+	return i915_mch_dev ? i915_mch_dev->rps.rp0_freq : 0;
+}
+EXPORT_SYMBOL_GPL(i915_gpu_get_max_pstate);
+
+/**
  * Tells the intel_ips driver that the i915 driver is now loaded, if
  * IPS got loaded first.
  *
