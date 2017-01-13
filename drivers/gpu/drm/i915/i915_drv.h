@@ -1341,6 +1341,7 @@ struct intel_gen6_power_mgmt {
 	struct intel_rps_ei up_ei, down_ei;
 
 	bool rc6_disable;
+	bool debugfs_disable_boost;
 
 	/*
 	 * Protects RPS/RC6 register access and PCU communication.
