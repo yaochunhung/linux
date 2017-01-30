@@ -129,7 +129,7 @@ static int broxton_ssp1_fixup(struct snd_soc_pcm_runtime *rtd,
 
 	/* The ADSP will covert the FE rate to 48k, 4 Channel */
 	rate->min = rate->max = 48000;
-	channels->min = channels->max = 4;
+	channels->min = channels->max = 2;
 
 	/* set SSP1 to 16 bit */
 	snd_mask_set(&params->masks[SNDRV_PCM_HW_PARAM_FORMAT -
