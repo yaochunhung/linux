@@ -1279,6 +1279,12 @@ intel_crtc_has_dp_encoder(const struct intel_crtc_state *crtc_state)
 		 (1 << INTEL_OUTPUT_DP_MST) |
 		 (1 << INTEL_OUTPUT_EDP));
 }
+static inline bool
+intel_plane_is_nv12(const struct intel_plane_state *pstate)
+{
+	return pstate && pstate->base.fb &&
+		pstate->base.fb->format->format == DRM_FORMAT_NV12;
+}
 static inline void
 intel_wait_for_vblank(struct drm_i915_private *dev_priv, enum pipe pipe)
 {

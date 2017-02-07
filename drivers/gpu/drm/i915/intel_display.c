@@ -2452,7 +2452,7 @@ u32 intel_compute_tile_offset(int *x, int *y,
 	u32 alignment;
 
 	/* AUX_DIST needs only 4K alignment */
-	if (fb->format->format == DRM_FORMAT_NV12 && plane == 1)
+	if (intel_plane_is_nv12(state) && plane == 1)
 		alignment = 4096;
 	else
 		alignment = intel_surf_alignment(dev_priv, fb->modifier);
@@ -2989,7 +2989,7 @@ int skl_check_plane_surface(struct intel_plane_state *plane_state)
 	 * Handle the AUX surface first since
 	 * the main surface setup depends on it.
 	 */
-	if (fb->format->format == DRM_FORMAT_NV12) {
+	if (intel_plane_is_nv12(plane_state)) {
 		ret = skl_check_nv12_aux_surface(plane_state);
 		if (ret)
 			return ret;

@@ -3226,7 +3226,7 @@ skl_plane_relative_data_rate(const struct intel_crtc_state *cstate,
 
 	if (pstate->plane->type == DRM_PLANE_TYPE_CURSOR)
 		return 0;
-	if (y && format != DRM_FORMAT_NV12)
+	if (y && !intel_plane_is_nv12(intel_pstate))
 		return 0;
 
 	width = drm_rect_width(&intel_pstate->base.src) >> 16;
@@ -3236,7 +3236,7 @@ skl_plane_relative_data_rate(const struct intel_crtc_state *cstate,
 		swap(width, height);
 
 	/* for planar format */
-	if (format == DRM_FORMAT_NV12) {
+	if (intel_plane_is_nv12(intel_pstate)) {
 		if (y)  /* y-plane data rate */
 			data_rate = width * height *
 				fb->format->cpp[0];
@@ -3309,7 +3309,7 @@ skl_ddb_min_alloc(const struct drm_plane_state *pstate,
 		return 0;
 
 	/* For packed formats, no y-plane, return 0 */
-	if (y && fb->format->format != DRM_FORMAT_NV12)
+	if (y && !intel_plane_is_nv12(intel_pstate))
 		return 0;
 
 	/* For Non Y-tile return 8-blocks */
@@ -3324,12 +3324,12 @@ skl_ddb_min_alloc(const struct drm_plane_state *pstate,
 		swap(src_w, src_h);
 
 	/* Halve UV plane width and height for NV12 */
-	if (fb->format->format == DRM_FORMAT_NV12 && !y) {
+	if (intel_plane_is_nv12(intel_pstate) && !y) {
 		src_w /= 2;
 		src_h /= 2;
 	}
 
-	if (fb->format->format == DRM_FORMAT_NV12 && !y)
+	if (intel_plane_is_nv12(intel_pstate) && !y)
 		plane_bpp = fb->format->cpp[1];
 	else
 		plane_bpp = fb->format->cpp[0];
@@ -3610,7 +3610,7 @@ static int skl_compute_plane_wm(const struct drm_i915_private *dev_priv,
 	plane_pixel_rate = skl_adjusted_plane_pixel_rate(cstate, intel_pstate);
 
 	if (drm_rotation_90_or_270(pstate->rotation)) {
-		int cpp = (fb->format->format == DRM_FORMAT_NV12) ?
+		int cpp = intel_plane_is_nv12(intel_pstate) ?
 			fb->format->cpp[1] :
 			fb->format->cpp[0];
 
