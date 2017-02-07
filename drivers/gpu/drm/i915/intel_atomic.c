@@ -247,7 +247,10 @@ int intel_atomic_setup_scalers(struct drm_device *dev,
 		}
 
 		/* set scaler mode */
-		if (num_scalers_need == 1 && intel_crtc->pipe != PIPE_C) {
+		if (intel_plane_is_nv12(plane_state)) {
+			scaler_state->scalers[*scaler_id].mode =
+				PS_SCALER_MODE_NV12;
+		} else if (num_scalers_need == 1 && intel_crtc->pipe != PIPE_C) {
 			/*
 			 * when only 1 scaler is in use on either pipe A or B,
 			 * scaler 0 operates in high quality (HQ) mode.

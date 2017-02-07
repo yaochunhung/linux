@@ -4637,7 +4637,7 @@ static void cpt_verify_modeset(struct drm_device *dev, int pipe)
 static int
 skl_update_scaler(struct intel_crtc_state *crtc_state, bool force_detach,
 		  unsigned scaler_user, int *scaler_id, unsigned int rotation,
-		  int src_w, int src_h, int dst_w, int dst_h)
+		  int src_w, int src_h, int dst_w, int dst_h, bool is_nv12)
 {
 	struct intel_crtc_scaler_state *scaler_state =
 		&crtc_state->scaler_state;
@@ -4645,9 +4645,9 @@ skl_update_scaler(struct intel_crtc_state *crtc_state, bool force_detach,
 		to_intel_crtc(crtc_state->base.crtc);
 	int need_scaling;
 
-	need_scaling = drm_rotation_90_or_270(rotation) ?
+	need_scaling = is_nv12 || (drm_rotation_90_or_270(rotation) ?
 		(src_h != dst_w || src_w != dst_h):
-		(src_w != dst_w || src_h != dst_h);
+		(src_w != dst_w || src_h != dst_h));
 
 	/*
 	 * if plane is being disabled or scaler is no more required or force detach
@@ -4711,7 +4711,8 @@ int skl_update_scaler_crtc(struct intel_crtc_state *state)
 	return skl_update_scaler(state, !state->base.active, SKL_CRTC_INDEX,
 		&state->scaler_state.scaler_id, DRM_ROTATE_0,
 		state->pipe_src_w, state->pipe_src_h,
-		adjusted_mode->crtc_hdisplay, adjusted_mode->crtc_vdisplay);
+		adjusted_mode->crtc_hdisplay, adjusted_mode->crtc_vdisplay,
+		false);
 }
 
 /**
@@ -4742,7 +4743,8 @@ static int skl_update_scaler_plane(struct intel_crtc_state *crtc_state,
 				drm_rect_width(&plane_state->base.src) >> 16,
 				drm_rect_height(&plane_state->base.src) >> 16,
 				drm_rect_width(&plane_state->base.dst),
-				drm_rect_height(&plane_state->base.dst));
+				drm_rect_height(&plane_state->base.dst),
+				intel_plane_is_nv12(plane_state));
 
 	if (ret || plane_state->scaler_id < 0)
 		return ret;
@@ -4768,6 +4770,7 @@ static int skl_update_scaler_plane(struct intel_crtc_state *crtc_state,
 	case DRM_FORMAT_YVYU:
 	case DRM_FORMAT_UYVY:
 	case DRM_FORMAT_VYUY:
+	case DRM_FORMAT_NV12:
 		break;
 	default:
 		DRM_DEBUG_KMS("[PLANE:%d:%s] FB:%d unsupported scaling format 0x%x\n",
