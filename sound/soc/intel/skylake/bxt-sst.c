@@ -38,6 +38,8 @@
 #define BXT_FW_ROM_BASEFW_ENTERED_TIMEOUT	3000
 #define BXT_ROM_INIT_HIPCIE_TIMEOUT	500
 #define BXT_ROM_INIT_DONE_TIMEOUT	500
+#define BXT_INIT_TIMEOUT	300
+#define BXT_ROM_INIT_TIMEOUT	70
 #define BXT_IPC_PURGE_FW	0x01004000
 
 #define BXT_FW_ROM_BASEFW_ENTERED	0x5
@@ -73,6 +75,9 @@
 
 /* Delay before scheduling D0i3 entry */
 #define BXT_D0I3_DELAY 5000
+
+#define BXT_ADSP_FW_BIN_HDR_OFFSET 0x2000
+#define BXT_FW_ROM_INIT_RETRY 3
 
 static void bxt_set_ssp_slave(struct sst_dsp *ctx);
 static int bxt_load_base_firmware(struct sst_dsp *ctx);
@@ -219,8 +224,7 @@ static int sst_bxt_prepare_fw(struct sst_dsp *ctx, const void *fwdata,
 {
 
 	int ret;
-	int i;
-	u32 reg;
+	u32 reg = 0;
 	int stream_tag;
 
 	dev_dbg(ctx->dev, "starting to prepare host dma: fwsize=%d\n", fwsize);
@@ -267,25 +271,14 @@ static int sst_bxt_prepare_fw(struct sst_dsp *ctx, const void *fwdata,
 	sst_dsp_shim_update_bits_unlocked(ctx, SKL_ADSP_REG_ADSPCS,
 			SKL_ADSPCS_CSTALL_MASK(SKL_DSP_CORE0_MASK), 0);
 
-	/* Step 5: Wait for DONE Bit */
-	for (i = BXT_ROM_INIT_HIPCIE_TIMEOUT; i > 0; --i) {
-		reg = sst_dsp_shim_read(ctx, SKL_ADSP_REG_HIPCIE);
-
-		if (reg & SKL_ADSP_REG_HIPCIE_DONE) {
-			sst_dsp_shim_update_bits_forced(ctx, SKL_ADSP_REG_HIPCIE,
+	/* Step 4: Wait for DONE Bit */
+	ret = sst_dsp_register_poll(ctx, SKL_ADSP_REG_HIPCIE,
 					SKL_ADSP_REG_HIPCIE_DONE,
-					SKL_ADSP_REG_HIPCIE_DONE);
-			break;
-		}
-
-		mdelay(1);
-	}
-	if (!i) {
-		dev_err(ctx->dev, "Timeout waiting for HIPCIE done, reg: 0x%x\n", reg);
-		/*FIXME */
-		sst_dsp_shim_update_bits(ctx, SKL_ADSP_REG_HIPCIE,
-				SKL_ADSP_REG_HIPCIE_DONE,
-				SKL_ADSP_REG_HIPCIE_DONE);
+					SKL_ADSP_REG_HIPCIE_DONE,
+					BXT_INIT_TIMEOUT, "HIPCIE Done");
+	if (ret < 0) {
+		dev_err(ctx->dev, "Timout for Purge Request%d\n", ret);
+		goto prepare_fw_load_failed;
 	}
 	dev_dbg(ctx->dev, "******HIPCIE reg: 0x%x\n", reg);
 
@@ -302,18 +295,10 @@ static int sst_bxt_prepare_fw(struct sst_dsp *ctx, const void *fwdata,
 	skl_ipc_op_int_enable(ctx);
 
 	/* Step 7: Wait for ROM init */
-	for (i = BXT_ROM_INIT_DONE_TIMEOUT; i > 0; --i) {
-		if (FW_ROM_INIT_DONE ==
-			(sst_dsp_shim_read(ctx, BXT_ADSP_REG_FW_STATUS) &
-				SKL_FW_STS_MASK)) {
-				dev_err(ctx->dev, "ROM loaded, we can continue with FW loading\n");
-			break;
-		}
-		mdelay(1);
-	}
-	if (!i) {
-		dev_err(ctx->dev, "Timeout waiting for ROM init done, reg: 0x%x\n", reg);
-		ret = -EIO;
+	ret = sst_dsp_register_poll(ctx, BXT_ADSP_REG_FW_STATUS, SKL_FW_STS_MASK,
+			SKL_FW_INIT, BXT_ROM_INIT_TIMEOUT, "ROM Load");
+	if (ret < 0) {
+		dev_err(ctx->dev, "Timeout for ROM init, ret:%d\n", ret);
 		goto prepare_fw_load_failed;
 	}
 
@@ -612,7 +597,7 @@ static int bxt_load_base_firmware(struct sst_dsp *ctx)
 {
 	struct firmware stripped_fw;
 	struct skl_sst *skl = ctx->thread_context;
-	int ret;
+	int ret, i;
 
 	dev_dbg(ctx->dev, "In %s\n", __func__);
 
@@ -635,16 +620,21 @@ static int bxt_load_base_firmware(struct sst_dsp *ctx)
 	stripped_fw.size = ctx->fw->size;
 	skl_dsp_strip_extended_manifest(&stripped_fw);
 
-	ret = sst_bxt_prepare_fw(ctx, stripped_fw.data, stripped_fw.size);
-	/* FIXME: Retry Enabling core and ROM load. Retry seemed to help during
-	   A0 Power On.So retain it for now. */
-	if (ret < 0) {
+	for (i = 0; i < BXT_FW_ROM_INIT_RETRY; i++) {
 		ret = sst_bxt_prepare_fw(ctx, stripped_fw.data, stripped_fw.size);
-		if (ret < 0) {
-			dev_err(ctx->dev, "Core En/ROM load fail:%d\n", ret);
-			goto sst_load_base_firmware_failed;
-		}
+		if (ret == 0)
+			break;
 	}
+
+	if (ret < 0) {
+		dev_err(ctx->dev, "Error code=0x%x: FW status=0x%x\n",
+			sst_dsp_shim_read(ctx, BXT_ADSP_ERROR_CODE),
+			sst_dsp_shim_read(ctx, BXT_ADSP_REG_FW_STATUS));
+
+		dev_err(ctx->dev, "Core En/ROM load fail:%d\n", ret);
+		goto sst_load_base_firmware_failed;
+	}
+
 	ret = sst_transfer_fw_host_dma(ctx);
 
 	if (ret < 0) {
