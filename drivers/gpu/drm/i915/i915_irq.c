@@ -1149,7 +1149,8 @@ static void gen6_pm_rps_work(struct work_struct *work)
 	/* Make sure we didn't queue anything we're not going to process. */
 	WARN_ON(pm_iir & ~dev_priv->pm_rps_events);
 
-	if ((pm_iir & dev_priv->pm_rps_events) == 0 && !client_boost)
+	if ((pm_iir & dev_priv->pm_rps_events) == 0 && !client_boost &&
+	    !atomic_read(&dev_priv->rps.use_boost_freq))
 		return;
 
 	mutex_lock(&dev_priv->rps.hw_lock);
@@ -1160,9 +1161,11 @@ static void gen6_pm_rps_work(struct work_struct *work)
 	new_delay = dev_priv->rps.cur_freq;
 	min = dev_priv->rps.min_freq_softlimit;
 	max = dev_priv->rps.max_freq_softlimit;
-	if (client_boost || any_waiters(dev_priv))
+	if (client_boost || any_waiters(dev_priv) ||
+	    atomic_read(&dev_priv->rps.use_boost_freq))
 		max = dev_priv->rps.max_freq;
-	if (client_boost && new_delay < dev_priv->rps.boost_freq) {
+	if ((client_boost || atomic_read(&dev_priv->rps.use_boost_freq)) &&
+	    (new_delay < dev_priv->rps.boost_freq)) {
 		new_delay = dev_priv->rps.boost_freq;
 		adj = 0;
 	} else if (pm_iir & GEN6_PM_RP_UP_THRESHOLD) {

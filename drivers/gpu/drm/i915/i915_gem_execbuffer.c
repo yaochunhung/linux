@@ -1796,6 +1796,9 @@ i915_gem_do_execbuffer(struct drm_device *dev, void *data,
 err_request:
 	__i915_add_request(params->request, ret == 0);
 
+	if (ctx->flags & CONTEXT_BOOST_FREQ)
+		intel_queue_rps_boost_for_request(params->request);
+
 err_batch_unpin:
 	/*
 	 * FIXME: We crucially rely upon the active tracking for the (ppgtt)
