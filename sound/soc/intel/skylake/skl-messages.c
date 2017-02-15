@@ -33,6 +33,9 @@
 #include "skl-tplg-interface.h"
 #include "skl-fwlog.h"
 
+#define ASRC_MODE_UPLINK   1
+#define ASRC_MODE_DOWNLINK  2
+
 static int skl_alloc_dma_buf(struct device *dev,
 		struct snd_dma_buffer *dmab, size_t size)
 {
@@ -791,6 +794,14 @@ static void skl_set_src_format(struct skl_sst *ctx,
 		(struct skl_base_cfg *)src_mconfig);
 
 	src_mconfig->src_cfg = fmt->s_freq;
+
+	if (mconfig->m_type == SKL_MODULE_TYPE_ASRC) {
+		if (mconfig->pipe->p_params->stream ==
+				SNDRV_PCM_STREAM_PLAYBACK)
+			src_mconfig->mode = ASRC_MODE_DOWNLINK;
+		else
+			src_mconfig->mode = ASRC_MODE_UPLINK;
+	}
 }
 
 /*
