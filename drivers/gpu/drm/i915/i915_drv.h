@@ -1471,7 +1471,7 @@ struct drm_i915_error_state_buf {
 };
 
 struct i915_error_state_file_priv {
-	struct drm_device *dev;
+	struct drm_i915_private *i915;
 	struct drm_i915_error_state *error;
 };
 
@@ -3449,7 +3449,7 @@ void i915_capture_error_state(struct drm_i915_private *dev_priv,
 void i915_error_state_get(struct drm_device *dev,
 			  struct i915_error_state_file_priv *error_priv);
 void i915_error_state_put(struct i915_error_state_file_priv *error_priv);
-void i915_destroy_error_state(struct drm_device *dev);
+void i915_destroy_error_state(struct drm_i915_private *dev_priv);
 
 #else
 
@@ -3459,7 +3459,7 @@ static inline void i915_capture_error_state(struct drm_i915_private *dev_priv,
 {
 }
 
-static inline void i915_destroy_error_state(struct drm_device *dev)
+static inline void i915_destroy_error_state(struct drm_i915_private *dev_priv)
 {
 }
 
