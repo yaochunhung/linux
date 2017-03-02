@@ -30,14 +30,15 @@
  * DOC: overview
  *
  * Encoders represent the connecting element between the CRTC (as the overall
- * pixel pipeline, represented by struct &drm_crtc) and the connectors (as the
- * generic sink entity, represented by struct &drm_connector). Encoders are
- * objects exposed to userspace, originally to allow userspace to infer cloning
- * and connector/CRTC restrictions. Unfortunately almost all drivers get this
- * wrong, making the uabi pretty much useless. On top of that the exposed
- * restrictions are too simple for todays hardware, and the recommend way to
- * infer restrictions is by using the DRM_MODE_ATOMIC_TEST_ONLY flag for the
- * atomic IOCTL.
+ * pixel pipeline, represented by &struct drm_crtc) and the connectors (as the
+ * generic sink entity, represented by &struct drm_connector). An encoder takes
+ * pixel data from a CRTC and converts it to a format suitable for any attached
+ * connector. Encoders are objects exposed to userspace, originally to allow
+ * userspace to infer cloning and connector/CRTC restrictions. Unfortunately
+ * almost all drivers get this wrong, making the uabi pretty much useless. On
+ * top of that the exposed restrictions are too simple for today's hardware, and
+ * the recommended way to infer restrictions is by using the
+ * DRM_MODE_ATOMIC_TEST_ONLY flag for the atomic IOCTL.
  *
  * Otherwise encoders aren't used in the uapi at all (any modeset request from
  * userspace directly connects a connector with a CRTC), drivers are therefore
