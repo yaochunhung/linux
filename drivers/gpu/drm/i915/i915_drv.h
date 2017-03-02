@@ -3501,8 +3501,8 @@ void intel_lpe_audio_notify(struct drm_i915_private *dev_priv,
 			    bool dp_output, int link_rate);
 
 /* intel_i2c.c */
-extern int intel_setup_gmbus(struct drm_device *dev);
-extern void intel_teardown_gmbus(struct drm_device *dev);
+extern int intel_setup_gmbus(struct drm_i915_private *dev_priv);
+extern void intel_teardown_gmbus(struct drm_i915_private *dev_priv);
 extern bool intel_gmbus_is_valid_pin(struct drm_i915_private *dev_priv,
 				     unsigned int pin);
 
