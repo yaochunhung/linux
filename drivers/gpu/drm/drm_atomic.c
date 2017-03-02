@@ -289,9 +289,8 @@ EXPORT_SYMBOL(drm_atomic_get_crtc_state);
  * @state: the CRTC whose incoming state to update
  * @mode: kernel-internal mode to use for the CRTC, or NULL to disable
  *
- * Set a mode (originating from the kernel) on the desired CRTC state. Does
- * not change any other state properties, including enable, active, or
- * mode_changed.
+ * Set a mode (originating from the kernel) on the desired CRTC state and update
+ * the enable property.
  *
  * RETURNS:
  * Zero on success, error code on failure. Cannot return -EDEADLK.
