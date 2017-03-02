@@ -4208,9 +4208,9 @@ static void assert_kernel_context_is_current(struct drm_i915_private *dev_priv)
 		GEM_BUG_ON(engine->last_context != dev_priv->kernel_context);
 }
 
-int i915_gem_suspend(struct drm_device *dev)
+int i915_gem_suspend(struct drm_i915_private *dev_priv)
 {
-	struct drm_i915_private *dev_priv = to_i915(dev);
+	struct drm_device *dev = &dev_priv->drm;
 	int ret;
 
 	intel_suspend_gt_powersave(dev_priv);
@@ -4284,9 +4284,9 @@ err:
 	return ret;
 }
 
-void i915_gem_resume(struct drm_device *dev)
+void i915_gem_resume(struct drm_i915_private *dev_priv)
 {
-	struct drm_i915_private *dev_priv = to_i915(dev);
+	struct drm_device *dev = &dev_priv->drm;
 
 	WARN_ON(dev_priv->gt.awake);
 
@@ -4351,9 +4351,8 @@ static void init_unused_rings(struct drm_i915_private *dev_priv)
 }
 
 int
-i915_gem_init_hw(struct drm_device *dev)
+i915_gem_init_hw(struct drm_i915_private *dev_priv)
 {
-	struct drm_i915_private *dev_priv = to_i915(dev);
 	struct intel_engine_cs *engine;
 	enum intel_engine_id id;
 	int ret;
@@ -4407,10 +4406,10 @@ i915_gem_init_hw(struct drm_device *dev)
 			goto out;
 	}
 
-	intel_mocs_init_l3cc_table(dev);
+	intel_mocs_init_l3cc_table(dev_priv);
 
 	/* We can't enable contexts until all firmware is loaded */
-	ret = intel_guc_setup(dev);
+	ret = intel_guc_setup(dev_priv);
 	if (ret)
 		goto out;
 
@@ -4440,12 +4439,11 @@ bool intel_sanitize_semaphores(struct drm_i915_private *dev_priv, int value)
 	return true;
 }
 
-int i915_gem_init(struct drm_device *dev)
+int i915_gem_init(struct drm_i915_private *dev_priv)
 {
-	struct drm_i915_private *dev_priv = to_i915(dev);
 	int ret;
 
-	mutex_lock(&dev->struct_mutex);
+	mutex_lock(&dev_priv->drm.struct_mutex);
 
 	if (!i915.enable_execlists) {
 		dev_priv->gt.resume = intel_legacy_submission_resume;
@@ -4469,15 +4467,15 @@ int i915_gem_init(struct drm_device *dev)
 	if (ret)
 		goto out_unlock;
 
-	ret = i915_gem_context_init(dev);
+	ret = i915_gem_context_init(dev_priv);
 	if (ret)
 		goto out_unlock;
 
-	ret = intel_engines_init(dev);
+	ret = intel_engines_init(dev_priv);
 	if (ret)
 		goto out_unlock;
 
-	ret = i915_gem_init_hw(dev);
+	ret = i915_gem_init_hw(dev_priv);
 	if (ret == -EIO) {
 		/* Allow engine initialisation to fail by marking the GPU as
 		 * wedged. But we only want to do this where the GPU is angry,
@@ -4490,7 +4488,7 @@ int i915_gem_init(struct drm_device *dev)
 
 out_unlock:
 	intel_uncore_forcewake_put(dev_priv, FORCEWAKE_ALL);
-	mutex_unlock(&dev->struct_mutex);
+	mutex_unlock(&dev_priv->drm.struct_mutex);
 
 	return ret;
 }
