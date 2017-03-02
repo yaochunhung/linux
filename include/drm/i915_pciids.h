@@ -288,6 +288,10 @@
 	INTEL_VGA_DEVICE(0x1A84, info), \
 	INTEL_VGA_DEVICE(0x5A84, info)
 
+#define INTEL_GLK_IDS(info) \
+	INTEL_VGA_DEVICE(0x3184, info), \
+	INTEL_VGA_DEVICE(0x3185, info)
+
 #define INTEL_KBL_GT1_IDS(info)	\
 	INTEL_VGA_DEVICE(0x5913, info), /* ULT GT1.5 */ \
 	INTEL_VGA_DEVICE(0x5915, info), /* ULX GT1.5 */ \
