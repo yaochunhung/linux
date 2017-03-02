@@ -299,8 +299,7 @@ struct skl_dfw_pipe {
 	u32 pipe_mode:2;
 	u32 lp_mode:1;
 	u32 nr_modules:4;
-	u32 nr_cfgs:3;
-	u32 rsvd:8;
+	u32 nr_cfgs:11;
 	struct skl_dfw_path_config configs[SKL_MAX_PATH_CONFIGS];
 } __packed;
 
