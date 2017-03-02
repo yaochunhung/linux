@@ -463,3 +463,9 @@ DRM MM Range Allocator Function References
 
 .. kernel-doc:: include/drm/drm_mm.h
    :internal:
+
+DRM Cache Handling
+==================
+
+.. kernel-doc:: drivers/gpu/drm/drm_cache.c
+   :export:
