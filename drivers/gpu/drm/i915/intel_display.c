@@ -15019,6 +15019,7 @@ intel_legacy_cursor_update(struct drm_plane *plane,
 	struct intel_plane *intel_plane = to_intel_plane(plane);
 	struct drm_framebuffer *old_fb;
 	struct drm_crtc_state *crtc_state = crtc->state;
+	struct i915_vma *old_vma;
 
 	/*
 	 * When crtc is inactive or there is a modeset pending,
@@ -15090,9 +15091,12 @@ intel_legacy_cursor_update(struct drm_plane *plane,
 			ret = PTR_ERR(vma);
 			goto out_unlock;
 		}
+
+		to_intel_plane_state(new_plane_state)->vma = vma;
 	}
 
 	old_fb = old_plane_state->fb;
+	old_vma = to_intel_plane_state(old_plane_state)->vma;
 
 	i915_gem_track_fb(intel_fb_obj(old_fb), intel_fb_obj(fb),
 			  intel_plane->frontbuffer_bit);
@@ -15102,6 +15106,7 @@ intel_legacy_cursor_update(struct drm_plane *plane,
 	*to_intel_plane_state(old_plane_state) = *to_intel_plane_state(new_plane_state);
 	new_plane_state->fence = NULL;
 	new_plane_state->fb = old_fb;
+	to_intel_plane_state(new_plane_state)->vma = old_vma;
 
 	intel_plane->update_plane(plane,
 				  to_intel_crtc_state(crtc->state),
