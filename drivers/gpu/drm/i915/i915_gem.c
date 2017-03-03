@@ -2611,6 +2611,7 @@ i915_gem_find_active_request(struct intel_engine_cs *engine)
 		if (__i915_gem_request_completed(request))
 			continue;
 
+		GEM_BUG_ON(request->engine != engine);
 		return request;
 	}
 
@@ -2629,7 +2630,7 @@ void i915_gem_reset_prepare(struct drm_i915_private *dev_priv)
 	i915_gem_revoke_fences(dev_priv);
 }
 
-static void reset_request(struct drm_i915_gem_request *request)
+static void skip_request(struct drm_i915_gem_request *request)
 {
 	void *vaddr = request->ring->vaddr;
 	u32 head;
@@ -2646,12 +2647,33 @@ static void reset_request(struct drm_i915_gem_request *request)
 	memset(vaddr + head, 0, request->postfix - head);
 }
 
+static void engine_skip_context(struct drm_i915_gem_request *request)
+{
+	struct intel_engine_cs *engine = request->engine;
+	struct i915_gem_context *hung_ctx = request->ctx;
+	struct intel_timeline *timeline;
+	unsigned long flags;
+
+	timeline = i915_gem_context_lookup_timeline(hung_ctx, engine);
+
+	spin_lock_irqsave(&engine->timeline->lock, flags);
+	spin_lock(&timeline->lock);
+
+	list_for_each_entry_continue(request, &engine->timeline->requests, link)
+		if (request->ctx == hung_ctx)
+			skip_request(request);
+
+	list_for_each_entry(request, &timeline->requests, link)
+		skip_request(request);
+
+	spin_unlock(&timeline->lock);
+	spin_unlock_irqrestore(&engine->timeline->lock, flags);
+}
+
 static void i915_gem_reset_engine(struct intel_engine_cs *engine)
 {
 	struct drm_i915_gem_request *request;
 	struct i915_gem_context *hung_ctx;
-	struct intel_timeline *timeline;
-	unsigned long flags;
 	bool ring_hung;
 
 	if (engine->irq_seqno_barrier)
@@ -2671,10 +2693,12 @@ static void i915_gem_reset_engine(struct intel_engine_cs *engine)
 		ring_hung = false;
 	}
 
-	if (ring_hung)
+	if (ring_hung) {
 		i915_gem_context_mark_guilty(hung_ctx);
-	else
+		skip_request(request);
+	} else {
 		i915_gem_context_mark_innocent(hung_ctx);
+	}
 
 	if (!ring_hung)
 		return;
@@ -2700,20 +2724,7 @@ static void i915_gem_reset_engine(struct intel_engine_cs *engine)
 	if (i915_gem_context_is_default(hung_ctx))
 		return;
 
-	timeline = i915_gem_context_lookup_timeline(hung_ctx, engine);
-
-	spin_lock_irqsave(&engine->timeline->lock, flags);
-	spin_lock(&timeline->lock);
-
-	list_for_each_entry_continue(request, &engine->timeline->requests, link)
-		if (request->ctx == hung_ctx)
-			reset_request(request);
-
-	list_for_each_entry(request, &timeline->requests, link)
-		reset_request(request);
-
-	spin_unlock(&timeline->lock);
-	spin_unlock_irqrestore(&engine->timeline->lock, flags);
+	engine_skip_context(request);
 }
 
 void i915_gem_reset_finish(struct drm_i915_private *dev_priv)
