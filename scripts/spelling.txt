@@ -59,6 +59,7 @@ adress||address
 adresses||addresses
 adviced||advised
 afecting||affecting
+againt||against
 agaist||against
 albumns||albums
 alegorical||allegorical
