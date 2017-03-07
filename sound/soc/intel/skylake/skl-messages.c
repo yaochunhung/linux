@@ -959,6 +959,7 @@ int skl_init_module(struct skl_sst *ctx,
 			&module_config_size, &param_data);
 	if (ret < 0) {
 		dev_err(ctx->dev, "Failed to set module format ret=%d\n", ret);
+		kfree(param_data);
 		return ret;
 	}
 
@@ -996,6 +997,7 @@ int skl_init_probe_module(struct skl_sst *ctx,
 			&module_config_size, &param_data);
 	if (ret < 0) {
 		dev_err(ctx->dev, "Failed to set module format ret=%d\n", ret);
+		kfree(param_data);
 		return ret;
 	}
 
