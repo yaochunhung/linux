@@ -33,7 +33,6 @@ struct platform_device;
 
 struct intel_hdmi_lpe_audio_eld {
 	int port_id;
-	int pipe_id;
 	unsigned char eld_data[HDMI_MAX_ELD_BYTES];
 };
 
