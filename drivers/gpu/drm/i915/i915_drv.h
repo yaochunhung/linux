@@ -2469,8 +2469,7 @@ struct drm_i915_private {
 
 	bool ipc_enabled;
 
-	/* Used to save the pipe-to-encoder mapping for audio */
-	struct intel_encoder *av_enc_map[I915_MAX_PIPES];
+	struct intel_encoder *dig_port_map[I915_MAX_PORTS];
 
 	/* necessary resource sharing with HDMI LPE audio driver. */
 	struct {
