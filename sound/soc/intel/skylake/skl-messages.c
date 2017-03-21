@@ -33,8 +33,8 @@
 #include "skl-tplg-interface.h"
 #include "skl-fwlog.h"
 
-#define ASRC_MODE_UPLINK   1
-#define ASRC_MODE_DOWNLINK  2
+#define ASRC_MODE_UPLINK   2
+#define ASRC_MODE_DOWNLINK  1
 
 static int skl_alloc_dma_buf(struct device *dev,
 		struct snd_dma_buffer *dmab, size_t size)
