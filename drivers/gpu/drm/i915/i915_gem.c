@@ -2634,24 +2634,22 @@ int i915_gem_reset_prepare(struct drm_i915_private *dev_priv)
 {
 	struct intel_engine_cs *engine;
 	enum intel_engine_id id;
-	int err = 0;
 
 	/* Ensure irq handler finishes, and not run again. */
 	for_each_engine(engine, dev_priv, id) {
-		struct drm_i915_gem_request *request;
-
 		tasklet_kill(&engine->irq_tasklet);
 
-		if (engine_stalled(engine)) {
-			request = i915_gem_find_active_request(engine);
-			if (request)
-				err = -EIO; /* Previous reset failed! */
-		}
+		/*
+		 * Forklift note: Upstream checks the request's fence here for
+		 * EIO and will notice that we failed to reset (so the GPU is
+		 * wedged).  Our base kernel doesn't have fence error codes
+		 * so we don't have a way to check this at the moment.
+		 */
 	}
 
 	i915_gem_revoke_fences(dev_priv);
 
-	return err;
+	return 0;
 }
 
 static void skip_request(struct drm_i915_gem_request *request)
