@@ -157,8 +157,10 @@ static u32 get_core_family(struct drm_i915_private *dev_priv)
 static void guc_params_init(struct drm_i915_private *dev_priv)
 {
 	struct intel_guc *guc = &dev_priv->guc;
+	struct intel_uc_fw *guc_fw = &dev_priv->guc.fw;
 	u32 params[GUC_CTL_MAX_DWORDS];
 	int i;
+	bool enable_critical_logging = false;
 
 	memset(&params, 0, sizeof(params));
 
@@ -181,11 +183,28 @@ static void guc_params_init(struct drm_i915_private *dev_priv)
 
 	params[GUC_CTL_LOG_PARAMS] = guc->log.flags;
 
+	/*
+	 * Enable critical logging in GuC based on i915.guc_log_level and
+	 * i915.enable_guc_critical_logging.
+	 */
 	if (i915.guc_log_level >= 0) {
 		params[GUC_CTL_DEBUG] =
 			i915.guc_log_level << GUC_LOG_VERBOSITY_SHIFT;
-	} else
+		enable_critical_logging = true;
+	} else {
 		params[GUC_CTL_DEBUG] = GUC_LOG_DISABLED;
+		if (i915.enable_guc_critical_logging)
+			enable_critical_logging = true;
+	}
+
+	if (NEEDS_GUC_CRITICAL_LOGGING(dev_priv, guc_fw)) {
+		if (enable_critical_logging)
+			params[GUC_CTL_DEBUG] &=
+				~GUC_V9_CRITICAL_LOGGING_DISABLED;
+		else
+			params[GUC_CTL_DEBUG] |=
+				GUC_V9_CRITICAL_LOGGING_DISABLED;
+	}
 
 	if (guc->ads_vma) {
 		u32 ads = guc_ggtt_offset(guc->ads_vma) >> PAGE_SHIFT;
