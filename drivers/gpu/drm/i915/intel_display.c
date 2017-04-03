@@ -16076,6 +16076,31 @@ static int intel_framebuffer_init(struct drm_device *dev,
 			return -EINVAL;
 		}
 		break;
+	case DRM_FORMAT_NV12:
+		if (INTEL_GEN(dev_priv) < 9) {
+			DRM_DEBUG("unsupported pixel format: %s\n",
+				  drm_get_format_name(mode_cmd->pixel_format, &format_name));
+			return -EINVAL;
+		}
+
+		/*
+		 * On current hardware we expect the UV plane to immediately
+		 * follow the Y plane.  This means we can't really allocate
+		 * them as separate bo's since they might be too far apart or
+		 * the UV might come before the Y.
+		 */
+		if (mode_cmd->handles[0] != mode_cmd->handles[1]) {
+			DRM_DEBUG("Y and UV planes should be stored in the same buffer for Intel hardware");
+			return -EINVAL;
+		}
+
+		/* Catch easy/dumb mistakes with overlapping planes */
+		if (mode_cmd->offsets[1] <
+		    mode_cmd->height * mode_cmd->pitches[0]) {
+			DRM_DEBUG("UV plane starts before end of Y plane");
+			return -EINVAL;
+		}
+		break;
 	default:
 		DRM_DEBUG("unsupported pixel format: %s\n",
 		          drm_get_format_name(mode_cmd->pixel_format, &format_name));
