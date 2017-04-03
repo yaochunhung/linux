@@ -208,14 +208,18 @@ skl_update_plane(struct drm_plane *drm_plane,
 	u32 plane_ctl;
 	const struct drm_intel_sprite_colorkey *key = &plane_state->ckey;
 	u32 surf_addr = plane_state->main.offset;
+	u32 aux_offset = plane_state->aux.offset;
 	unsigned int rotation = plane_state->base.rotation;
 	u32 stride = skl_plane_stride(fb, 0, rotation);
+	u32 aux_stride = skl_plane_stride(fb, 1, rotation);
 	int crtc_x = plane_state->base.dst.x1;
 	int crtc_y = plane_state->base.dst.y1;
 	uint32_t crtc_w = drm_rect_width(&plane_state->base.dst);
 	uint32_t crtc_h = drm_rect_height(&plane_state->base.dst);
 	uint32_t x = plane_state->main.x;
 	uint32_t y = plane_state->main.y;
+	uint32_t aux_x = plane_state->aux.x;
+	uint32_t aux_y = plane_state->aux.y;
 	uint32_t src_w = drm_rect_width(&plane_state->base.src) >> 16;
 	uint32_t src_h = drm_rect_height(&plane_state->base.src) >> 16;
 
@@ -248,6 +252,8 @@ skl_update_plane(struct drm_plane *drm_plane,
 	I915_WRITE(PLANE_OFFSET(pipe, plane_id), (y << 16) | x);
 	I915_WRITE(PLANE_STRIDE(pipe, plane_id), stride);
 	I915_WRITE(PLANE_SIZE(pipe, plane_id), (src_h << 16) | src_w);
+	I915_WRITE(PLANE_AUX_DIST(pipe, plane_id), aux_offset | aux_stride);
+	I915_WRITE(PLANE_AUX_OFFSET(pipe, plane_id), (aux_y << 16) | aux_x);
 
 	/* program plane scaler */
 	if (plane_state->scaler_id >= 0) {
