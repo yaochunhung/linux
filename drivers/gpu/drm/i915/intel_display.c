@@ -2656,6 +2656,8 @@ static int skl_format_to_fourcc(int format, bool rgb_order, bool alpha)
 			return DRM_FORMAT_XBGR2101010;
 		else
 			return DRM_FORMAT_XRGB2101010;
+	case PLANE_CTL_FORMAT_NV12:
+		return DRM_FORMAT_NV12;
 	}
 }
 
@@ -3318,6 +3320,8 @@ u32 skl_plane_ctl_format(uint32_t pixel_format)
 		return PLANE_CTL_FORMAT_YUV422 | PLANE_CTL_YUV422_UYVY;
 	case DRM_FORMAT_VYUY:
 		return PLANE_CTL_FORMAT_YUV422 | PLANE_CTL_YUV422_VYUY;
+	case DRM_FORMAT_NV12:
+		return PLANE_CTL_FORMAT_NV12;
 	default:
 		MISSING_CASE(pixel_format);
 	}
@@ -9768,6 +9772,10 @@ skylake_get_initial_plane_config(struct intel_crtc *crtc,
 	fourcc = skl_format_to_fourcc(pixel_format,
 				      val & PLANE_CTL_ORDER_RGBX,
 				      val & PLANE_CTL_ALPHA_MASK);
+	if (fourcc == DRM_FORMAT_NV12) {
+		DRM_DEBUG_KMS("Cannot inherit NV12 fb's yet\n");
+		goto error;
+	}
 	fb->format = drm_format_info(fourcc);
 
 	tiling = val & PLANE_CTL_TILED_MASK;
