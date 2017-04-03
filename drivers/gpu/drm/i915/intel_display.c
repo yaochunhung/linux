@@ -14883,9 +14883,10 @@ intel_cleanup_plane_fb(struct drm_plane *plane,
 }
 
 int
-skl_max_scale(struct intel_crtc *intel_crtc, struct intel_crtc_state *crtc_state)
+skl_max_scale(struct intel_crtc *intel_crtc,
+	      struct intel_crtc_state *crtc_state,
+	      struct intel_plane_state *plane_state)
 {
-	int max_scale;
 	int crtc_clock, cdclk;
 
 	if (!intel_crtc || !crtc_state->base.enable)
@@ -14899,13 +14900,17 @@ skl_max_scale(struct intel_crtc *intel_crtc, struct intel_crtc_state *crtc_state
 
 	/*
 	 * skl max scale is lower of:
-	 *    close to 3 but not 3, -1 is for that purpose
+	 *    fixed limit
 	 *            or
 	 *    cdclk/crtc_clock
+	 *
+	 * fixed limit is just under 2.0 (0x1ffff in fixed pt) for NV12
+	 * or just under 3.0 (0x2ffff in fixed pt) for non-NV12
 	 */
-	max_scale = min((1 << 16) * 3 - 1, (1 << 8) * ((cdclk << 8) / crtc_clock));
-
-	return max_scale;
+	if (intel_plane_is_nv12(plane_state))
+		return min(0x1ffff, (1 << 8) * ((cdclk << 8) / crtc_clock));
+	else
+		return min(0x2ffff, (1 << 8) * ((cdclk << 8) / crtc_clock));
 }
 
 static int
@@ -14924,7 +14929,9 @@ intel_check_primary_plane(struct drm_plane *plane,
 		/* use scaler when colorkey is not required */
 		if (state->ckey.flags == I915_SET_COLORKEY_NONE) {
 			min_scale = 1;
-			max_scale = skl_max_scale(to_intel_crtc(crtc), crtc_state);
+			max_scale = skl_max_scale(to_intel_crtc(crtc),
+						  crtc_state,
+						  state);
 		}
 		can_position = true;
 	}
