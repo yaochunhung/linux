@@ -3378,10 +3378,14 @@ static void skylake_update_primary_plane(struct drm_plane *plane,
 	u32 plane_ctl;
 	unsigned int rotation = plane_state->base.rotation;
 	u32 stride = skl_plane_stride(fb, 0, rotation);
+	u32 aux_stride = skl_plane_stride(fb, 1, rotation);
 	u32 surf_addr = plane_state->main.offset;
+	u32 aux_offset = plane_state->aux.offset;
 	int scaler_id = plane_state->scaler_id;
 	int src_x = plane_state->main.x;
 	int src_y = plane_state->main.y;
+	int aux_x = plane_state->aux.x;
+	int aux_y = plane_state->aux.y;
 	int src_w = drm_rect_width(&plane_state->base.src) >> 16;
 	int src_h = drm_rect_height(&plane_state->base.src) >> 16;
 	int dst_x = plane_state->base.dst.x1;
@@ -3413,6 +3417,8 @@ static void skylake_update_primary_plane(struct drm_plane *plane,
 	I915_WRITE(PLANE_OFFSET(pipe, plane_id), (src_y << 16) | src_x);
 	I915_WRITE(PLANE_STRIDE(pipe, plane_id), stride);
 	I915_WRITE(PLANE_SIZE(pipe, plane_id), (src_h << 16) | src_w);
+	I915_WRITE(PLANE_AUX_DIST(pipe, plane_id), aux_offset | aux_stride);
+	I915_WRITE(PLANE_AUX_OFFSET(pipe, plane_id), (aux_y << 16) | aux_x);
 
 	if (scaler_id >= 0) {
 		uint32_t ps_ctrl = 0;
