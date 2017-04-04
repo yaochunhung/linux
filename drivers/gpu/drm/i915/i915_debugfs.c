@@ -4159,6 +4159,28 @@ DEFINE_SIMPLE_ATTRIBUTE(i915_wedged_fops,
 			i915_wedged_get, i915_wedged_set,
 			"%llu\n");
 
+static u32 i915_watchdog_reset_count(struct drm_device *dev)
+{
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct i915_gem_context *ctx;
+	struct page *page;
+	struct guc_shared_ctx_data *guc_shared_data;
+	u32 guc_media_reset_count;
+
+	if (mutex_lock_interruptible(&dev->struct_mutex))
+		return 0;
+
+	ctx = dev_priv->kernel_context;
+	page = i915_gem_object_get_dirty_page(ctx->engine[RCS].state->obj,
+					      LRC_GUCSHR_PN);
+	guc_shared_data = kmap_atomic(page);
+	guc_media_reset_count = guc_shared_data->media_reset_count;
+	kunmap_atomic(guc_shared_data);
+
+	mutex_unlock(&dev->struct_mutex);
+
+	return guc_media_reset_count;
+}
 
 static ssize_t i915_reset_info_read(struct file *filp, char __user *ubuf,
 				    size_t max, loff_t *ppos)
@@ -4173,6 +4195,10 @@ static ssize_t i915_reset_info_read(struct file *filp, char __user *ubuf,
 
 	len = scnprintf(buf, sizeof(buf), "full gpu reset = %u\n",
 			i915_reset_count(error));
+
+	len += scnprintf(buf + len, sizeof(buf) - len,
+			 "watchdog / media reset = %u\n",
+			 i915_watchdog_reset_count(dev));
 
 	for_each_engine(engine, dev_priv, id) {
 		len += scnprintf(buf + len, sizeof(buf) - len,
