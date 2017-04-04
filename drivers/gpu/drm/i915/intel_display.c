@@ -84,6 +84,9 @@ static const uint32_t skl_primary_formats[] = {
 	DRM_FORMAT_YVYU,
 	DRM_FORMAT_UYVY,
 	DRM_FORMAT_VYUY,
+
+	/* Keep last --- NV12 only supported on first two pipes */
+	DRM_FORMAT_NV12,
 };
 
 /* Cursor formats */
@@ -15234,6 +15237,10 @@ intel_primary_plane_create(struct drm_i915_private *dev_priv, enum pipe pipe)
 	if (INTEL_GEN(dev_priv) >= 9) {
 		intel_primary_formats = skl_primary_formats;
 		num_formats = ARRAY_SIZE(skl_primary_formats);
+
+		/* Drop final format (NV12) for pipes that don't support it */
+		if (pipe >= PIPE_C)
+			num_formats--;
 
 		primary->update_plane = skylake_update_primary_plane;
 		primary->disable_plane = skylake_disable_primary_plane;

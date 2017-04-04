@@ -1038,6 +1038,12 @@ static uint32_t skl_plane_formats[] = {
 	DRM_FORMAT_YVYU,
 	DRM_FORMAT_UYVY,
 	DRM_FORMAT_VYUY,
+
+	/*
+	 * Keep last --- NV12 only supported on first two pipes and first two
+	 * universal planes.
+	 */
+	DRM_FORMAT_NV12,
 };
 
 struct intel_plane *
@@ -1074,6 +1080,13 @@ intel_sprite_plane_create(struct drm_i915_private *dev_priv,
 
 		plane_formats = skl_plane_formats;
 		num_plane_formats = ARRAY_SIZE(skl_plane_formats);
+
+		/*
+		 * Drop the last format (NV12) for pipes/planes that don't
+		 * support it
+		 */
+		if (pipe >= PIPE_C || plane >= 1)
+			num_plane_formats--;
 	} else if (IS_VALLEYVIEW(dev_priv) || IS_CHERRYVIEW(dev_priv)) {
 		intel_plane->can_scale = false;
 		intel_plane->max_downscale = 1;
