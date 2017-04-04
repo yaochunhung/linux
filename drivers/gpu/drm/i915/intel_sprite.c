@@ -222,6 +222,7 @@ skl_update_plane(struct drm_plane *drm_plane,
 	uint32_t aux_y = plane_state->aux.y;
 	uint32_t src_w = drm_rect_width(&plane_state->base.src) >> 16;
 	uint32_t src_h = drm_rect_height(&plane_state->base.src) >> 16;
+	u32 hphase = 0, vphase = 0;
 
 	plane_ctl = PLANE_CTL_ENABLE |
 		PLANE_CTL_PIPE_GAMMA_ENABLE |
@@ -231,6 +232,17 @@ skl_update_plane(struct drm_plane *drm_plane,
 	plane_ctl |= skl_plane_ctl_tiling(fb->modifier);
 
 	plane_ctl |= skl_plane_ctl_rotation(rotation);
+
+	if (intel_plane_is_nv12(plane_state)) {
+		/*
+		 * FIXME:  Hardware documentation is very vague about what
+		 * these settings really mean.  These are copied from VPG's
+		 * Android driver, although it's unclear whether they're
+		 * critical to proper NV12 operation or not.
+		 */
+		hphase = (PS_UV_PHASE_TRIP_EN | PS_Y_PHASE_TRIP_EN);
+		vphase = (PS_Y_PHASE_TRIP_EN | PS_UV_PHASE_FRAC_05);
+	}
 
 	if (key->flags) {
 		I915_WRITE(PLANE_KEYVAL(pipe, plane_id), key->min_value);
@@ -268,7 +280,8 @@ skl_update_plane(struct drm_plane *drm_plane,
 		I915_WRITE(SKL_PS_WIN_POS(pipe, scaler_id), (crtc_x << 16) | crtc_y);
 		I915_WRITE(SKL_PS_WIN_SZ(pipe, scaler_id),
 			((crtc_w + 1) << 16)|(crtc_h + 1));
-
+		I915_WRITE(SKL_PS_HPHASE(pipe, scaler_id), hphase);
+		I915_WRITE(SKL_PS_VPHASE(pipe, scaler_id), vphase);
 		I915_WRITE(PLANE_POS(pipe, plane_id), 0);
 	} else {
 		I915_WRITE(PLANE_POS(pipe, plane_id), (crtc_y << 16) | crtc_x);

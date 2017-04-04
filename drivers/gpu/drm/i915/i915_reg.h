@@ -6224,6 +6224,16 @@ enum {
 #define _PS_HPHASE_2B       0x68A94
 #define _PS_HPHASE_1C       0x69194
 
+#define PS_UV_PHASE_TRIP_EN    (1)
+#define PS_Y_PHASE_TRIP_EN     (1 << 16)
+#define PS_UV_PHASE_INT_MASK   (0x3 << 14)
+#define PS_UV_PHASE_FRAC_MASK  (0x1fff << 1)
+#define PS_Y_PHASE_INT_MASK    (0x3 << 30)
+#define PS_Y_PHASE_FRAC_MASK   (0x1fff << 17)
+
+/* UV Phase fraction values */
+#define PS_UV_PHASE_FRAC_05    (0x1000 << 0x1)  /* 0.5 */
+
 #define _PS_ECC_STAT_1A     0x681D0
 #define _PS_ECC_STAT_2A     0x682D0
 #define _PS_ECC_STAT_1B     0x689D0

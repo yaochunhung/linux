@@ -3396,6 +3396,7 @@ static void skylake_update_primary_plane(struct drm_plane *plane,
 	int dst_y = plane_state->base.dst.y1;
 	int dst_w = drm_rect_width(&plane_state->base.dst);
 	int dst_h = drm_rect_height(&plane_state->base.dst);
+	u32 hphase = 0, vphase = 0;
 
 	plane_ctl = PLANE_CTL_ENABLE |
 		    PLANE_CTL_PIPE_GAMMA_ENABLE |
@@ -3405,6 +3406,17 @@ static void skylake_update_primary_plane(struct drm_plane *plane,
 	plane_ctl |= skl_plane_ctl_tiling(fb->modifier);
 	plane_ctl |= PLANE_CTL_PLANE_GAMMA_DISABLE;
 	plane_ctl |= skl_plane_ctl_rotation(rotation);
+
+	if (intel_plane_is_nv12(plane_state)) {
+		/*
+		 * FIXME:  Hardware documentation is very vague about what
+		 * these settings really mean.  These are copied from VPG's
+		 * Android driver, although it's unclear whether they're
+		 * critical to proper NV12 operation or not.
+		 */
+		hphase = (PS_UV_PHASE_TRIP_EN | PS_Y_PHASE_TRIP_EN);
+		vphase = (PS_Y_PHASE_TRIP_EN | PS_UV_PHASE_FRAC_05);
+	}
 
 	/* Sizes are 0 based */
 	src_w--;
@@ -3434,6 +3446,8 @@ static void skylake_update_primary_plane(struct drm_plane *plane,
 		I915_WRITE(SKL_PS_PWR_GATE(pipe, scaler_id), 0);
 		I915_WRITE(SKL_PS_WIN_POS(pipe, scaler_id), (dst_x << 16) | dst_y);
 		I915_WRITE(SKL_PS_WIN_SZ(pipe, scaler_id), (dst_w << 16) | dst_h);
+		I915_WRITE(SKL_PS_HPHASE(pipe, scaler_id), hphase);
+		I915_WRITE(SKL_PS_VPHASE(pipe, scaler_id), vphase);
 		I915_WRITE(PLANE_POS(pipe, plane_id), 0);
 	} else {
 		I915_WRITE(PLANE_POS(pipe, plane_id), (dst_y << 16) | dst_x);
