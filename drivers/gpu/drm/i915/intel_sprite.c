@@ -1082,10 +1082,11 @@ intel_sprite_plane_create(struct drm_i915_private *dev_priv,
 		num_plane_formats = ARRAY_SIZE(skl_plane_formats);
 
 		/*
-		 * Drop the last format (NV12) for pipes/planes that don't
-		 * support it
+		 * Drop the last format (NV12) for pipes/planes or hardware
+		 * steppings that don't support it.
 		 */
-		if (pipe >= PIPE_C || plane >= 1)
+		if (IS_BXT_REVID(dev_priv, 0, BXT_REVID_C0) ||
+		    pipe >= PIPE_C || plane >= 1)
 			num_plane_formats--;
 	} else if (IS_VALLEYVIEW(dev_priv) || IS_CHERRYVIEW(dev_priv)) {
 		intel_plane->can_scale = false;

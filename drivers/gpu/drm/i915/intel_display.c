@@ -15238,8 +15238,11 @@ intel_primary_plane_create(struct drm_i915_private *dev_priv, enum pipe pipe)
 		intel_primary_formats = skl_primary_formats;
 		num_formats = ARRAY_SIZE(skl_primary_formats);
 
-		/* Drop final format (NV12) for pipes that don't support it */
-		if (pipe >= PIPE_C)
+		/*
+		 * Drop final format (NV12) for pipes or hardware steppings
+		 * that don't support it.
+		 */
+		if (IS_BXT_REVID(dev_priv, 0, BXT_REVID_C0) || pipe >= PIPE_C)
 			num_formats--;
 
 		primary->update_plane = skylake_update_primary_plane;
