@@ -232,8 +232,12 @@ static struct snd_soc_dai_driver dummy_dai[] = {
 };
 int snd_soc_dai_is_dummy(struct snd_soc_dai *dai)
 {
-	if (dai->driver == &dummy_dai)
-		return 1;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(dummy_dai); i++) {
+		if (dai->driver == &dummy_dai[i])
+			return 1;
+	}
 	return 0;
 }
 
