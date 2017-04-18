@@ -1101,7 +1101,7 @@ i915_gem_execbuffer_move_to_gpu(struct drm_i915_gem_request *req,
 		if (ret)
 			return ret;
 
-		if (obj->base.write_domain & I915_GEM_DOMAIN_CPU)
+		if (obj->cache_dirty || obj->base.write_domain & I915_GEM_DOMAIN_CPU)
 			i915_gem_clflush_object(obj, false);
 	}
 
