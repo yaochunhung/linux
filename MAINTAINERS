@@ -753,6 +753,22 @@ F:	include/linux/apm_bios.h
 F:	include/uapi/linux/apm_bios.h
 F:	drivers/char/apm-emulation.c
 
+APPOLO LAKE-I DUMMY CODED FOR PROJECT A
+M:	Ho Ching Chien <ching.chien.ho@intel.com>
+S:	Supported
+F:	sound/soc/intel/boards/apli_lhcrb_dummy_project_a.c
+
+APPOLO_LAKE_I WM8281 MACHINE DRIVER
+M:	Tan, Seng Kai <seng.kai.tan@intel.com>
+S:	Maintained
+F:	sound/soc/intel/boards/apli_lhcrb_wm8281.c
+F:	arch/x86/platform/apli_lhcrb/apli_lhcrb_wm8281_i2c.c
+
+APPOLO_LAKE_I GENERIC DUMMY CODEC DRIVER
+M:	Vinod Kumar <vinod.kumarx.vinod.kumar@intel.com>
+S:	Maintained
+F:	sound/soc/intel/boards/apli_lhcrb_generic.c
+
 APPLE BCM5974 MULTITOUCH DRIVER
 M:	Henrik Rydberg <rydberg@bitmath.org>
 L:	linux-input@vger.kernel.org
