@@ -623,10 +623,36 @@ void i915_gem_object_free(struct drm_i915_gem_object *obj)
 	kmem_cache_free(dev_priv->objects, obj);
 }
 
+static struct drm_i915_gem_object *
+i915_gem_alloc_object_stolen(struct drm_i915_private *dev_priv, size_t size)
+{
+	struct drm_i915_gem_object *obj;
+	int ret;
+
+	mutex_lock(&dev_priv->drm.struct_mutex);
+	obj = i915_gem_object_create_stolen(dev_priv, size);
+	if (!obj) {
+		mutex_unlock(&dev_priv->drm.struct_mutex);
+		return ERR_PTR(-ENOMEM);
+	}
+
+	/* Always clear fresh buffers before handing to userspace */
+	ret = i915_gem_object_clear(obj);
+	if (ret) {
+		i915_gem_object_put(obj);
+		mutex_unlock(&dev_priv->drm.struct_mutex);
+		return ERR_PTR(-ENOMEM);
+	}
+
+	mutex_unlock(&dev_priv->drm.struct_mutex);
+	return obj;
+}
+
 static int
 i915_gem_create(struct drm_file *file,
 		struct drm_i915_private *dev_priv,
 		uint64_t size,
+		uint64_t flags,
 		uint32_t *handle_p)
 {
 	struct drm_i915_gem_object *obj;
@@ -637,8 +663,21 @@ i915_gem_create(struct drm_file *file,
 	if (size == 0)
 		return -EINVAL;
 
+	if (flags & __I915_CREATE_UNKNOWN_FLAGS)
+		return -EINVAL;
+
 	/* Allocate the new object */
-	obj = i915_gem_object_create(dev_priv, size);
+	switch (flags & I915_CREATE_PLACEMENT_MASK) {
+	case I915_CREATE_PLACEMENT_NORMAL:
+		obj = i915_gem_object_create(dev_priv, size);
+		break;
+	case I915_CREATE_PLACEMENT_STOLEN:
+		obj = i915_gem_alloc_object_stolen(dev_priv, size);
+		break;
+	default:
+		return -EINVAL;
+	}
+
 	if (IS_ERR(obj))
 		return PTR_ERR(obj);
 
@@ -661,7 +700,7 @@ i915_gem_dumb_create(struct drm_file *file,
 	args->pitch = ALIGN(args->width * DIV_ROUND_UP(args->bpp, 8), 64);
 	args->size = args->pitch * args->height;
 	return i915_gem_create(file, to_i915(dev),
-			       args->size, &args->handle);
+			       args->size, 0, &args->handle);
 }
 
 /**
@@ -680,7 +719,7 @@ i915_gem_create_ioctl(struct drm_device *dev, void *data,
 	i915_gem_flush_free_objects(dev_priv);
 
 	return i915_gem_create(file, dev_priv,
-			       args->size, &args->handle);
+			       args->size, args->flags, &args->handle);
 }
 
 static inline int
@@ -4897,7 +4936,7 @@ int i915_gem_object_clear(struct drm_i915_gem_object *obj)
 		goto err_remove_node;
 
 	i915_gem_object_pin_pages(obj);
-	base = io_mapping_map_wc(ggtt->mappable, node.start);
+	base = io_mapping_map_wc(&i915->ggtt.mappable, node.start, PAGE_SIZE);
 
 	for (i = 0; i < size/PAGE_SIZE; i++) {
 		ggtt->base.insert_page(&ggtt->base,
