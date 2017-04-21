@@ -86,7 +86,7 @@ struct drm_i915_gem_object {
 	struct rb_root vma_tree;
 
 	/** Stolen memory for this object, instead of being backed by shmem. */
-	struct drm_mm_node *stolen;
+	struct i915_stolen_node *stolen;
 	struct list_head global_link;
 	union {
 		struct rcu_head rcu;
@@ -102,6 +102,8 @@ struct drm_i915_gem_object {
 	struct list_head obj_exec_link;
 
 	struct list_head batch_pool_link;
+	/** Used to link an object to a list temporarily */
+	struct list_head tmp_link;
 
 	unsigned long flags;
 
