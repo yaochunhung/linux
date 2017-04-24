@@ -4976,7 +4976,7 @@ i915_gem_object_migrate_stolen_to_shmemfs(struct drm_i915_gem_object *obj)
 	struct i915_vma *vma, *vn;
 	struct file *file;
 	struct address_space *mapping;
-	struct sg_table *stolen_pages, *shmemfs_pages;
+	struct sg_table *stolen_pages, *shmemfs_pages = NULL;
 	int ret;
 
 	if (WARN_ON_ONCE(i915_gem_object_needs_bit17_swizzle(obj)))
@@ -5252,7 +5252,10 @@ int i915_gem_object_clear(struct drm_i915_gem_object *obj)
 	if (ret)
 		goto err_remove_node;
 
-	i915_gem_object_pin_pages(obj);
+	ret = i915_gem_object_pin_pages(obj);
+	if (ret)
+		goto err_put_pages;
+
 	base = io_mapping_map_wc(&i915->ggtt.mappable, node.start, PAGE_SIZE);
 
 	intel_runtime_pm_get(i915);
@@ -5269,6 +5272,9 @@ int i915_gem_object_clear(struct drm_i915_gem_object *obj)
 	ggtt->base.clear_range(&ggtt->base, node.start, node.size);
 	intel_runtime_pm_put(i915);
 	i915_gem_object_unpin_pages(obj);
+
+err_put_pages:
+	__i915_gem_object_put_pages(obj, I915_MM_NORMAL);
 
 err_remove_node:
 	remove_mappable_node(&node);
