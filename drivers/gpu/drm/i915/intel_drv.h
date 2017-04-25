@@ -1439,7 +1439,8 @@ u32 skl_plane_ctl_format(uint32_t pixel_format, enum i915_alpha alpha);
 u32 skl_plane_ctl_tiling(uint64_t fb_modifier);
 u32 skl_plane_ctl_rotation(unsigned int rotation);
 u32 skl_plane_stride(const struct drm_framebuffer *fb, int plane,
-		     unsigned int rotation);
+		     unsigned int rotation, unsigned int render_comp);
+u32 skl_plane_aux_offset_rbc(const struct drm_framebuffer *fb);
 int skl_check_plane_surface(struct intel_plane_state *plane_state);
 
 /* intel_csr.c */

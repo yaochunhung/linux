@@ -208,11 +208,11 @@ skl_update_plane(struct drm_plane *drm_plane,
 	u32 plane_ctl;
 	const struct drm_intel_sprite_colorkey *key = &plane_state->ckey;
 	u32 surf_addr = plane_state->main.offset;
-	u32 aux_offset = plane_state->aux.offset;
 	unsigned int rotation = plane_state->base.rotation;
-	u32 stride = skl_plane_stride(fb, 0, rotation);
-	u32 aux_stride = skl_plane_stride(fb, 1, rotation);
 	unsigned int render_comp = plane_state->render_comp_enable;
+	u32 stride = skl_plane_stride(fb, 0, rotation, render_comp);
+	u32 aux_stride = skl_plane_stride(fb, 1, rotation, render_comp);
+	u32 aux_offset = plane_state->aux.offset;
 	int crtc_x = plane_state->base.dst.x1;
 	int crtc_y = plane_state->base.dst.y1;
 	uint32_t crtc_w = drm_rect_width(&plane_state->base.dst);

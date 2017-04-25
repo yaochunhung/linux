@@ -3004,6 +3004,13 @@ int skl_check_plane_surface(struct intel_plane_state *plane_state)
 		ret = skl_check_nv12_aux_surface(plane_state);
 		if (ret)
 			return ret;
+	} else if (plane_state->render_comp_enable) {
+		/* offset calculation for aux plane
+		 * in case it is used for render compression
+		 */
+		plane_state->aux.offset = skl_plane_aux_offset_rbc(fb);
+		plane_state->aux.x = 0;
+		plane_state->aux.y = 0;
 	} else {
 		plane_state->aux.offset = ~0xfff;
 		plane_state->aux.x = 0;
@@ -3274,12 +3281,16 @@ static void skl_detach_scalers(struct intel_crtc *intel_crtc)
 }
 
 u32 skl_plane_stride(const struct drm_framebuffer *fb, int plane,
-		     unsigned int rotation)
+		     unsigned int rotation, unsigned int render_comp)
 {
 	const struct drm_i915_private *dev_priv = to_i915(fb->dev);
 	u32 stride;
 
-	if (plane >= fb->format->num_planes)
+	/* If called for aux stride and we don't have a 2 plane
+	 * format (e.g. NV12) or render compression is off,
+	 * skip calculation
+	 */
+	if ((plane >= fb->format->num_planes) && !render_comp)
 		return 0;
 
 	stride = intel_fb_pitch(fb, plane, rotation);
@@ -3298,6 +3309,25 @@ u32 skl_plane_stride(const struct drm_framebuffer *fb, int plane,
 	}
 
 	return stride;
+}
+
+u32 skl_plane_aux_offset_rbc(const struct drm_framebuffer *fb)
+{
+	const struct drm_i915_private *dev_priv = to_i915(fb->dev);
+	u32 tile_height, height_in_mem, tile_row_adjustment;
+	u32 aux_offset;
+
+	tile_height = PAGE_SIZE / intel_fb_stride_alignment(dev_priv,
+							    fb->modifier,
+							    fb->format->format);
+
+	height_in_mem = (fb->offsets[1]/fb->pitches[0]);
+	tile_row_adjustment = height_in_mem % tile_height;
+
+	aux_offset = (fb->pitches[0] *
+		      (height_in_mem - tile_row_adjustment));
+
+	return aux_offset;
 }
 
 u32 skl_plane_ctl_format(uint32_t pixel_format, enum i915_alpha alpha)
@@ -3411,8 +3441,8 @@ static void skylake_update_primary_plane(struct drm_plane *plane,
 	u32 plane_ctl;
 	unsigned int rotation = plane_state->base.rotation;
 	unsigned int render_comp = plane_state->render_comp_enable;
-	u32 stride = skl_plane_stride(fb, 0, rotation);
-	u32 aux_stride = skl_plane_stride(fb, 1, rotation);
+	u32 stride = skl_plane_stride(fb, 0, rotation, render_comp);
+	u32 aux_stride = skl_plane_stride(fb, 1, rotation, render_comp);
 	u32 surf_addr = plane_state->main.offset;
 	u32 aux_offset = plane_state->aux.offset;
 	int scaler_id = plane_state->scaler_id;
@@ -12130,7 +12160,7 @@ static void skl_do_mmio_flip(struct intel_crtc *intel_crtc,
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	struct drm_framebuffer *fb = intel_crtc->base.primary->fb;
 	const enum pipe pipe = intel_crtc->pipe;
-	u32 ctl, stride = skl_plane_stride(fb, 0, rotation);
+	u32 ctl, stride = skl_plane_stride(fb, 0, rotation, 0);
 
 	ctl = I915_READ(PLANE_CTL(pipe, 0));
 	ctl &= ~PLANE_CTL_TILED_MASK;
