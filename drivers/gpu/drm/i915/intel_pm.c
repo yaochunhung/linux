@@ -6771,7 +6771,22 @@ EXPORT_SYMBOL_GPL(i915_unregister_freq_notify);
  */
 int i915_gpu_pstate2freq(int pstate)
 {
-	return i915_mch_dev ? intel_gpu_freq(i915_mch_dev, pstate) * 1000 : -1;
+	int ret = -1;
+
+	spin_lock_irq(&mchdev_lock);
+	if (!i915_mch_dev)
+		goto out_unlock;
+
+	if ((pstate > i915_mch_dev->rps.rp0_freq) ||
+	    (pstate < i915_mch_dev->rps.min_freq))
+		goto out_unlock;
+
+	ret = intel_gpu_freq(i915_mch_dev, pstate) * 1000;
+
+out_unlock:
+	spin_unlock_irq(&mchdev_lock);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(i915_gpu_pstate2freq);
 
