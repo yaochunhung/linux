@@ -1244,10 +1244,7 @@ static int skl_tplg_mixer_dapm_post_pmd_event(struct snd_soc_dapm_widget *w,
 	list_for_each_entry(w_module, &s_pipe->w_list, node) {
 		dst_module = w_module->w->priv;
 
-		if (!dst_module->module)
-			continue;
-
-		if (mconfig->m_state >= SKL_MODULE_INIT_DONE)
+		if (dst_module->m_state >= SKL_MODULE_INIT_DONE)
 			skl_tplg_free_pipe_mcps(skl, dst_module);
 		if (src_module == NULL) {
 			src_module = dst_module;
