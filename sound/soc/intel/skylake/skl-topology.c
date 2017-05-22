@@ -383,7 +383,7 @@ static int skl_tplg_update_be_blob(struct snd_soc_dapm_widget *w,
 	struct skl_module_intf *m_intf;
 
 	/* check if we already have blob */
-	if (m_cfg->formats_config.caps_size > 0)
+	if (m_cfg->formats_config[SKL_PARAM_INIT].caps_size > 0)
 		return 0;
 
 	dev_dbg(ctx->dev, "Applying default cfg blob\n");
@@ -420,8 +420,8 @@ static int skl_tplg_update_be_blob(struct snd_soc_dapm_widget *w,
 	cfg = skl_get_ep_blob(skl, m_cfg->vbus_id, link_type,
 					s_fmt, ch, s_freq, dir);
 	if (cfg) {
-		m_cfg->formats_config.caps_size = cfg->size;
-		m_cfg->formats_config.caps = (u32 *) &cfg->caps;
+		m_cfg->formats_config[SKL_PARAM_INIT].caps_size = cfg->size;
+		m_cfg->formats_config[SKL_PARAM_INIT].caps = (u32 *) &cfg->caps;
 	} else {
 		dev_err(ctx->dev, "Blob NULL for id %x type %d dirn %d\n",
 					m_cfg->vbus_id, link_type, dir);
@@ -647,9 +647,9 @@ int skl_tplg_set_module_params(struct snd_soc_dapm_widget *w,
 	struct skl_algo_data *bc;
 	struct skl_specific_cfg *sp_cfg;
 
-	if (mconfig->formats_config.caps_size > 0 &&
-		mconfig->formats_config.set_params == SKL_PARAM_SET) {
-		sp_cfg = &mconfig->formats_config;
+	if (mconfig->formats_config[SKL_PARAM_SET].caps_size > 0 &&
+		mconfig->formats_config[SKL_PARAM_SET].set_params == SKL_PARAM_SET) {
+		sp_cfg = &mconfig->formats_config[SKL_PARAM_SET];
 		ret = skl_set_module_params(ctx, (void *)sp_cfg->caps,
 							sp_cfg->caps_size,
 							sp_cfg->param_id,
@@ -700,8 +700,8 @@ static int skl_tplg_set_module_init_data(struct snd_soc_dapm_widget *w)
 			bc = (struct skl_algo_data *)sb->dobj.private;
 			if (bc->set_params != SKL_PARAM_INIT)
 				continue;
-			mconfig->formats_config.caps = (u32 *)bc->params;
-			mconfig->formats_config.caps_size = bc->max;
+			mconfig->formats_config[SKL_PARAM_INIT].caps = (u32 *)bc->params;
+			mconfig->formats_config[SKL_PARAM_INIT].caps_size = bc->max;
 			break;
 		}
 	}
@@ -968,9 +968,9 @@ static int skl_tplg_set_module_bind_params(struct snd_soc_dapm_widget *w,
 			return 0;
 	}
 
-	if (mconfig->formats_config.caps_size > 0 &&
-		mconfig->formats_config.set_params == SKL_PARAM_BIND) {
-		sp_cfg = &mconfig->formats_config;
+	if (mconfig->formats_config[SKL_PARAM_BIND].caps_size > 0 &&
+		mconfig->formats_config[SKL_PARAM_BIND].set_params == SKL_PARAM_BIND) {
+		sp_cfg = &mconfig->formats_config[SKL_PARAM_BIND];
 		ret = skl_set_module_params(ctx, sp_cfg->caps,
 					sp_cfg->caps_size,
 					sp_cfg->param_id, mconfig);
@@ -1974,8 +1974,8 @@ static int skl_tplg_be_fill_pipe_params(struct snd_soc_dai *dai,
 					params->stream);
 	}
 	if (cfg) {
-		mconfig->formats_config.caps_size = cfg->size;
-		mconfig->formats_config.caps = (u32 *) &cfg->caps;
+		mconfig->formats_config[SKL_PARAM_INIT].caps_size = cfg->size;
+		mconfig->formats_config[SKL_PARAM_INIT].caps = (u32 *) &cfg->caps;
 	} else {
 		dev_err(dai->dev, "Blob NULL for id %x type %d dirn %d\n",
 					mconfig->vbus_id, link_type,
@@ -2325,7 +2325,7 @@ static int skl_tplg_widget_load(struct snd_soc_component *cmpnt,
 				struct snd_soc_dapm_widget *w,
 				struct snd_soc_tplg_dapm_widget *tplg_w)
 {
-	int ret;
+	int ret, i;
 	struct hdac_ext_bus *ebus = snd_soc_component_get_drvdata(cmpnt);
 	struct skl *skl = ebus_to_skl(ebus);
 	struct hdac_bus *bus = ebus_to_hbus(ebus);
@@ -2367,7 +2367,12 @@ static int skl_tplg_widget_load(struct snd_soc_component *cmpnt,
 	mconfig->dev_type = dfw_config->dev_type;
 	mconfig->hw_conn_type = dfw_config->hw_conn_type;
 	mconfig->time_slot = dfw_config->time_slot;
-	mconfig->formats_config.caps_size = dfw_config->caps.caps_size;
+	mconfig->formats_config[SKL_PARAM_INIT].caps_size =
+				dfw_config->caps[SKL_PARAM_INIT].caps_size;
+	mconfig->formats_config[SKL_PARAM_SET].caps_size =
+				dfw_config->caps[SKL_PARAM_SET].caps_size;
+	mconfig->formats_config[SKL_PARAM_BIND].caps_size =
+				dfw_config->caps[SKL_PARAM_BIND].caps_size;
 
 	mconfig->m_in_pin = devm_kzalloc(bus->dev, SKL_MAX_IN_QUEUE *
 				sizeof(*mconfig->m_in_pin), GFP_KERNEL);
@@ -2387,19 +2392,25 @@ static int skl_tplg_widget_load(struct snd_soc_component *cmpnt,
 				dfw_config->is_dynamic_out_pin,
 				SKL_MAX_OUT_QUEUE);
 
-	if (mconfig->formats_config.caps_size == 0)
-		goto bind_event;
+	for (i = 1; i < SKL_MAX_PARAMS_TYPES; i++) {
+		if (mconfig->formats_config[i].caps_size != 0) {
+			mconfig->formats_config[i].caps =
+					(u32 *)devm_kzalloc(bus->dev,
+					mconfig->formats_config[i].caps_size,
+					GFP_KERNEL);
+			if (mconfig->formats_config[i].caps == NULL)
+				return -ENOMEM;
 
-	mconfig->formats_config.caps = (u32 *)devm_kzalloc(bus->dev,
-			mconfig->formats_config.caps_size, GFP_KERNEL);
+			memcpy(mconfig->formats_config[i].caps,
+					dfw_config->caps[i].caps,
+					dfw_config->caps[i].caps_size);
+			mconfig->formats_config[i].param_id =
+					dfw_config->caps[i].param_id;
+			mconfig->formats_config[i].set_params =
+					dfw_config->caps[i].set_params;
 
-	if (mconfig->formats_config.caps == NULL)
-		return -ENOMEM;
-
-	memcpy(mconfig->formats_config.caps, dfw_config->caps.caps,
-						 dfw_config->caps.caps_size);
-	mconfig->formats_config.param_id = dfw_config->caps.param_id;
-	mconfig->formats_config.set_params = dfw_config->caps.set_params;
+		}
+	}
 
 	skl_debug_init_module(skl->debugfs, w, mconfig);
 

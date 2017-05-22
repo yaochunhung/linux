@@ -42,6 +42,7 @@
 #define STEREO 2
 
 #define SKL_MAX_FW_BINARY 8
+#define SKL_MAX_PARAMS_TYPES	4
 
 #define LIB_NAME_LENGTH 128
 #define HDA_MAX_LIB    16
@@ -326,7 +327,7 @@ struct skl_dfw_module {
 	struct skl_dfw_pipe pipe;
 	struct skl_dfw_module_pin in_pin[SKL_MAX_IN_QUEUE];
 	struct skl_dfw_module_pin out_pin[SKL_MAX_OUT_QUEUE];
-	struct skl_dfw_module_caps caps;
+	struct skl_dfw_module_caps caps[SKL_MAX_PARAMS_TYPES];
 } __packed;
 
 struct skl_gain_config {

@@ -595,10 +595,12 @@ static int skl_set_ext_algo_format(struct skl_sst *ctx,
 		skl_fill_module_pin_format(pin_fmt, pin_res, intf_fmt);
 	}
 
-	if (mconfig->formats_config.caps_size != 0) {
-		memcpy(ext_cfg->params, mconfig->formats_config.caps,
-				mconfig->formats_config.caps_size);
-		ext_cfg->priv_param_length = mconfig->formats_config.caps_size;
+	if (mconfig->formats_config[SKL_PARAM_INIT].caps_size != 0) {
+		memcpy(ext_cfg->params,
+			mconfig->formats_config[SKL_PARAM_INIT].caps,
+			mconfig->formats_config[SKL_PARAM_INIT].caps_size);
+		ext_cfg->priv_param_length =
+			mconfig->formats_config[SKL_PARAM_INIT].caps_size;
 	}
 
 	return 0;
@@ -616,12 +618,12 @@ static int skl_set_base_algo_format(struct skl_sst *ctx,
 
 	skl_set_base_module_format(ctx, mconfig, base_cfg);
 
-	if (mconfig->formats_config.caps_size == 0)
+	if (mconfig->formats_config[SKL_PARAM_INIT].caps_size == 0)
 		return 0;
 
 	memcpy(algo_mcfg->params,
-			mconfig->formats_config.caps,
-			mconfig->formats_config.caps_size);
+			mconfig->formats_config[SKL_PARAM_INIT].caps,
+			mconfig->formats_config[SKL_PARAM_INIT].caps_size);
 
 	return 0;
 }
@@ -656,15 +658,15 @@ static int skl_set_algo_format(struct skl_sst *ctx,
 static void skl_copy_copier_caps(struct skl_module_cfg *mconfig,
 				struct skl_cpr_cfg *cpr_mconfig)
 {
-	if (mconfig->formats_config.caps_size == 0)
+	if (mconfig->formats_config[SKL_PARAM_INIT].caps_size == 0)
 		return;
 
 	memcpy(cpr_mconfig->gtw_cfg.config_data,
-			mconfig->formats_config.caps,
-			mconfig->formats_config.caps_size);
+			mconfig->formats_config[SKL_PARAM_INIT].caps,
+			mconfig->formats_config[SKL_PARAM_INIT].caps_size);
 
 	cpr_mconfig->gtw_cfg.config_length =
-			(mconfig->formats_config.caps_size) / 4;
+			(mconfig->formats_config[SKL_PARAM_INIT].caps_size) / 4;
 }
 
 #define SKL_NON_GATEWAY_CPR_NODE_ID 0xFFFFFFFF
@@ -907,7 +909,7 @@ static u16 skl_get_module_param_size(struct skl_sst *ctx,
 	switch (mconfig->m_type) {
 	case SKL_MODULE_TYPE_COPIER:
 		param_size = sizeof(struct skl_cpr_cfg);
-		param_size += mconfig->formats_config.caps_size;
+		param_size += mconfig->formats_config[SKL_PARAM_INIT].caps_size;
 		return param_size;
 
 	case SKL_MODULE_TYPE_PROBE:
@@ -931,7 +933,7 @@ static u16 skl_get_module_param_size(struct skl_sst *ctx,
 		} else
 			param_size = sizeof(struct skl_base_cfg);
 
-		param_size += mconfig->formats_config.caps_size;
+		param_size += mconfig->formats_config[SKL_PARAM_INIT].caps_size;
 		return param_size;
 
 	case SKL_MODULE_TYPE_GAIN:
@@ -951,7 +953,7 @@ static u16 skl_get_module_param_size(struct skl_sst *ctx,
 		module_pins = res->nr_input_pins + res->nr_output_pins;
 		param_size =  sizeof(struct skl_base_cfg_ext) +
 			(sizeof(struct skl_pin_format) * module_pins);
-		param_size += mconfig->formats_config.caps_size;
+		param_size += mconfig->formats_config[SKL_PARAM_INIT].caps_size;
 		return param_size;
 	}
 
