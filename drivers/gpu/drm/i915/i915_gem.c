@@ -4977,7 +4977,7 @@ i915_gem_object_migrate_stolen_to_shmemfs(struct drm_i915_gem_object *obj)
 	struct file *file;
 	struct address_space *mapping;
 	struct sg_table *stolen_pages, *shmemfs_pages = NULL;
-	int ret;
+	int ret = -EINVAL;
 
 	if (WARN_ON_ONCE(i915_gem_object_needs_bit17_swizzle(obj)))
 		return -EINVAL;
@@ -4996,6 +4996,7 @@ i915_gem_object_migrate_stolen_to_shmemfs(struct drm_i915_gem_object *obj)
 		 * an unpopulated shmemfs object.
 		 */
 		obj->mm.madv = __I915_MADV_PURGED;
+		ret = 0;
 	} else {
 		ret = copy_content(obj, i915, mapping);
 		if (ret)
@@ -5015,6 +5016,7 @@ i915_gem_object_migrate_stolen_to_shmemfs(struct drm_i915_gem_object *obj)
 			goto err_file;
 		}
 
+		obj->mm.pages = shmemfs_pages;
 		obj->mm.get_page.sg_pos = obj->mm.pages->sgl;
 		obj->mm.get_page.sg_idx = 0;
 
