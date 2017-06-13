@@ -189,9 +189,13 @@ int bxt_sst_dsp_init_fw(struct device *dev, struct skl_sst *ctx)
 
 	dev_dbg(dev, "In %s\n", __func__);
 
+	/* Disable MISCBDCGE during FW and LIB download */
+	ctx->enable_miscbdcge(dev, false);
+
 	ret = ctx->dsp->fw_ops.load_fw(ctx->dsp);
 	if (ret < 0) {
 		dev_err(dev, "Load base fw failed : %x", ret);
+		ctx->enable_miscbdcge(dev, true);
 		return ret;
 	}
 	ctx->fw_loaded = true;
@@ -199,12 +203,17 @@ int bxt_sst_dsp_init_fw(struct device *dev, struct skl_sst *ctx)
 		ret = ctx->dsp->fw_ops.load_library(ctx->dsp);
 		if (ret < 0) {
 			dev_err(dev, "Load Library failed : %x", ret);
+			ctx->enable_miscbdcge(dev, true);
 			return ret;
 		}
 	}
 
 	/* First boot successfully done */
 	ctx->is_first_boot = false;
+
+	/* Re-enable MISCBDCGE after FW and LIB download */
+	ctx->enable_miscbdcge(dev, true);
+
 	dev_dbg(dev, "Exit %s\n", __func__);
 	return 0;
 }
