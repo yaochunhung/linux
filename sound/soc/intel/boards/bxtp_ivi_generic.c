@@ -134,6 +134,26 @@ static int bxtp_ssp1_gpio_init(struct snd_soc_pcm_runtime *rtd)
 	return 0;
 }
 
+static int bxtp_ssp3_gpio_init(struct snd_soc_pcm_runtime *rtd)
+{
+
+	char *gpio_addr;
+	u32 gpio_value1 = 0x44000800;
+	u32 gpio_value2 = 0x44000802;
+
+	gpio_addr = (void *)ioremap_nocache(0xd0c40638, 0x30);
+	if (gpio_addr == NULL)
+		return(-EIO);
+
+	memcpy_toio(gpio_addr, &gpio_value1, sizeof(gpio_value1));
+	memcpy_toio(gpio_addr + 0x8, &gpio_value2, sizeof(gpio_value2));
+	memcpy_toio(gpio_addr + 0x10, &gpio_value1, sizeof(gpio_value1));
+	memcpy_toio(gpio_addr + 0x18, &gpio_value1, sizeof(gpio_value1));
+
+	iounmap(gpio_addr);
+	return 0;
+}
+
 static int bxtp_ssp4_gpio_init(struct snd_soc_pcm_runtime *rtd)
 {
 
@@ -170,63 +190,6 @@ static int bxtp_ssp5_gpio_init(struct snd_soc_pcm_runtime *rtd)
 	memcpy_toio(gpio_addr + 0x18, &gpio_value1, sizeof(gpio_value1));
 
 	iounmap(gpio_addr);
-	return 0;
-}
-
-static int broxton_ssp1_fixup(struct snd_soc_pcm_runtime *rtd,
-			struct snd_pcm_hw_params *params)
-{
-	struct snd_interval *rate = hw_param_interval(params,
-				SNDRV_PCM_HW_PARAM_RATE);
-	struct snd_interval *channels = hw_param_interval(params,
-				SNDRV_PCM_HW_PARAM_CHANNELS);
-
-	/* The ADSP will covert the FE rate to 48k, 4 Channel */
-	rate->min = rate->max = 48000;
-	channels->min = channels->max = 8;
-
-	/* set SSP1 to 16 bit */
-	snd_mask_set(&params->masks[SNDRV_PCM_HW_PARAM_FORMAT -
-					SNDRV_PCM_HW_PARAM_FIRST_MASK],
-					SNDRV_PCM_FORMAT_S16_LE);
-	return 0;
-}
-
-static int broxton_ssp2_fixup(struct snd_soc_pcm_runtime *rtd,
-			struct snd_pcm_hw_params *params)
-{
-	struct snd_interval *rate = hw_param_interval(params,
-				SNDRV_PCM_HW_PARAM_RATE);
-	struct snd_interval *channels = hw_param_interval(params,
-				SNDRV_PCM_HW_PARAM_CHANNELS);
-
-	/* The ADSP will covert the FE rate to 44.1k, stereo */
-	rate->min = rate->max = 48000;
-	channels->min = channels->max = 8;
-
-	/* set SSP2 to 16 bit */
-	snd_mask_set(&params->masks[SNDRV_PCM_HW_PARAM_FORMAT -
-					SNDRV_PCM_HW_PARAM_FIRST_MASK],
-					SNDRV_PCM_FORMAT_S16_LE);
-	return 0;
-}
-
-static int broxton_ssp4_fixup(struct snd_soc_pcm_runtime *rtd,
-			struct snd_pcm_hw_params *params)
-{
-	struct snd_interval *rate = hw_param_interval(params,
-					SNDRV_PCM_HW_PARAM_RATE);
-	struct snd_interval *channels = hw_param_interval(params,
-					SNDRV_PCM_HW_PARAM_CHANNELS);
-
-	/* The ADSP will covert the FE rate to 44k, stereo */
-	rate->min = rate->max = 48000;
-	channels->min = channels->max = 8;
-
-	/* set SSP4 to 16 bit */
-	snd_mask_set(&params->masks[SNDRV_PCM_HW_PARAM_FORMAT -
-					SNDRV_PCM_HW_PARAM_FIRST_MASK],
-					SNDRV_PCM_FORMAT_S16_LE);
 	return 0;
 }
 
@@ -392,7 +355,6 @@ static struct snd_soc_dai_link broxton_rt298_dais[] = {
 			SND_SOC_DAIFMT_CBS_CFS,
 		.ignore_suspend = 1,
 		.ignore_pmdown_time = 1,
-		.be_hw_params_fixup = broxton_ssp1_fixup,
 		.dpcm_playback = 1,
 		.dpcm_capture = 1,
 	},
@@ -410,7 +372,6 @@ static struct snd_soc_dai_link broxton_rt298_dais[] = {
 			SND_SOC_DAIFMT_CBS_CFS,
 		.ignore_suspend = 1,
 		.ignore_pmdown_time = 1,
-		.be_hw_params_fixup = broxton_ssp2_fixup,
 		.dpcm_playback = 1,
 		.dpcm_capture = 1,
 	},
@@ -423,7 +384,7 @@ static struct snd_soc_dai_link broxton_rt298_dais[] = {
 		.no_pcm = 1,
 		.codec_name = "snd-soc-dummy",
 		.codec_dai_name = "snd-soc-dummy-dai5",
-		.init = NULL,
+		.init = bxtp_ssp3_gpio_init,
 		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
 			SND_SOC_DAIFMT_CBS_CFS,
 		.ignore_suspend = 1,
@@ -445,7 +406,6 @@ static struct snd_soc_dai_link broxton_rt298_dais[] = {
 			SND_SOC_DAIFMT_CBS_CFS,
 		.ignore_suspend = 1,
 		.ignore_pmdown_time = 1,
-		.be_hw_params_fixup = broxton_ssp4_fixup,
 		.dpcm_playback = 1,
 		.dpcm_capture = 1,
 	},
