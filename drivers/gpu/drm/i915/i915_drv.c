@@ -816,6 +816,8 @@ static int i915_driver_init_early(struct drm_i915_private *dev_priv,
 	mutex_init(&dev_priv->av_mutex);
 	mutex_init(&dev_priv->wm.wm_mutex);
 	mutex_init(&dev_priv->pps_mutex);
+	mutex_init(&dev_priv->perfmon.config.lock);
+	mutex_init(&dev_priv->rc6_wa_bb.lock);
 
 	intel_uc_init_early(dev_priv);
 
@@ -1266,6 +1268,9 @@ int i915_driver_load(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	intel_runtime_pm_put(dev_priv);
 
+	/* Initialize all the resources for perf monitoring */
+	i915_perfmon_setup(dev_priv);
+
 	dev_priv->profile.driver_load = sched_clock() - start_tm;
 
 	printk(KERN_INFO "IOTG i915 forklift 2017-03-23\n");
@@ -1285,6 +1290,10 @@ out_pci_disable:
 	pci_disable_device(pdev);
 out_free_priv:
 	i915_load_error(dev_priv, "Device initialization failed (%d)\n", ret);
+
+	/* Clean up all the resources for perf monitoring */
+	i915_perfmon_cleanup(dev_priv);
+
 	drm_dev_unref(&dev_priv->drm);
 	return ret;
 }
@@ -2577,6 +2586,7 @@ static const struct drm_ioctl_desc i915_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(I915_GEM_CONTEXT_GETPARAM, i915_gem_context_getparam_ioctl, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(I915_GEM_CONTEXT_SETPARAM, i915_gem_context_setparam_ioctl, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(I915_PERF_OPEN, i915_perf_open_ioctl, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(I915_PERFMON, i915_perfmon_ioctl, DRM_UNLOCKED),
 };
 
 static struct drm_driver driver = {

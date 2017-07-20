@@ -28,6 +28,8 @@
 #include <linux/bitops.h>
 #include <linux/list.h>
 
+#include "i915_perfmon_defs.h"
+
 struct pid;
 
 struct drm_device;
@@ -179,6 +181,9 @@ struct i915_gem_context {
 
 	/** remap_slice: Bitmask of cache lines that need remapping */
 	u8 remap_slice;
+
+	/* perfmon configuration */
+	struct drm_i915_perfmon_context perfmon;
 };
 
 static inline bool i915_gem_context_is_closed(const struct i915_gem_context *ctx)

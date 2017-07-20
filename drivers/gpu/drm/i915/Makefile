@@ -130,6 +130,9 @@ endif
 # LPE Audio for VLV and CHT
 i915-y += intel_lpe_audio.o
 
+# perfmon
+i915-y += i915_perfmon.o
+
 obj-$(CONFIG_DRM_I915) += i915.o
 
 CFLAGS_i915_trace_points.o := -I$(src)

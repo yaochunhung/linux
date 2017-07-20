@@ -88,6 +88,8 @@
 
 #include "intel_gvt.h"
 
+#include "i915_perfmon_defs.h"
+
 /* General customization:
  */
 
@@ -546,6 +548,8 @@ struct drm_i915_file_private {
  */
 #define I915_MAX_CLIENT_CONTEXT_BANS 3
 	int context_bans;
+
+	struct drm_i915_perfmon_file perfmon;
 };
 
 /* Used by dp and fdi links */
@@ -2276,6 +2280,17 @@ struct drm_i915_private {
 
 	int dpio_phy_iosf_port[I915_NUM_PHYS_VLV];
 
+	struct drm_i915_perfmon_device perfmon;
+
+	struct {
+		struct drm_i915_gem_object *obj;
+		struct i915_vma *vma;
+		unsigned long offset;
+		void *address;
+		atomic_t enable;
+		struct mutex lock;
+	} rc6_wa_bb;
+
 	struct i915_workarounds workarounds;
 
 	struct i915_frontbuffer_tracking fb_tracking;
@@ -3751,6 +3766,15 @@ extern bool intel_set_memory_cxsr(struct drm_i915_private *dev_priv,
 
 int i915_reg_read_ioctl(struct drm_device *dev, void *data,
 			struct drm_file *file);
+
+/* i915_perfmon.c */
+int i915_perfmon_ioctl(struct drm_device *dev, void *data, struct drm_file *file);
+void i915_perfmon_setup(struct drm_i915_private *dev_priv);
+void i915_perfmon_cleanup(struct drm_i915_private *dev_priv);
+void i915_perfmon_ctx_setup(struct i915_gem_context *ctx);
+void i915_perfmon_ctx_cleanup(struct i915_gem_context *ctx);
+int i915_perfmon_update_workaround_bb(struct drm_i915_private *dev_priv,
+				      struct drm_i915_perfmon_config *config);
 
 /* overlay */
 extern struct intel_overlay_error_state *
