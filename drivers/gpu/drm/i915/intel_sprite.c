@@ -228,7 +228,8 @@ skl_update_plane(struct drm_plane *drm_plane,
 		PLANE_CTL_PIPE_GAMMA_ENABLE |
 		PLANE_CTL_PIPE_CSC_ENABLE;
 
-	plane_ctl |= skl_plane_ctl_format(fb->format->format);
+	plane_ctl |= skl_plane_ctl_format(fb->format->format,
+					  plane_state->alpha);
 	plane_ctl |= skl_plane_ctl_tiling(fb->modifier);
 
 	plane_ctl |= skl_plane_ctl_rotation(rotation);
@@ -236,11 +237,14 @@ skl_update_plane(struct drm_plane *drm_plane,
 	if (render_comp)
 		plane_ctl |= PLANE_CTL_DECOMPRESSION_ENABLE;
 
-	if (key->flags) {
+	I915_WRITE(PLANE_KEYMAX(pipe, plane_id),
+		   (DRM_RGBA_ALPHABITS(plane_state->base.blend_mode.color, 8)
+			<< 24) | (key->max_value & 0x00ffffff));
+	I915_WRITE(PLANE_KEYMSK(pipe, plane_id),
+		   (plane_state->use_plane_alpha << 31) |
+		   (key->channel_mask & GENMASK(0, 26)));
+	if (key->flags)
 		I915_WRITE(PLANE_KEYVAL(pipe, plane_id), key->min_value);
-		I915_WRITE(PLANE_KEYMAX(pipe, plane_id), key->max_value);
-		I915_WRITE(PLANE_KEYMSK(pipe, plane_id), key->channel_mask);
-	}
 
 	if (key->flags & I915_SET_COLORKEY_DESTINATION)
 		plane_ctl |= PLANE_CTL_KEY_ENABLE_DESTINATION;
@@ -1156,6 +1160,7 @@ intel_sprite_plane_create(struct drm_i915_private *dev_priv,
 	drm_plane_create_rotation_property(&intel_plane->base,
 					   DRM_ROTATE_0,
 					   supported_rotations);
+	intel_plane_add_blend_properties(intel_plane);
 
 	if (INTEL_GEN(dev_priv) >= 9)
 		intel_create_render_comp_property(&dev_priv->drm, intel_plane);
