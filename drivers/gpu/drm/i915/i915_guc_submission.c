@@ -532,8 +532,15 @@ static void __i915_guc_submit(struct drm_i915_gem_request *rq)
 
 static void i915_guc_submit(struct drm_i915_gem_request *rq)
 {
-	i915_gem_request_submit(rq);
+	struct intel_engine_cs *engine = rq->engine;
+	unsigned long flags;
+
+	spin_lock_irqsave(&engine->timeline->lock, flags);
+
+	__i915_gem_request_submit(rq);
 	__i915_guc_submit(rq);
+
+	spin_unlock_irqrestore(&engine->timeline->lock, flags);
 }
 
 /*
