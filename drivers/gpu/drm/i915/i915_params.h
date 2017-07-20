@@ -68,6 +68,7 @@ struct i915_params {
 	bool enable_dpcd_backlight;
 	bool enable_gvt;
 	bool enable_ipc;
+	bool enable_guc_critical_logging;
 };
 
 extern struct i915_params i915 __read_mostly;

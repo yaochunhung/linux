@@ -56,8 +56,8 @@
 #define SKL_FW_MAJOR 6
 #define SKL_FW_MINOR 1
 
-#define BXT_FW_MAJOR 8
-#define BXT_FW_MINOR 7
+#define BXT_FW_MAJOR 9
+#define BXT_FW_MINOR 29
 
 #define KBL_FW_MAJOR 9
 #define KBL_FW_MINOR 14
@@ -114,7 +114,6 @@ static void guc_interrupts_capture(struct drm_i915_private *dev_priv)
 	struct intel_engine_cs *engine;
 	enum intel_engine_id id;
 	int irqs;
-	u32 tmp;
 
 	/* tell all command streamers to forward interrupts (but not vblank) to GuC */
 	irqs = _MASKED_BIT_ENABLE(GFX_INTERRUPT_STEERING);
@@ -128,31 +127,6 @@ static void guc_interrupts_capture(struct drm_i915_private *dev_priv)
 	I915_WRITE(GUC_BCS_RCS_IER, ~irqs);
 	I915_WRITE(GUC_VCS2_VCS1_IER, ~irqs);
 	I915_WRITE(GUC_WD_VECS_IER, ~irqs);
-
-	/*
-	 * The REDIRECT_TO_GUC bit of the PMINTRMSK register directs all
-	 * (unmasked) PM interrupts to the GuC. All other bits of this
-	 * register *disable* generation of a specific interrupt.
-	 *
-	 * 'pm_intr_keep' indicates bits that are NOT to be set when
-	 * writing to the PM interrupt mask register, i.e. interrupts
-	 * that must not be disabled.
-	 *
-	 * If the GuC is handling these interrupts, then we must not let
-	 * the PM code disable ANY interrupt that the GuC is expecting.
-	 * So for each ENABLED (0) bit in this register, we must SET the
-	 * bit in pm_intr_keep so that it's left enabled for the GuC.
-	 *
-	 * OTOH the REDIRECT_TO_GUC bit is initially SET in pm_intr_keep
-	 * (so interrupts go to the DISPLAY unit at first); but here we
-	 * need to CLEAR that bit, which will result in the register bit
-	 * being left SET!
-	 */
-	tmp = I915_READ(GEN6_PMINTRMSK);
-	if (tmp & GEN8_PMINTR_REDIRECT_TO_GUC) {
-		dev_priv->rps.pm_intr_keep |= ~tmp;
-		dev_priv->rps.pm_intr_keep &= ~GEN8_PMINTR_REDIRECT_TO_GUC;
-	}
 }
 
 static u32 get_gttype(struct drm_i915_private *dev_priv)
@@ -183,8 +157,10 @@ static u32 get_core_family(struct drm_i915_private *dev_priv)
 static void guc_params_init(struct drm_i915_private *dev_priv)
 {
 	struct intel_guc *guc = &dev_priv->guc;
+	struct intel_uc_fw *guc_fw = &dev_priv->guc.fw;
 	u32 params[GUC_CTL_MAX_DWORDS];
 	int i;
+	bool enable_critical_logging = false;
 
 	memset(&params, 0, sizeof(params));
 
@@ -207,11 +183,28 @@ static void guc_params_init(struct drm_i915_private *dev_priv)
 
 	params[GUC_CTL_LOG_PARAMS] = guc->log.flags;
 
+	/*
+	 * Enable critical logging in GuC based on i915.guc_log_level and
+	 * i915.enable_guc_critical_logging.
+	 */
 	if (i915.guc_log_level >= 0) {
 		params[GUC_CTL_DEBUG] =
 			i915.guc_log_level << GUC_LOG_VERBOSITY_SHIFT;
-	} else
+		enable_critical_logging = true;
+	} else {
 		params[GUC_CTL_DEBUG] = GUC_LOG_DISABLED;
+		if (i915.enable_guc_critical_logging)
+			enable_critical_logging = true;
+	}
+
+	if (NEEDS_GUC_CRITICAL_LOGGING(dev_priv, guc_fw)) {
+		if (enable_critical_logging)
+			params[GUC_CTL_DEBUG] &=
+				~GUC_V9_CRITICAL_LOGGING_DISABLED;
+		else
+			params[GUC_CTL_DEBUG] |=
+				GUC_V9_CRITICAL_LOGGING_DISABLED;
+	}
 
 	if (guc->ads_vma) {
 		u32 ads = guc_ggtt_offset(guc->ads_vma) >> PAGE_SHIFT;
