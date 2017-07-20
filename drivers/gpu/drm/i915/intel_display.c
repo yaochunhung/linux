@@ -10971,6 +10971,7 @@ static void i9xx_update_cursor(struct drm_crtc *crtc, u32 base,
 	struct drm_device *dev = crtc->dev;
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
+	struct skl_pipe_wm *pipe_wm;
 	int pipe = intel_crtc->pipe;
 	uint32_t cntl = 0;
 
@@ -10997,6 +10998,13 @@ static void i9xx_update_cursor(struct drm_crtc *crtc, u32 base,
 
 		if (plane_state->base.rotation & DRM_ROTATE_180)
 			cntl |= CURSOR_ROTATE_180;
+	}
+
+	/* Update cursor watermarks for gen9 inside vblank evasion */
+	if (INTEL_GEN(dev_priv) >= 9) {
+		pipe_wm = &to_intel_crtc_state(crtc->state)->wm.skl.optimal;
+
+		skl_write_cursor_wm(intel_crtc, &pipe_wm->planes[PLANE_CURSOR]);
 	}
 
 	if (intel_crtc->cursor_cntl != cntl) {

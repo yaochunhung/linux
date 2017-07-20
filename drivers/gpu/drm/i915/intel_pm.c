@@ -3918,13 +3918,15 @@ static void skl_write_plane_wm(struct intel_crtc *intel_crtc,
 			    &ddb->y_plane[pipe][plane_id]);
 }
 
-static void skl_write_cursor_wm(struct intel_crtc *intel_crtc,
-				const struct skl_plane_wm *wm,
-				const struct skl_ddb_allocation *ddb)
+void skl_write_cursor_wm(struct intel_crtc *intel_crtc,
+			 const struct skl_plane_wm *wm)
 {
 	struct drm_crtc *crtc = &intel_crtc->base;
 	struct drm_device *dev = crtc->dev;
 	struct drm_i915_private *dev_priv = to_i915(dev);
+	struct skl_ddb_entry *pipeddb =
+		&to_intel_crtc_state(crtc->state)->wm.skl.ddb;
+	struct skl_ddb_entry cursorddb;
 	int level, max_level = ilk_wm_max_level(dev_priv);
 	enum pipe pipe = intel_crtc->pipe;
 
@@ -3934,8 +3936,19 @@ static void skl_write_cursor_wm(struct intel_crtc *intel_crtc,
 	}
 	skl_write_wm_level(dev_priv, CUR_WM_TRANS(pipe), &wm->trans_wm);
 
-	skl_ddb_entry_write(dev_priv, CUR_BUF_CFG(pipe),
-			    &ddb->plane[pipe][PLANE_CURSOR]);
+	/*
+	 * This is a bit of a hack; we don't have easy access to the
+	 * pre-computed DDB values here so we're recomputing the cursor alloc.
+	 * Fortunately it's pretty easy to know what the cursor value needs to
+	 * be since it's always positioned right at the end of the pipe DDB
+	 * allocation.  Nevertheless, we'll probably want to revisit this in
+	 * the future and find a better way to plumb the existing DDB data down
+	 * to this point to make the code more future-proof.
+	 */
+	cursorddb.end = pipeddb->end;
+	cursorddb.start = pipeddb->end -
+		skl_cursor_allocation(hweight32(dev_priv->active_crtcs));
+	skl_ddb_entry_write(dev_priv, CUR_BUF_CFG(pipe), &cursorddb);
 }
 
 bool skl_wm_level_equals(const struct skl_wm_level *l1,
@@ -4253,9 +4266,19 @@ static void skl_atomic_update_crtc_wm(struct intel_atomic_state *state,
 		if (plane_id != PLANE_CURSOR)
 			skl_write_plane_wm(crtc, &pipe_wm->planes[plane_id],
 					   ddb, plane_id);
-		else
-			skl_write_cursor_wm(crtc, &pipe_wm->planes[plane_id],
-					    ddb);
+
+		/*
+		 * We don't program the cursor watermarks here since we do
+		 * that under vblank evasion instead.  Programming them
+		 * outside of evasion somehow causes the cursor control
+		 * register to not arm properly on the subsequent surface
+		 * register write.  Seems to be a hardware bug (or at
+		 * least an incorrect/incomplete hardware spec).
+		 *
+		 * After we investigate further, we may need to move the
+		 * other plane WM writes back under evasion as well, but
+		 * for now we'll leave them here.
+		 */
 	}
 }
 
@@ -4850,7 +4873,20 @@ static u32 intel_rps_limits(struct drm_i915_private *dev_priv, u8 val)
 	 * frequency, if the down threshold expires in that window we will not
 	 * receive a down interrupt. */
 	if (IS_GEN9(dev_priv)) {
-		limits = (dev_priv->rps.max_freq_softlimit) << 23;
+		int max_freq = dev_priv->rps.max_freq_softlimit;
+		int rp0_freq = dev_priv->rps.rp0_freq;
+
+		if (IS_GEN9_LP(dev_priv) && (max_freq == rp0_freq))
+			/*
+			 * For GEN9_LP, it is suggested to increase the upper
+			 * interrupt limiter by 1 (16.6MHz) so that the HW will
+			 * generate an interrupt when we are near or just below
+			 * the upper limit.
+			 */
+			limits = (dev_priv->rps.max_freq_softlimit + 1) << 23;
+		else
+			limits = (dev_priv->rps.max_freq_softlimit) << 23;
+
 		if (val <= dev_priv->rps.min_freq_softlimit)
 			limits |= (dev_priv->rps.min_freq_softlimit) << 14;
 	} else {
