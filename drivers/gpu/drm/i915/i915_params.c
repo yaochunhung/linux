@@ -66,6 +66,7 @@ struct i915_params i915 __read_mostly = {
 	.enable_gvt = false,
 	.enable_ipc = 0,
 	.enable_guc_critical_logging = false,
+	.enable_initial_modeset = false,
 };
 
 module_param_named(modeset, i915.modeset, int, 0400);
@@ -257,3 +258,6 @@ MODULE_PARM_DESC(enable_gvt,
 module_param_named_unsafe(enable_ipc, i915.enable_ipc, bool, 0400);
 MODULE_PARM_DESC(enable_ipc,
 		 "Enable Isochronous Priority Control (default: false)");
+module_param_named_unsafe(enable_initial_modeset, i915.enable_initial_modeset, bool, 0400);
+MODULE_PARM_DESC(enable_initial_modeset,
+		 "Do initial modeset for TSD usecase (default : false)");

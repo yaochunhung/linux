@@ -69,6 +69,7 @@ struct i915_params {
 	bool enable_gvt;
 	bool enable_ipc;
 	bool enable_guc_critical_logging;
+	bool enable_initial_modeset;
 };
 
 extern struct i915_params i915 __read_mostly;
