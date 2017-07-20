@@ -16631,6 +16631,7 @@ int intel_modeset_init(struct drm_device *dev)
 	struct i915_ggtt *ggtt = &dev_priv->ggtt;
 	enum pipe pipe;
 	struct intel_crtc *crtc;
+	unsigned long long start = sched_clock();
 
 	drm_mode_config_init(dev);
 
@@ -16756,6 +16757,7 @@ int intel_modeset_init(struct drm_device *dev)
 	 * since the watermark calculation done here will use pstate->fb.
 	 */
 	sanitize_watermarks(dev);
+	dev_priv->profile.modeset_init_2 = sched_clock() - start;
 
 	return 0;
 }
@@ -17269,12 +17271,15 @@ void intel_display_resume(struct drm_device *dev)
 void intel_modeset_gem_init(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = to_i915(dev);
+	unsigned long long start = sched_clock();
 
 	intel_init_gt_powersave(dev_priv);
 
 	intel_modeset_init_hw(dev);
 
 	intel_setup_overlay(dev_priv);
+
+	dev_priv->profile.modeset_gem_init = sched_clock() - start;
 }
 
 int intel_connector_register(struct drm_connector *connector)

@@ -445,6 +445,7 @@ int intel_guc_setup(struct drm_i915_private *dev_priv)
 	struct intel_uc_fw *guc_fw = &dev_priv->guc.fw;
 	const char *fw_path = guc_fw->path;
 	int retries, ret, err;
+	unsigned long long start = sched_clock();
 
 	DRM_DEBUG_DRIVER("GuC fw status: path %s, fetch %s, load %s\n",
 		fw_path,
@@ -536,6 +537,7 @@ int intel_guc_setup(struct drm_i915_private *dev_priv)
 		guc_interrupts_capture(dev_priv);
 	}
 
+	dev_priv->profile.guc_huc_load = sched_clock() - start;
 	return 0;
 
 fail:
@@ -738,6 +740,7 @@ void intel_guc_init(struct drm_i915_private *dev_priv)
 	struct intel_uc_fw *guc_fw = &dev_priv->guc.fw;
 	const char *fw_path;
 	bool is_forced_rc6 = false;
+	unsigned long long start = sched_clock();
 
 	if (!HAS_GUC(dev_priv)) {
 		i915.enable_guc_loading = 0;
@@ -798,6 +801,7 @@ void intel_guc_init(struct drm_i915_private *dev_priv)
 	}
 
 	intel_uc_fw_fetch(dev_priv, guc_fw);
+	dev_priv->profile.guc_init = sched_clock() - start;
 	/* status must now be FAIL or SUCCESS */
 
 	if (is_forced_rc6) {

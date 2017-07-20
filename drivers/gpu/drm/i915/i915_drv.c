@@ -1186,6 +1186,9 @@ int i915_driver_load(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	struct drm_i915_private *dev_priv;
 	int ret;
+	unsigned long long start_tm, sub_load_tm;
+
+	start_tm = sub_load_tm = sched_clock();
 
 	if (i915.nuclear_pageflip)
 		driver.driver_features |= DRIVER_ATOMIC;
@@ -1223,6 +1226,9 @@ int i915_driver_load(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (ret < 0)
 		goto out_cleanup_mmio;
 
+	dev_priv->profile.hardware_init = sched_clock() - sub_load_tm;
+	sub_load_tm = sched_clock();
+
 	/*
 	 * TODO: move the vblank init and parts of modeset init steps into one
 	 * of the i915_driver_init_/i915_driver_register functions according
@@ -1239,7 +1245,11 @@ int i915_driver_load(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (ret < 0)
 		goto out_cleanup_vblank;
 
+	dev_priv->profile.modeset_init = sched_clock() - sub_load_tm;
+	sub_load_tm = sched_clock();
+
 	i915_driver_register(dev_priv);
+	dev_priv->profile.driver_register = sched_clock() - sub_load_tm;
 
 	intel_runtime_pm_enable(dev_priv);
 
@@ -1255,6 +1265,8 @@ int i915_driver_load(struct pci_dev *pdev, const struct pci_device_id *ent)
 		DRM_INFO("DRM_I915_DEBUG_GEM enabled\n");
 
 	intel_runtime_pm_put(dev_priv);
+
+	dev_priv->profile.driver_load = sched_clock() - start_tm;
 
 	printk(KERN_INFO "IOTG i915 forklift 2017-03-23\n");
 
