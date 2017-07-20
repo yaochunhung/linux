@@ -395,6 +395,7 @@ static const struct intel_device_info intel_skylake_gt3_info = {
 static const struct intel_device_info intel_broxton_info = {
 	GEN9_LP_FEATURES,
 	.platform = INTEL_BROXTON,
+	.has_psr = 1,
 	.ddb_size = 512,
 };
 

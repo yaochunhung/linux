@@ -4665,6 +4665,14 @@ void intel_update_watermarks(struct intel_crtc *crtc)
 
 	if (dev_priv->display.update_wm)
 		dev_priv->display.update_wm(crtc);
+
+	/*
+	 * BXT: IPC can be enabled optionally for test purpose
+	 * now to address display flickering and/or corruption.
+	 */
+	if (IS_BROXTON(dev_priv) && i915.enable_ipc)
+		I915_WRITE(DISP_ARB_CTL2,
+			I915_READ(DISP_ARB_CTL2) | DISP_ENABLE_IPC);
 }
 
 /*
@@ -8068,6 +8076,18 @@ void intel_queue_rps_boost_for_request(struct drm_i915_gem_request *req)
 
 	INIT_WORK(&boost->work, __intel_rps_boost_work);
 	queue_work(req->i915->wq, &boost->work);
+
+	if (req->ctx->flags & CONTEXT_BOOST_FREQ) {
+		atomic_set(&req->i915->rps.use_boost_freq, 1);
+		mod_timer(&req->i915->rps.boost_timeout,
+			  req->emitted_jiffies + DRM_I915_BOOST_TIMEOUT_JIFFIES);
+	}
+}
+
+static void intel_boost_timeout_handler(unsigned long data)
+{
+	atomic_t *use_boost_freq = (atomic_t *)data;
+	atomic_set(use_boost_freq, 0);
 }
 
 void intel_pm_setup(struct drm_i915_private *dev_priv)
@@ -8078,6 +8098,10 @@ void intel_pm_setup(struct drm_i915_private *dev_priv)
 	INIT_DELAYED_WORK(&dev_priv->rps.autoenable_work,
 			  __intel_autoenable_gt_powersave);
 	INIT_LIST_HEAD(&dev_priv->rps.clients);
+	atomic_set(&dev_priv->rps.use_boost_freq, 0);
+	atomic_set(&dev_priv->rps.boost_ctx_count, 0);
+	setup_timer(&dev_priv->rps.boost_timeout, intel_boost_timeout_handler,
+			(unsigned long)&dev_priv->rps.use_boost_freq);
 
 	dev_priv->pm.suspended = false;
 	atomic_set(&dev_priv->pm.wakeref_count, 0);

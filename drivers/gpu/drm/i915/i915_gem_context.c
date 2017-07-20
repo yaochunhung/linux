@@ -134,6 +134,22 @@ static int get_context_size(struct drm_i915_private *dev_priv)
 	return ret;
 }
 
+static inline void i915_gem_context_boost_inc(struct i915_gem_context *ctx)
+{
+	struct intel_gen6_power_mgmt *rps = &ctx->i915->rps;
+	atomic_inc(&rps->boost_ctx_count);
+}
+
+static inline void i915_gem_context_boost_dec(struct i915_gem_context *ctx)
+{
+	struct intel_gen6_power_mgmt *rps = &ctx->i915->rps;
+	WARN_ON(!atomic_read(&rps->boost_ctx_count));
+	if (atomic_dec_and_test(&rps->boost_ctx_count))
+		if (del_timer(&rps->boost_timeout))
+			atomic_set(&rps->use_boost_freq, 0);
+
+}
+
 void i915_gem_context_free(struct kref *ctx_ref)
 {
 	struct i915_gem_context *ctx = container_of(ctx_ref, typeof(*ctx), ref);
@@ -160,6 +176,8 @@ void i915_gem_context_free(struct kref *ctx_ref)
 
 	kfree(ctx->name);
 	put_pid(ctx->pid);
+	if (ctx->flags & CONTEXT_BOOST_FREQ)
+		i915_gem_context_boost_dec(ctx);
 	list_del(&ctx->link);
 
 	ida_simple_remove(&ctx->i915->context_hw_ida, ctx->hw_id);
@@ -1062,6 +1080,9 @@ int i915_gem_context_getparam_ioctl(struct drm_device *dev, void *data,
 	case I915_CONTEXT_PARAM_BANNABLE:
 		args->value = i915_gem_context_is_bannable(ctx);
 		break;
+	case I915_CONTEXT_PRIVATE_PARAM_BOOST:
+		args->value = ctx->flags & CONTEXT_BOOST_FREQ;
+		break;
 	default:
 		ret = -EINVAL;
 		break;
@@ -1119,6 +1140,26 @@ int i915_gem_context_setparam_ioctl(struct drm_device *dev, void *data,
 		else
 			i915_gem_context_clear_bannable(ctx);
 		break;
+	case I915_CONTEXT_PRIVATE_PARAM_BOOST:
+	{
+		int val = !!args->value;
+		if (args->size)
+			ret = -EINVAL;
+		else {
+			if (val != (ctx->flags & CONTEXT_BOOST_FREQ)) {
+				if (val) {
+					ctx->flags |= CONTEXT_BOOST_FREQ;
+					i915_gem_context_boost_inc(ctx);
+				}
+				else {
+					ctx->flags &= ~CONTEXT_BOOST_FREQ;
+					i915_gem_context_boost_dec(ctx);
+				}
+			}
+		}
+		break;
+	}
+
 	default:
 		ret = -EINVAL;
 		break;

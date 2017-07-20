@@ -1348,6 +1348,13 @@ struct intel_gen6_power_mgmt {
 	 * talking to hw - so only take it when talking to hw!
 	 */
 	struct mutex hw_lock;
+
+#define DRM_I915_BOOST_TIMEOUT 2000
+#define DRM_I915_BOOST_TIMEOUT_JIFFIES msecs_to_jiffies(DRM_I915_BOOST_TIMEOUT)
+	struct timer_list boost_timeout;
+
+	atomic_t use_boost_freq;
+	atomic_t boost_ctx_count;
 };
 
 /* defined intel_pm.c */
