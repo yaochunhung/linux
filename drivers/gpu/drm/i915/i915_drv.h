@@ -1346,6 +1346,11 @@ struct intel_gen6_power_mgmt {
 	/* manual wa residency calculations */
 	struct intel_rps_ei up_ei, down_ei;
 
+	bool rc6_disable;
+	bool debugfs_disable_boost;
+	u32 rps_mask;
+	bool rps_disable;
+
 	/*
 	 * Protects RPS/RC6 register access and PCU communication.
 	 * Must be taken after struct_mutex if nested. Note that
@@ -3825,6 +3830,8 @@ extern void i915_redisable_vga_power_on(struct drm_i915_private *dev_priv);
 extern bool ironlake_set_drps(struct drm_i915_private *dev_priv, u8 val);
 extern void intel_init_pch_refclk(struct drm_i915_private *dev_priv);
 extern void intel_set_rps(struct drm_i915_private *dev_priv, u8 val);
+extern void vlv_set_rps_mode(struct drm_i915_private *dev_priv, bool disable);
+extern int intel_set_rc6_mode(struct drm_device *dev, bool disable);
 extern bool intel_set_memory_cxsr(struct drm_i915_private *dev_priv,
 				  bool enable);
 

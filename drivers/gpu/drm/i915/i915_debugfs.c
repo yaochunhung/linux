@@ -35,6 +35,11 @@ static inline struct drm_i915_private *node_to_i915(struct drm_info_node *node)
 	return to_i915(node->minor->dev);
 }
 
+enum {
+	LRC_CONTEXT_DUMP,       /* First 1536 bytes of register state ctx */
+	FULL_CONTEXT_DUMP,      /* Full context (HW status + reg state ctx) */
+};
+
 /* As the drm_debugfs_init() routines are called before dev->dev_private is
  * allocated we need to hook into the minor for release. */
 static int
@@ -2131,11 +2136,13 @@ static int i915_context_status(struct seq_file *m, void *unused)
 
 static void i915_dump_lrc_obj(struct seq_file *m,
 			      struct i915_gem_context *ctx,
-			      struct intel_engine_cs *engine)
+			      struct intel_engine_cs *engine,
+			      unsigned long dump_flag)
 {
 	struct i915_vma *vma = ctx->engine[engine->id].state;
 	struct page *page;
-	int j;
+	struct sg_page_iter sg_iter;
+	int i;
 
 	seq_printf(m, "CONTEXT: %s %u\n", engine->name, ctx->hw_id);
 
@@ -2153,18 +2160,55 @@ static void i915_dump_lrc_obj(struct seq_file *m,
 		return;
 	}
 
-	page = i915_gem_object_get_page(vma->obj, LRC_STATE_PN);
-	if (page) {
-		u32 *reg_state = kmap_atomic(page);
-
-		for (j = 0; j < 0x600 / sizeof(u32) / 4; j += 4) {
-			seq_printf(m,
-				   "\t[0x%04x] 0x%08x 0x%08x 0x%08x 0x%08x\n",
-				   j * 4,
-				   reg_state[j], reg_state[j + 1],
-				   reg_state[j + 2], reg_state[j + 3]);
+	i = 0;
+	for_each_sg_page(vma->pages->sgl, &sg_iter,
+			 vma->pages->nents, 0) {
+		/* Dump only the first page of LRC state if requested */
+		if (dump_flag == LRC_CONTEXT_DUMP && i != LRC_STATE_PN) {
+			i++;
+			continue;
 		}
-		kunmap_atomic(reg_state);
+
+		page = sg_page_iter_page(&sg_iter);
+		if (!WARN_ON(page == NULL)) {
+			int j;
+			uint32_t *reg_state;
+			int run_length = 0;
+			unsigned long page_offset = vma->node.start + i*PAGE_SIZE;
+
+			reg_state = kmap_atomic(page);
+
+			seq_printf(m, "Context object Page: %d\n", i);
+			for (j = 0; j < PAGE_SIZE / sizeof(u32); j += 4) {
+				if (reg_state[j + 0] == 0 && reg_state[j + 1] == 0 &&
+				    reg_state[j + 2] == 0 && reg_state[j + 3] == 0) {
+					run_length += 4;
+					continue;
+				}
+
+				if (run_length > 0) {
+					seq_printf(m, "\t[0x%08lx - 0x%08lx]: 0x00000000\n",
+						   page_offset + (j * 4) - (run_length * 4),
+						   page_offset + (j * 4) - 1);
+
+					run_length = 0;
+				}
+
+				seq_printf(m, "\t[0x%08lx] 0x%08x 0x%08x 0x%08x 0x%08x\n",
+					   page_offset + (j * 4),
+					   reg_state[j + 0], reg_state[j + 1],
+					   reg_state[j + 2], reg_state[j + 3]);
+			}
+
+			if (run_length > 0) {
+				seq_printf(m, "\t[0x%08lx - 0x%08lx]: 0x00000000\n",
+					   page_offset + (j * 4) - (run_length * 4),
+					   page_offset + (j * 4) - 1);
+				run_length = 0;
+			}
+			kunmap_atomic(reg_state);
+		}
+		++i;
 	}
 
 	i915_gem_object_unpin_pages(vma->obj);
@@ -2173,11 +2217,13 @@ static void i915_dump_lrc_obj(struct seq_file *m,
 
 static int i915_dump_lrc(struct seq_file *m, void *unused)
 {
-	struct drm_i915_private *dev_priv = node_to_i915(m->private);
+	struct drm_info_node *node = (struct drm_info_node *) m->private;
+	struct drm_i915_private *dev_priv = node_to_i915(node);
 	struct drm_device *dev = &dev_priv->drm;
 	struct intel_engine_cs *engine;
 	struct i915_gem_context *ctx;
 	enum intel_engine_id id;
+	uintptr_t dump_flag = (uintptr_t) node->info_ent->data;
 	int ret;
 
 	if (!i915.enable_execlists) {
@@ -2190,8 +2236,22 @@ static int i915_dump_lrc(struct seq_file *m, void *unused)
 		return ret;
 
 	list_for_each_entry(ctx, &dev_priv->context_list, link)
-		for_each_engine(engine, dev_priv, id)
-			i915_dump_lrc_obj(m, ctx, engine);
+		for_each_engine(engine, dev_priv, id) {
+			struct i915_vma *ctx_obj = ctx->engine[id].state;
+			if (ctx_obj == NULL) {
+				seq_printf(m, "Context on %s with no gem object\n",
+					   engine->name);
+				continue;
+			}
+
+			if (ctx->file_priv) {
+				seq_printf(m, "CONTEXT: %s (PID: %u, UH:%d)\n",
+					   engine->name,
+					   pid_nr(ctx->pid),
+					   ctx->user_handle);
+				i915_dump_lrc_obj(m, ctx, engine, dump_flag);
+			}
+		}
 
 	mutex_unlock(&dev->struct_mutex);
 
@@ -4278,6 +4338,64 @@ DEFINE_SIMPLE_ATTRIBUTE(i915_wedged_fops,
 			i915_wedged_get, i915_wedged_set,
 			"%llu\n");
 
+static u32 i915_watchdog_reset_count(struct drm_device *dev)
+{
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct i915_gem_context *ctx;
+	struct page *page;
+	struct guc_shared_ctx_data *guc_shared_data;
+	u32 guc_media_reset_count;
+
+	if (mutex_lock_interruptible(&dev->struct_mutex))
+		return 0;
+
+	ctx = dev_priv->kernel_context;
+	page = i915_gem_object_get_dirty_page(ctx->engine[RCS].state->obj,
+					      LRC_GUCSHR_PN);
+	guc_shared_data = kmap_atomic(page);
+	guc_media_reset_count = guc_shared_data->media_reset_count;
+	kunmap_atomic(guc_shared_data);
+
+	mutex_unlock(&dev->struct_mutex);
+
+	return guc_media_reset_count;
+}
+
+static ssize_t i915_reset_info_read(struct file *filp, char __user *ubuf,
+				    size_t max, loff_t *ppos)
+{
+	int len;
+	char buf[300];
+	struct drm_device *dev = filp->private_data;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct i915_gpu_error *error = &dev_priv->gpu_error;
+	struct intel_engine_cs *engine;
+	enum intel_engine_id id;
+
+	len = scnprintf(buf, sizeof(buf), "full gpu reset = %u\n",
+			i915_reset_count(error));
+
+	len += scnprintf(buf + len, sizeof(buf) - len,
+			 "watchdog / media reset = %u\n",
+			 i915_watchdog_reset_count(dev));
+
+	for_each_engine(engine, dev_priv, id) {
+		len += scnprintf(buf + len, sizeof(buf) - len,
+				 "%s = 0\n", engine->name);
+	}
+
+	len += scnprintf(buf + len - 1, sizeof(buf) - len, "\n");
+
+	return simple_read_from_buffer(ubuf, max, ppos, buf, len);
+}
+
+static const struct file_operations i915_reset_info_fops = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.read = i915_reset_info_read,
+	.llseek = default_llseek,
+};
+
 static int
 i915_ring_missed_irq_get(void *data, u64 *val)
 {
@@ -4506,6 +4624,119 @@ i915_min_freq_set(void *data, u64 val)
 
 DEFINE_SIMPLE_ATTRIBUTE(i915_min_freq_fops,
 			i915_min_freq_get, i915_min_freq_set,
+			"%llu\n");
+
+static int i915_rps_disable_boost_get(void *data, u64 *val)
+{
+	struct drm_device *dev = data;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+
+	if (INTEL_INFO(dev_priv)->gen < 6)
+		return -ENODEV;
+
+	*val = dev_priv->rps.debugfs_disable_boost;
+
+	return 0;
+}
+
+static int i915_rps_disable_boost_set(void *data, u64 val)
+{
+	struct drm_device *dev = data;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	int ret;
+
+	DRM_DEBUG_DRIVER("Setting RPS disable Boost-Idle mode to %s\n",
+				 val ? "on" : "off");
+
+	ret = mutex_lock_interruptible(&dev_priv->rps.hw_lock);
+	if (ret)
+		return ret;
+
+	dev_priv->rps.debugfs_disable_boost = val;
+
+	mutex_unlock(&dev_priv->rps.hw_lock);
+
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(i915_rps_disable_boost_fops,
+		i915_rps_disable_boost_get, i915_rps_disable_boost_set,
+			"%llu\n");
+
+static int i915_rps_disable_get(void *data, u64 *val)
+{
+	struct drm_device *dev = data;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+
+	if (INTEL_GEN(dev_priv) < 6)
+		return -ENODEV;
+
+	*val = dev_priv->rps.rps_disable;
+
+	return 0;
+}
+
+static int i915_rps_disable_set(void *data, u64 val)
+{
+	struct drm_device *dev = data;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	int ret;
+
+	if (INTEL_GEN(dev_priv) < 6)
+		return -ENODEV;
+
+	DRM_DEBUG_DRIVER("Setting RPS disable %s\n",
+			 val ? "true" : "false");
+
+	intel_runtime_pm_get(dev_priv);
+	ret = mutex_lock_interruptible(&dev_priv->rps.hw_lock);
+	if (ret)
+		return ret;
+
+	dev_priv->rps.rps_disable = val;
+
+	if (val)
+		I915_WRITE(GEN6_RP_CONTROL, 0);
+	else
+		I915_WRITE(GEN6_RP_CONTROL, GEN6_RP_MEDIA_TURBO |
+				GEN6_RP_MEDIA_HW_NORMAL_MODE |
+				GEN6_RP_MEDIA_IS_GFX |
+				GEN6_RP_ENABLE |
+				GEN6_RP_UP_BUSY_AVG |
+				GEN6_RP_DOWN_IDLE_AVG);
+
+	mutex_unlock(&dev_priv->rps.hw_lock);
+	intel_runtime_pm_put(dev_priv);
+
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(i915_rps_disable_fops,
+			i915_rps_disable_get, i915_rps_disable_set,
+			"%llu\n");
+
+static int i915_rc6_disable_get(void *data, u64 *val)
+{
+	struct drm_device *dev = data;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+
+	*val = dev_priv->rps.rc6_disable;
+
+	return 0;
+}
+
+static int i915_rc6_disable_set(void *data, u64 val)
+{
+	struct drm_device *dev = data;
+
+	DRM_DEBUG_DRIVER("Setting RC6 disable %s\n",
+			 val ? "true" : "false");
+
+	return intel_set_rc6_mode(dev, (bool)val);
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(i915_rc6_disable_fops,
+			i915_rc6_disable_get, i915_rc6_disable_set,
 			"%llu\n");
 
 static int
@@ -4833,7 +5064,8 @@ static const struct drm_info_list i915_debugfs_list[] = {
 	{"i915_vbt", i915_vbt, 0},
 	{"i915_gem_framebuffer", i915_gem_framebuffer_info, 0},
 	{"i915_context_status", i915_context_status, 0},
-	{"i915_dump_lrc", i915_dump_lrc, 0},
+	{"i915_dump_lrc", i915_dump_lrc, 0, (void *) LRC_CONTEXT_DUMP},
+	{"i915_context_dump", i915_dump_lrc, 0, (void *) FULL_CONTEXT_DUMP},
 	{"i915_forcewake_domains", i915_forcewake_domains, 0},
 	{"i915_swizzle_info", i915_swizzle_info, 0},
 	{"i915_ppgtt_info", i915_ppgtt_info, 0},
@@ -4863,8 +5095,12 @@ static const struct i915_debugfs_files {
 	const struct file_operations *fops;
 } i915_debugfs_files[] = {
 	{"i915_wedged", &i915_wedged_fops},
+	{"i915_reset_info", &i915_reset_info_fops},
 	{"i915_max_freq", &i915_max_freq_fops},
 	{"i915_min_freq", &i915_min_freq_fops},
+	{"i915_rps_disable_boost", &i915_rps_disable_boost_fops},
+	{"i915_rps_disable", &i915_rps_disable_fops},
+	{"i915_rc6_disable", &i915_rc6_disable_fops},
 	{"i915_cache_sharing", &i915_cache_sharing_fops},
 	{"i915_ring_missed_irq", &i915_ring_missed_irq_fops},
 	{"i915_ring_test_irq", &i915_ring_test_irq_fops},
