@@ -86,7 +86,7 @@ struct drm_i915_gem_object {
 	struct rb_root vma_tree;
 
 	/** Stolen memory for this object, instead of being backed by shmem. */
-	struct drm_mm_node *stolen;
+	struct i915_stolen_node *stolen;
 	struct list_head global_link;
 	union {
 		struct rcu_head rcu;
@@ -102,6 +102,8 @@ struct drm_i915_gem_object {
 	struct list_head obj_exec_link;
 
 	struct list_head batch_pool_link;
+	/** Used to link an object to a list temporarily */
+	struct list_head tmp_link;
 
 	unsigned long flags;
 
@@ -153,6 +155,13 @@ struct drm_i915_gem_object {
 		 * Advice: are the backing pages purgeable?
 		 */
 		unsigned int madv:2;
+
+		/**
+		 * Whereas madv is for userspace, there are certain situations
+		 * where we want I915_MADV_DONTNEED behaviour on internal objects
+		 * without conflating the userspace setting.
+		 */
+		unsigned int internal_volatile:1;
 
 		/**
 		 * This is set if the object has been written to since the

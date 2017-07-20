@@ -5811,7 +5811,7 @@ static void valleyview_check_pctx(struct drm_i915_private *dev_priv)
 	unsigned long pctx_addr = I915_READ(VLV_PCBR) & ~4095;
 
 	WARN_ON(pctx_addr != dev_priv->mm.stolen_base +
-			     dev_priv->vlv_pctx->stolen->start);
+			     dev_priv->vlv_pctx->stolen->base.start);
 }
 
 
@@ -5860,10 +5860,13 @@ static void valleyview_setup_pctx(struct drm_i915_private *dev_priv)
 								      pcbr_offset,
 								      I915_GTT_OFFSET_NONE,
 								      pctx_size);
+		if (IS_ERR(pctx))
+			pctx = NULL;
+
 		goto out;
 	}
 
-	DRM_DEBUG_DRIVER("BIOS didn't set up PCBR, fixing up\n");
+	DRM_DEBUG_DRIVER("BIOS didn't set up PCBR or prealloc failed, fixing up\n");
 
 	/*
 	 * From the Gunit register HAS:
@@ -5879,10 +5882,12 @@ static void valleyview_setup_pctx(struct drm_i915_private *dev_priv)
 		goto out;
 	}
 
-	pctx_paddr = dev_priv->mm.stolen_base + pctx->stolen->start;
+	pctx_paddr = dev_priv->mm.stolen_base + pctx->stolen->base.start;
 	I915_WRITE(VLV_PCBR, pctx_paddr);
 
 out:
+	/* The power context need not be preserved across hibernation */
+	pctx->mm.internal_volatile = true;
 	DRM_DEBUG_DRIVER("PCBR: 0x%08x\n", I915_READ(VLV_PCBR));
 	dev_priv->vlv_pctx = pctx;
 }
