@@ -3181,6 +3181,8 @@ int i915_gem_userptr_ioctl(struct drm_device *dev, void *data,
 			   struct drm_file *file);
 int i915_gem_get_aperture_ioctl(struct drm_device *dev, void *data,
 				struct drm_file *file_priv);
+int i915_gem_get_aperture_ioctl2(struct drm_device *dev, void *data,
+				 struct drm_file *file);
 int i915_gem_wait_ioctl(struct drm_device *dev, void *data,
 			struct drm_file *file_priv);
 int i915_gem_load_init(struct drm_i915_private *dev_priv);
