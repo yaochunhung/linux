@@ -1,0 +1,53 @@
+###
+### Upstream integration
+###
+base/mr3.1 252f8846d801dd2bce14bb9077139ad751cf089d
+	acpi: Export acpi_bus_type
+
+###
+### GMS integration
+###
+snapshot/mr3/topic/forklift_reverts 797a7d5480fed49e8ac3dc3dddde892870793211
+	Revert "drm/i915/gen9: Remove WaEnableYV12BugFixInHalfSliceChicken7"
+snapshot/mr3/topic/forklift_extras 867852ce08b2a1cf8775d9e7c437d090219b59df
+	drm/i915: Pass the correct plane index to _intel_compute_tile_offset()
+snapshot/mr3/topic/bxt-enablement 37fa0d5a5a3e5fb5409c72c585da08b91383a312
+	drm/i915: Add support for OCL Turbo Boost
+snapshot/mr3/topic/gms/driver_timing 27c92754809d6c5e16104fce67b41b10715b50dd
+	drm/i915/profile: Add profile time storage for HuC load
+snapshot/mr3/topic/vpg/forklift_updates ae80fb83d63875c84877c24f5b052609d15497d1
+	drm/i915: Suspend GuC during GEM Suspend prior to GPU Reset
+snapshot/mr3/topic/vpg_mocs_update 4a62c730c03030ccd2f91af202ec77fcda8f5586
+	drm/i915: Fix I915_MOCS_CACHED entry to avoid snooping
+snapshot/mr3/topic/vpg_gpa_patches 6b58aa2298faf0e52189d3ee99369f07f493be0e
+	drm/i915: Update Gen9 forcewake range to cover OA
+snapshot/mr3/topic/vpg/rbc 70744dc587fdcae6bf04b86c08288df96265f9a4
+	drm: Check should be skipped for DRM_MODE_FB_AUX_PLANE
+snapshot/mr3/topic/vpg/get_aperature2 d2d726acaab0a648ddd50fe4a2b2e500f4d46fe4
+	drm/i915: Add I915_GEM_GET_APERTURE2 ioctl
+snapshot/mr3/topic/vpg/stolen_memory 3b1159da94e2041f56a00c09f4c99262596710a8
+	drm/i915: Add missing rpm wakelock to i915_gem_object_clear
+snapshot/mr3/topic/vpg/media_watchdog f9b41c5c4bca895c57ef8af860e1d75c7b382c92
+	drm/i915: Watchdog timeout: DRM kernel interface to set the timeout
+snapshot/mr3/topic/vpg_debug f92a36945727076d211171807fabd7b8b88f179e
+	drm/i915: Watchdog timeout: Export media reset count from GuC to debugfs
+snapshot/mr3/topic/backlight_aux 3b80045e035a46e45aff29eecc32c191f6e6a2af
+	drm/i915: Add backlight Control using DPCD registers for DP connectors
+snapshot/mr3/topic/gms/background_color f00988904178ed75f8ac5f97b247bf28342a5628
+	drm/i915/gen9: Add support for pipe background color (v3)
+snapshot/mr3/topic/plane_blend 7a05625e1ba9dd6b3da3e6cb99239f55129f69e5
+	drm/i915: Fix compiler warning in intel_plane_state_check_blend()
+snapshot/mr3/topic/initial_modeset_splash ac66dfe20ee77b0aebedd5f78792433d20f6e13f
+	drm/i915: Use intel data structures to find encoder
+snapshot/mr3/topic/mipidsi 54f90676ef79f2b9327997eff4f5c8c6b5521ba3
+	drm/i915/bxt: DSI dual-link shift WA for A0 (v2)
+snapshot/mr3/topic/governor 30842c343fee4a7478fe585b9ee1bfb28280602e
+	drm/i915: Add turbo status to debugfs
+snapshot/mr3/topic/gms/nv12 994fb4de96d12652c92a9c115fb6daf17a5c2841
+	drm/i915: Restrict NV12 support to APL E0+ (v2)
+snapshot/mr3/topic/gms/hsd_bugfixes 2931a5db23967c4a2964ee50bc18cb8bead2eaca
+	drm/i915: Move cursor watermark writes back under vblank evasion
+snapshot/mr3/topic/ipu_flush_workaround 10c6346e04957176958fe814bb62dddcd3d0461c
+	drm/i915:Avoid cache flush when calling IPU DMA driver
+snapshot/mr3/topic/gms_buildid a05437900666001e6d26a7cc259684725e02ad47
+	drm/i915: Add IOTG build identifier
