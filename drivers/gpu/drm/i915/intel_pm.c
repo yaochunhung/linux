@@ -32,6 +32,9 @@
 #include "../../../platform/x86/intel_ips.h"
 #include <linux/module.h>
 #include <drm/drm_atomic_helper.h>
+#include <linux/notifier.h>
+
+static BLOCKING_NOTIFIER_HEAD(i915_freq_notifier_list);
 
 /**
  * DOC: RC6
@@ -55,6 +58,8 @@
 #define INTEL_RC6_ENABLE			(1<<0)
 #define INTEL_RC6p_ENABLE			(1<<1)
 #define INTEL_RC6pp_ENABLE			(1<<2)
+#define GEN9_TURBO_DISABLED                     0
+#define GEN9_TURBO_ENABLED                      1
 
 static void gen9_init_clock_gating(struct drm_i915_private *dev_priv)
 {
@@ -4962,10 +4967,17 @@ static void gen6_set_rps(struct drm_i915_private *dev_priv, u8 val)
 	WARN_ON(val > dev_priv->rps.max_freq);
 	WARN_ON(val < dev_priv->rps.min_freq);
 
+	if ((dev_priv->ips.fstart == GEN9_TURBO_DISABLED) &&
+	    (val > dev_priv->rps.rp1_freq))
+		val = dev_priv->rps.rp1_freq;
+
 	/* min/max delay may still have been modified so be sure to
 	 * write the limits value.
 	 */
 	if (val != dev_priv->rps.cur_freq) {
+		blocking_notifier_call_chain(&i915_freq_notifier_list,
+					     (unsigned long)val, NULL);
+
 		gen6_set_rps_thresholds(dev_priv, val);
 
 		if (IS_GEN9(dev_priv))
@@ -6606,10 +6618,28 @@ bool i915_gpu_turbo_disable(void)
 	}
 	dev_priv = i915_mch_dev;
 
-	dev_priv->ips.max_delay = dev_priv->ips.fstart;
+	if (IS_GEN5(dev_priv)) {
+		dev_priv->ips.max_delay = dev_priv->ips.fstart;
 
-	if (!ironlake_set_drps(dev_priv, dev_priv->ips.fstart))
-		ret = false;
+		if (!ironlake_set_drps(dev_priv, dev_priv->ips.fstart))
+			ret = false;
+	} else if (IS_GEN9(dev_priv)) {
+		if (dev_priv->ips.fstart == GEN9_TURBO_DISABLED)
+			goto out_unlock;
+
+		dev_priv->ips.fstart = GEN9_TURBO_DISABLED;
+
+		/* If the current freq > rp1, clamp it down */
+		if (dev_priv->rps.cur_freq > dev_priv->rps.rp1_freq) {
+			intel_runtime_pm_get(dev_priv);
+			mutex_lock(&dev_priv->rps.hw_lock);
+
+			gen6_set_rps(dev_priv, dev_priv->rps.rp1_freq);
+
+			mutex_unlock(&dev_priv->rps.hw_lock);
+			intel_runtime_pm_put(dev_priv);
+		}
+	}
 
 out_unlock:
 	spin_unlock_irq(&mchdev_lock);
@@ -6617,6 +6647,79 @@ out_unlock:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(i915_gpu_turbo_disable);
+
+/**
+ * i915_gpu_turbo_enable - enable graphics turbo
+ *
+ * Allow GPU to use frequencies up to softmax (i.e. remove clamping
+ * to RP1 that was set by the i915_gpu_turbo_disable() function).
+ */
+bool i915_gpu_turbo_enable(void)
+{
+	struct drm_i915_private *dev_priv;
+	bool ret = true;
+
+	spin_lock_irq(&mchdev_lock);
+	if (!i915_mch_dev) {
+		ret = false;
+		goto out_unlock;
+	}
+	dev_priv = i915_mch_dev;
+
+	if (IS_GEN9(dev_priv)) {
+		if (dev_priv->ips.fstart != GEN9_TURBO_DISABLED)
+			goto out_unlock;
+
+		dev_priv->ips.fstart = GEN9_TURBO_ENABLED;
+	}
+
+out_unlock:
+	spin_unlock_irq(&mchdev_lock);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(i915_gpu_turbo_enable);
+
+/**
+ * Register a notifier callback for gpu frequency changes.
+ * @nb: pointer to the notifier block for the callback
+ */
+int i915_register_freq_notify(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_register(&i915_freq_notifier_list, nb);
+}
+EXPORT_SYMBOL_GPL(i915_register_freq_notify);
+
+/**
+ * Unregister a notifier from the gpu freqency change callback.
+ * @nb: pointer to the notifier block for the callback
+ */
+int i915_unregister_freq_notify(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_unregister(&i915_freq_notifier_list, nb);
+}
+EXPORT_SYMBOL_GPL(i915_unregister_freq_notify);
+
+/**
+ * Return the frequency, in KHz, represented by the opcode.
+ *
+ * This isn't an integer value.
+ */
+int i915_gpu_pstate2freq(int pstate)
+{
+	return i915_mch_dev ? intel_gpu_freq(i915_mch_dev, pstate) * 1000 : -1;
+}
+EXPORT_SYMBOL_GPL(i915_gpu_pstate2freq);
+
+/**
+ * Return the maximum pstate (or frequency opcode) avalable on
+ * the platform.
+ */
+int i915_gpu_get_max_pstate(void)
+{
+	return i915_mch_dev ? i915_mch_dev->rps.rp0_freq : 0;
+}
+EXPORT_SYMBOL_GPL(i915_gpu_get_max_pstate);
 
 /**
  * Tells the intel_ips driver that the i915 driver is now loaded, if
@@ -6643,6 +6746,7 @@ void intel_gpu_ips_init(struct drm_i915_private *dev_priv)
 	/* We only register the i915 ips part with intel-ips once everything is
 	 * set up, to avoid intel-ips sneaking in and reading bogus values. */
 	spin_lock_irq(&mchdev_lock);
+	dev_priv->ips.fstart = GEN9_TURBO_ENABLED;
 	i915_mch_dev = dev_priv;
 	spin_unlock_irq(&mchdev_lock);
 

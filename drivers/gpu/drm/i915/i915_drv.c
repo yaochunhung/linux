@@ -1146,7 +1146,7 @@ static void i915_driver_register(struct drm_i915_private *dev_priv)
 		acpi_video_register();
 	}
 
-	if (IS_GEN5(dev_priv))
+	if (IS_GEN5(dev_priv) || IS_GEN9(dev_priv))
 		intel_gpu_ips_init(dev_priv);
 
 	intel_audio_init(dev_priv);
