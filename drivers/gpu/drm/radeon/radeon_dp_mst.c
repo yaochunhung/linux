@@ -283,13 +283,11 @@ static struct drm_connector *radeon_dp_add_mst_connector(struct drm_dp_mst_topol
 	radeon_connector->mst_encoder = radeon_dp_create_fake_mst_encoder(master);
 
 	drm_object_attach_property(&connector->base, dev->mode_config.path_property, 0);
-	drm_object_attach_property(&connector->base, dev->mode_config.tile_property, 0);
 	drm_mode_connector_set_path_property(connector, pathprop);
-	drm_reinit_primary_mode_group(dev);
 
-	drm_modeset_lock_all(dev);
+	mutex_lock(&dev->mode_config.mutex);
 	radeon_fb_add_connector(rdev, connector);
-	drm_modeset_unlock_all(dev);
+	mutex_unlock(&dev->mode_config.mutex);
 
 	drm_connector_register(connector);
 	return connector;
@@ -304,12 +302,12 @@ static void radeon_dp_destroy_mst_connector(struct drm_dp_mst_topology_mgr *mgr,
 
 	drm_connector_unregister(connector);
 	/* need to nuke the connector */
-	drm_modeset_lock_all(dev);
+	mutex_lock(&dev->mode_config.mutex);
 	/* dpms off */
 	radeon_fb_remove_connector(rdev, connector);
 
 	drm_connector_cleanup(connector);
-	drm_modeset_unlock_all(dev);
+	mutex_unlock(&dev->mode_config.mutex);
 	drm_reinit_primary_mode_group(dev);
 
 
@@ -520,17 +518,11 @@ static bool radeon_mst_mode_fixup(struct drm_encoder *encoder,
 	drm_mode_set_crtcinfo(adjusted_mode, 0);
 	{
 	  struct radeon_connector_atom_dig *dig_connector;
-	  int ret;
 
 	  dig_connector = mst_enc->connector->con_priv;
-	  ret = radeon_dp_get_dp_link_config(&mst_enc->connector->base,
-					     dig_connector->dpcd, adjusted_mode->clock,
-					     &dig_connector->dp_lane_count,
-					     &dig_connector->dp_clock);
-	  if (ret) {
-		  dig_connector->dp_lane_count = 0;
-		  dig_connector->dp_clock = 0;
-	  }
+	  dig_connector->dp_lane_count = drm_dp_max_lane_count(dig_connector->dpcd);
+	  dig_connector->dp_clock = radeon_dp_get_max_link_rate(&mst_enc->connector->base,
+								dig_connector->dpcd);
 	  DRM_DEBUG_KMS("dig clock %p %d %d\n", dig_connector,
 			dig_connector->dp_lane_count, dig_connector->dp_clock);
 	}

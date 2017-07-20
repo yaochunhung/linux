@@ -43,7 +43,6 @@ struct vmw_user_surface {
 	struct vmw_surface srf;
 	uint32_t size;
 	struct drm_master *master;
-	struct ttm_base_object *backup_base;
 };
 
 /**
@@ -653,8 +652,6 @@ static void vmw_user_surface_base_release(struct ttm_base_object **p_base)
 	struct vmw_resource *res = &user_srf->srf.res;
 
 	*p_base = NULL;
-	if (user_srf->backup_base)
-		ttm_base_object_unref(&user_srf->backup_base);
 	vmw_resource_unreference(&res);
 }
 
@@ -711,14 +708,11 @@ int vmw_surface_define_ioctl(struct drm_device *dev, void *data,
 			128;
 
 	num_sizes = 0;
-	for (i = 0; i < DRM_VMW_MAX_SURFACE_FACES; ++i) {
-		if (req->mip_levels[i] > DRM_VMW_MAX_MIP_LEVELS)
-			return -EINVAL;
+	for (i = 0; i < DRM_VMW_MAX_SURFACE_FACES; ++i)
 		num_sizes += req->mip_levels[i];
-	}
 
-	if (num_sizes > DRM_VMW_MAX_SURFACE_FACES * DRM_VMW_MAX_MIP_LEVELS ||
-	    num_sizes == 0)
+	if (num_sizes > DRM_VMW_MAX_SURFACE_FACES *
+	    DRM_VMW_MAX_MIP_LEVELS)
 		return -EINVAL;
 
 	size = vmw_user_surface_size + 128 +
@@ -852,8 +846,7 @@ int vmw_surface_define_ioctl(struct drm_device *dev, void *data,
 					    res->backup_size,
 					    true,
 					    &backup_handle,
-					    &res->backup,
-					    &user_srf->backup_base);
+					    &res->backup);
 		if (unlikely(ret != 0)) {
 			vmw_resource_unreference(&res);
 			goto out_unlock;
@@ -1316,8 +1309,7 @@ int vmw_gb_surface_define_ioctl(struct drm_device *dev, void *data,
 
 	if (req->buffer_handle != SVGA3D_INVALID_ID) {
 		ret = vmw_user_dmabuf_lookup(tfile, req->buffer_handle,
-					     &res->backup,
-					     &user_srf->backup_base);
+					     &res->backup);
 	} else if (req->drm_surface_flags &
 		   drm_vmw_surface_flag_create_buffer)
 		ret = vmw_user_dmabuf_alloc(dev_priv, tfile,
@@ -1325,8 +1317,7 @@ int vmw_gb_surface_define_ioctl(struct drm_device *dev, void *data,
 					    req->drm_surface_flags &
 					    drm_vmw_surface_flag_shareable,
 					    &backup_handle,
-					    &res->backup,
-					    &user_srf->backup_base);
+					    &res->backup);
 
 	if (unlikely(ret != 0)) {
 		vmw_resource_unreference(&res);
