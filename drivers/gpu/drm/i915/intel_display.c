@@ -2532,7 +2532,7 @@ intel_fill_fb_info(struct drm_i915_private *dev_priv,
 		intel_fb->normal[i].y = y;
 
 		offset = _intel_compute_tile_offset(dev_priv, &x, &y,
-						    fb, 0, fb->pitches[i],
+						    fb, i, fb->pitches[i],
 						    DRM_ROTATE_0, tile_size);
 		offset /= tile_size;
 
@@ -3266,7 +3266,12 @@ u32 skl_plane_stride(const struct drm_framebuffer *fb, int plane,
 		     unsigned int rotation)
 {
 	const struct drm_i915_private *dev_priv = to_i915(fb->dev);
-	u32 stride = intel_fb_pitch(fb, plane, rotation);
+	u32 stride;
+
+	if (plane >= fb->format->num_planes)
+		return 0;
+
+	stride = intel_fb_pitch(fb, plane, rotation);
 
 	/*
 	 * The stride is either expressed as a multiple of 64 bytes chunks for
@@ -11039,7 +11044,7 @@ intel_framebuffer_create_for_mode(struct drm_device *dev,
 
 	fb = intel_framebuffer_create(dev, &mode_cmd, obj);
 	if (IS_ERR(fb))
-		i915_gem_object_put_unlocked(obj);
+		i915_gem_object_put(obj);
 
 	return fb;
 }
@@ -12333,7 +12338,7 @@ cleanup:
 	crtc->primary->fb = old_fb;
 	update_state_fb(crtc->primary);
 
-	i915_gem_object_put_unlocked(obj);
+	i915_gem_object_put(obj);
 	drm_framebuffer_unreference(work->old_fb);
 
 	spin_lock_irq(&dev->event_lock);
@@ -16109,7 +16114,7 @@ intel_user_framebuffer_create(struct drm_device *dev,
 
 	fb = intel_framebuffer_create(dev, &mode_cmd, obj);
 	if (IS_ERR(fb))
-		i915_gem_object_put_unlocked(obj);
+		i915_gem_object_put(obj);
 
 	return fb;
 }

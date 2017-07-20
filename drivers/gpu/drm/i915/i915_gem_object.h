@@ -262,18 +262,11 @@ __attribute__((nonnull))
 static inline void
 i915_gem_object_put(struct drm_i915_gem_object *obj)
 {
-	drm_gem_object_unreference(&obj->base);
+	__drm_gem_object_unreference(&obj->base);
 }
 
 __deprecated
 extern void drm_gem_object_unreference(struct drm_gem_object *);
-
-__attribute__((nonnull))
-static inline void
-i915_gem_object_put_unlocked(struct drm_i915_gem_object *obj)
-{
-	drm_gem_object_unreference_unlocked(&obj->base);
-}
 
 __deprecated
 extern void drm_gem_object_unreference_unlocked(struct drm_gem_object *);
