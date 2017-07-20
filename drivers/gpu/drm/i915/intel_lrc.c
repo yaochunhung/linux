@@ -1477,6 +1477,8 @@ static int gen8_emit_bb_start(struct drm_i915_gem_request *req,
 {
 	struct intel_ring *ring = req->ring;
 	bool ppgtt = !(dispatch_flags & I915_DISPATCH_SECURE);
+	u32 num_dwords;
+	bool watchdog_running = false;
 	int ret;
 
 	/* Don't rely in hw updating PDPs, specially in lite-restore.
@@ -1497,9 +1499,28 @@ static int gen8_emit_bb_start(struct drm_i915_gem_request *req,
 		req->ctx->ppgtt->pd_dirty_rings &= ~intel_engine_flag(req->engine);
 	}
 
-	ret = intel_ring_begin(req, 4);
+	/* bb_start only */
+	num_dwords = 4;
+
+	/* check if watchdog will be required */
+	if (req->ctx->engine[req->engine->id].watchdog_threshold != 0) {
+		if (!req->engine->emit_start_watchdog ||
+		    !req->engine->emit_stop_watchdog)
+			return -EINVAL;
+
+		/* + start_watchdog (6) + stop_watchdog (4) */
+		num_dwords += 10;
+		watchdog_running = true;
+	}
+
+	ret = intel_ring_begin(req, num_dwords);
 	if (ret)
 		return ret;
+
+	if (watchdog_running) {
+		/* Start watchdog timer */
+		req->engine->emit_start_watchdog(req);
+	}
 
 	/* FIXME(BDW): Address space and security selectors. */
 	intel_ring_emit(ring, MI_BATCH_BUFFER_START_GEN8 |
@@ -1509,8 +1530,13 @@ static int gen8_emit_bb_start(struct drm_i915_gem_request *req,
 	intel_ring_emit(ring, lower_32_bits(offset));
 	intel_ring_emit(ring, upper_32_bits(offset));
 	intel_ring_emit(ring, MI_NOOP);
-	intel_ring_advance(ring);
 
+	if (watchdog_running) {
+		/* Cancel watchdog timer */
+		req->engine->emit_stop_watchdog(req);
+	}
+
+	intel_ring_advance(ring);
 	return 0;
 }
 
@@ -1673,6 +1699,47 @@ static void bxt_a_seqno_barrier(struct intel_engine_cs *engine)
 	intel_flush_status_page(engine, I915_GEM_HWS_INDEX);
 }
 
+static void gen9_emit_start_watchdog(struct drm_i915_gem_request *req)
+{
+	struct intel_ring *ring = req->ring;
+	struct intel_engine_cs *engine = req->engine;
+	struct i915_gem_context *ctx = req->ctx;
+	struct intel_context *ce = &ctx->engine[engine->id];
+
+	/* XXX: no watchdog support in BCS engine */
+	GEM_BUG_ON(engine->id == BCS);
+
+	/*
+	 * watchdog register must never be programmed to zero. This would
+	 * cause the watchdog counter to exceed and not allow the engine to
+	 * go into IDLE state
+	 */
+	GEM_BUG_ON(ce->watchdog_threshold == 0);
+
+	/* Set counter period */
+	intel_ring_emit(ring, MI_LOAD_REGISTER_IMM(2));
+	intel_ring_emit_reg(ring, RING_THRESH(engine->mmio_base));
+	intel_ring_emit(ring, ce->watchdog_threshold);
+	/* Start counter */
+	intel_ring_emit_reg(ring, RING_CNTR(engine->mmio_base));
+	intel_ring_emit(ring, GEN9_WATCHDOG_ENABLE);
+	intel_ring_emit(ring, MI_NOOP);
+}
+
+static void gen9_emit_stop_watchdog(struct drm_i915_gem_request *req)
+{
+	struct intel_ring *ring = req->ring;
+	struct intel_engine_cs *engine = req->engine;
+
+	/* XXX: no watchdog support in BCS engine */
+	GEM_BUG_ON(engine->id == BCS);
+
+	intel_ring_emit(ring, MI_LOAD_REGISTER_IMM(1));
+	intel_ring_emit_reg(ring, RING_CNTR(engine->mmio_base));
+	intel_ring_emit(ring, GEN9_WATCHDOG_DISABLE);
+	intel_ring_emit(ring, MI_NOOP);
+}
+
 /*
  * Reserve space for 2 NOOPs at the end of each request to be
  * used as a workaround for not being allowed to do lite
@@ -1830,6 +1897,18 @@ logical_ring_default_irqs(struct intel_engine_cs *engine)
 	unsigned shift = engine->irq_shift;
 	engine->irq_enable_mask = GT_RENDER_USER_INTERRUPT << shift;
 	engine->irq_keep_mask = GT_CONTEXT_SWITCH_INTERRUPT << shift;
+
+	switch (engine->id) {
+	default:
+		/* BCS engine does not support hw watchdog */
+		break;
+	case RCS:
+	case VCS:
+	case VCS2:
+	case VECS:
+		engine->irq_keep_mask |= (GT_GEN9_WATCHDOG_INTERRUPT << shift);
+		break;
+	}
 }
 
 static int
@@ -1926,6 +2005,10 @@ int logical_render_ring_init(struct intel_engine_cs *engine)
 	engine->emit_flush = gen8_emit_flush_render;
 	engine->emit_breadcrumb = gen8_emit_breadcrumb_render;
 	engine->emit_breadcrumb_sz = gen8_emit_breadcrumb_render_sz;
+	if (INTEL_GEN(dev_priv) >= 9) {
+		engine->emit_start_watchdog = gen9_emit_start_watchdog;
+		engine->emit_stop_watchdog = gen9_emit_stop_watchdog;
+	}
 
 	ret = intel_engine_create_scratch(engine, PAGE_SIZE);
 	if (ret)
@@ -1947,7 +2030,15 @@ int logical_render_ring_init(struct intel_engine_cs *engine)
 
 int logical_xcs_ring_init(struct intel_engine_cs *engine)
 {
+	struct drm_i915_private *dev_priv = engine->i915;
+
 	logical_ring_setup(engine);
+
+	/* BCS engine does not have a watchdog-expired irq */
+	if (engine->id != BCS && INTEL_GEN(dev_priv) >= 9) {
+		engine->emit_start_watchdog = gen9_emit_start_watchdog;
+		engine->emit_stop_watchdog = gen9_emit_stop_watchdog;
+	}
 
 	return logical_ring_init(engine);
 }

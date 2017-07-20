@@ -136,7 +136,7 @@
 #define   GUC_ADS_ADDR_SHIFT		11
 #define   GUC_ADS_ADDR_MASK		0xfffff800
 
-#define GUC_CTL_RSRVD			9
+#define GUC_CTL_SHARED_DATA		9
 
 #define GUC_CTL_MAX_DWORDS		(SOFT_SCRATCH_COUNT - 2) /* [1..14] */
 
@@ -397,7 +397,6 @@ struct guc_policies {
 #define GUC_REGSET_SAVE_CURRENT_VALUE	0x10
 
 #define GUC_REGSET_MAX_REGISTERS	25
-#define GUC_MMIO_WHITE_LIST_START	0x24d0
 #define GUC_MMIO_WHITE_LIST_MAX		12
 #define GUC_S3_SAVE_SPACE_PAGES		10
 
