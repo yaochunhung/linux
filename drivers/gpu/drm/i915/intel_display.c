@@ -4739,6 +4739,11 @@ skl_update_scaler(struct intel_crtc_state *crtc_state, bool force_detach,
 		(src_h != dst_w || src_w != dst_h):
 		(src_w != dst_w || src_h != dst_h);
 
+	if (crtc_state->bxt_pfit_dsi_dual_wa) {
+		DRM_DEBUG_KMS("DSI dual_link shift WA keep pfit on\n");
+		need_scaling = true;
+	}
+
 	/*
 	 * if plane is being disabled or scaler is no more required or force detach
 	 *  - free scaler binded to this plane/crtc
@@ -4871,7 +4876,13 @@ static int skl_update_scaler_plane(struct intel_crtc_state *crtc_state,
 
 static void skylake_scaler_disable(struct intel_crtc *crtc)
 {
+	struct drm_device *dev = crtc->base.dev;
+	struct drm_i915_private *dev_priv = to_i915(dev);
 	int i;
+
+	/* BXT Splitscreen WA */
+	if (IS_BXT_REVID(dev_priv, 0, BXT_REVID_A1))
+		return;
 
 	for (i = 0; i < crtc->num_scalers; i++)
 		skl_detach_scaler(crtc, i);
@@ -12845,7 +12856,10 @@ static int intel_crtc_atomic_check(struct drm_crtc *crtc,
 	}
 
 	if (INTEL_GEN(dev_priv) >= 9) {
-		if (mode_changed)
+		if (IS_BXT_REVID(dev_priv, 0, BXT_REVID_A1))
+			pipe_config->bxt_pfit_dsi_dual_wa = true;
+
+		if (mode_changed || pipe_config->bxt_pfit_dsi_dual_wa)
 			ret = skl_update_scaler_crtc(pipe_config);
 
 		if (!ret)

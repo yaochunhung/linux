@@ -691,6 +691,9 @@ struct intel_crtc_state {
 
 	/* Gamma mode programmed on the pipe */
 	uint32_t gamma_mode;
+
+	/* BXT dual-link DSI WA */
+	bool bxt_pfit_dsi_dual_wa;
 };
 
 struct vlv_wm_state {
