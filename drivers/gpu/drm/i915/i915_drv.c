@@ -52,6 +52,7 @@
 #include "intel_uc.h"
 
 #include "i915_ext_ioctl.h"
+#include "iotg_build.h"
 
 static struct drm_driver driver;
 
@@ -1286,7 +1287,11 @@ int i915_driver_load(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	dev_priv->profile.driver_load = sched_clock() - start_tm;
 
+#ifndef IOTG_BUILD_ID
+#define IOTG_BUILD_ID "unknown"
+#endif
 	printk(KERN_INFO "IOTG i915 forklift 2017-03-23\n");
+	printk(KERN_INFO "IOTG i915 build " IOTG_BUILD_ID "\n");
 
 	return 0;
 
