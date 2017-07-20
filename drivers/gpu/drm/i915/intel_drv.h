@@ -375,6 +375,10 @@ struct intel_atomic_state {
 	struct llist_node freed;
 };
 
+/* render compression property bits */
+#define COMP_UNCOMPRESSED          0
+#define COMP_RENDER                1
+
 struct intel_plane_state {
 	struct drm_plane_state base;
 	struct drm_rect clip;
@@ -410,6 +414,9 @@ struct intel_plane_state {
 	int scaler_id;
 
 	struct drm_intel_sprite_colorkey ckey;
+
+	/* Render compression */
+	unsigned int render_comp_enable;
 };
 
 struct intel_initial_plane_config {
@@ -1333,6 +1340,9 @@ int intel_plane_atomic_calc_changes(struct drm_crtc_state *crtc_state,
 
 unsigned int intel_tile_height(const struct drm_i915_private *dev_priv,
 			       uint64_t fb_modifier, unsigned int cpp);
+
+void intel_create_render_comp_property(struct drm_device *dev,
+				       struct intel_plane *plane);
 
 void assert_pch_transcoder_disabled(struct drm_i915_private *dev_priv,
 				    enum pipe pipe);

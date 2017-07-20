@@ -130,6 +130,7 @@ static int framebuffer_check(const struct drm_mode_fb_cmd2 *r)
 {
 	const struct drm_format_info *info;
 	int i;
+	int num_planes;
 
 	info = __drm_format_info(r->pixel_format & ~DRM_FORMAT_BIG_ENDIAN);
 	if (!info) {
@@ -139,6 +140,7 @@ static int framebuffer_check(const struct drm_mode_fb_cmd2 *r)
 		                                  &format_name));
 		return -EINVAL;
 	}
+	num_planes = info->num_planes;
 
 	if (r->width == 0 || r->width % info->hsub) {
 		DRM_DEBUG_KMS("bad framebuffer width %u\n", r->width);
@@ -150,7 +152,7 @@ static int framebuffer_check(const struct drm_mode_fb_cmd2 *r)
 		return -EINVAL;
 	}
 
-	for (i = 0; i < info->num_planes; i++) {
+	for (i = 0; i < num_planes; i++) {
 		unsigned int width = r->width / (i != 0 ? info->hsub : 1);
 		unsigned int height = r->height / (i != 0 ? info->vsub : 1);
 		unsigned int cpp = info->cpp[i];
@@ -203,7 +205,17 @@ static int framebuffer_check(const struct drm_mode_fb_cmd2 *r)
 		}
 	}
 
-	for (i = info->num_planes; i < 4; i++) {
+	if (r->flags & DRM_MODE_FB_AUX_PLANE) {
+		num_planes++;
+
+		if (num_planes == 4) {
+			DRM_DEBUG_KMS("num_planes cannot exceed 3 including aux plane\n");
+			return -EINVAL;
+		}
+	}
+
+
+	for (i = num_planes; i < 4; i++) {
 		if (r->modifier[i]) {
 			DRM_DEBUG_KMS("non-zero modifier for unused plane %d\n", i);
 			return -EINVAL;
@@ -241,7 +253,8 @@ drm_internal_framebuffer_create(struct drm_device *dev,
 	struct drm_framebuffer *fb;
 	int ret;
 
-	if (r->flags & ~(DRM_MODE_FB_INTERLACED | DRM_MODE_FB_MODIFIERS)) {
+	if (r->flags & ~(DRM_MODE_FB_INTERLACED | DRM_MODE_FB_MODIFIERS |
+			 DRM_MODE_FB_AUX_PLANE)) {
 		DRM_DEBUG_KMS("bad framebuffer flags 0x%08x\n", r->flags);
 		return ERR_PTR(-EINVAL);
 	}
@@ -260,6 +273,12 @@ drm_internal_framebuffer_create(struct drm_device *dev,
 	if (r->flags & DRM_MODE_FB_MODIFIERS &&
 	    !dev->mode_config.allow_fb_modifiers) {
 		DRM_DEBUG_KMS("driver does not support fb modifiers\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	if (r->flags & DRM_MODE_FB_AUX_PLANE &&
+	    !dev->mode_config.allow_aux_plane) {
+		DRM_DEBUG_KMS("driver does not support render compression\n");
 		return ERR_PTR(-EINVAL);
 	}
 
