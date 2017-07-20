@@ -84,6 +84,9 @@ static const uint32_t skl_primary_formats[] = {
 	DRM_FORMAT_YVYU,
 	DRM_FORMAT_UYVY,
 	DRM_FORMAT_VYUY,
+
+	/* Keep last --- NV12 only supported on first two pipes */
+	DRM_FORMAT_NV12,
 };
 
 /* Cursor formats */
@@ -2455,7 +2458,7 @@ u32 intel_compute_tile_offset(int *x, int *y,
 	u32 alignment;
 
 	/* AUX_DIST needs only 4K alignment */
-	if (fb->format->format == DRM_FORMAT_NV12 && plane == 1)
+	if (intel_plane_is_nv12(state) && plane == 1)
 		alignment = 4096;
 	else
 		alignment = intel_surf_alignment(dev_priv, fb->modifier);
@@ -2659,6 +2662,8 @@ static int skl_format_to_fourcc(int format, bool rgb_order, bool alpha)
 			return DRM_FORMAT_XBGR2101010;
 		else
 			return DRM_FORMAT_XRGB2101010;
+	case PLANE_CTL_FORMAT_NV12:
+		return DRM_FORMAT_NV12;
 	}
 }
 
@@ -2995,7 +3000,7 @@ int skl_check_plane_surface(struct intel_plane_state *plane_state)
 	 * Handle the AUX surface first since
 	 * the main surface setup depends on it.
 	 */
-	if (fb->format->format == DRM_FORMAT_NV12) {
+	if (intel_plane_is_nv12(plane_state)) {
 		ret = skl_check_nv12_aux_surface(plane_state);
 		if (ret)
 			return ret;
@@ -3342,6 +3347,8 @@ u32 skl_plane_ctl_format(uint32_t pixel_format, enum i915_alpha alpha)
 		return PLANE_CTL_FORMAT_YUV422 | PLANE_CTL_YUV422_UYVY;
 	case DRM_FORMAT_VYUY:
 		return PLANE_CTL_FORMAT_YUV422 | PLANE_CTL_YUV422_VYUY;
+	case DRM_FORMAT_NV12:
+		return PLANE_CTL_FORMAT_NV12;
 	default:
 		MISSING_CASE(pixel_format);
 	}
@@ -3419,6 +3426,7 @@ static void skylake_update_primary_plane(struct drm_plane *plane,
 	int dst_y = plane_state->base.dst.y1;
 	int dst_w = drm_rect_width(&plane_state->base.dst);
 	int dst_h = drm_rect_height(&plane_state->base.dst);
+	u32 hphase = 0, vphase = 0;
 
 	plane_ctl = PLANE_CTL_ENABLE |
 		    PLANE_CTL_PIPE_GAMMA_ENABLE |
@@ -3431,6 +3439,17 @@ static void skylake_update_primary_plane(struct drm_plane *plane,
 
 	if (render_comp)
 		plane_ctl |= PLANE_CTL_DECOMPRESSION_ENABLE;
+
+	if (intel_plane_is_nv12(plane_state)) {
+		/*
+		 * FIXME:  Hardware documentation is very vague about what
+		 * these settings really mean.  These are copied from VPG's
+		 * Android driver, although it's unclear whether they're
+		 * critical to proper NV12 operation or not.
+		 */
+		hphase = (PS_UV_PHASE_TRIP_EN | PS_Y_PHASE_TRIP_EN);
+		vphase = (PS_Y_PHASE_TRIP_EN | PS_UV_PHASE_FRAC_05);
+	}
 
 	/* Sizes are 0 based */
 	src_w--;
@@ -3482,6 +3501,8 @@ static void skylake_update_primary_plane(struct drm_plane *plane,
 		I915_WRITE(SKL_PS_PWR_GATE(pipe, scaler_id), 0);
 		I915_WRITE(SKL_PS_WIN_POS(pipe, scaler_id), (dst_x << 16) | dst_y);
 		I915_WRITE(SKL_PS_WIN_SZ(pipe, scaler_id), (dst_w << 16) | dst_h);
+		I915_WRITE(SKL_PS_HPHASE(pipe, scaler_id), hphase);
+		I915_WRITE(SKL_PS_VPHASE(pipe, scaler_id), vphase);
 		I915_WRITE(PLANE_POS(pipe, plane_id), 0);
 	} else {
 		I915_WRITE(PLANE_POS(pipe, plane_id), (dst_y << 16) | dst_x);
@@ -4727,7 +4748,7 @@ static void cpt_verify_modeset(struct drm_device *dev, int pipe)
 static int
 skl_update_scaler(struct intel_crtc_state *crtc_state, bool force_detach,
 		  unsigned scaler_user, int *scaler_id, unsigned int rotation,
-		  int src_w, int src_h, int dst_w, int dst_h)
+		  int src_w, int src_h, int dst_w, int dst_h, bool is_nv12)
 {
 	struct intel_crtc_scaler_state *scaler_state =
 		&crtc_state->scaler_state;
@@ -4735,9 +4756,9 @@ skl_update_scaler(struct intel_crtc_state *crtc_state, bool force_detach,
 		to_intel_crtc(crtc_state->base.crtc);
 	int need_scaling;
 
-	need_scaling = drm_rotation_90_or_270(rotation) ?
+	need_scaling = is_nv12 || (drm_rotation_90_or_270(rotation) ?
 		(src_h != dst_w || src_w != dst_h):
-		(src_w != dst_w || src_h != dst_h);
+		(src_w != dst_w || src_h != dst_h));
 
 	if (crtc_state->bxt_pfit_dsi_dual_wa) {
 		DRM_DEBUG_KMS("DSI dual_link shift WA keep pfit on\n");
@@ -4806,7 +4827,8 @@ int skl_update_scaler_crtc(struct intel_crtc_state *state)
 	return skl_update_scaler(state, !state->base.active, SKL_CRTC_INDEX,
 		&state->scaler_state.scaler_id, DRM_ROTATE_0,
 		state->pipe_src_w, state->pipe_src_h,
-		adjusted_mode->crtc_hdisplay, adjusted_mode->crtc_vdisplay);
+		adjusted_mode->crtc_hdisplay, adjusted_mode->crtc_vdisplay,
+		false);
 }
 
 /**
@@ -4837,7 +4859,8 @@ static int skl_update_scaler_plane(struct intel_crtc_state *crtc_state,
 				drm_rect_width(&plane_state->base.src) >> 16,
 				drm_rect_height(&plane_state->base.src) >> 16,
 				drm_rect_width(&plane_state->base.dst),
-				drm_rect_height(&plane_state->base.dst));
+				drm_rect_height(&plane_state->base.dst),
+				intel_plane_is_nv12(plane_state));
 
 	if (ret || plane_state->scaler_id < 0)
 		return ret;
@@ -4863,6 +4886,7 @@ static int skl_update_scaler_plane(struct intel_crtc_state *crtc_state,
 	case DRM_FORMAT_YVYU:
 	case DRM_FORMAT_UYVY:
 	case DRM_FORMAT_VYUY:
+	case DRM_FORMAT_NV12:
 		break;
 	default:
 		DRM_DEBUG_KMS("[PLANE:%d:%s] FB:%d unsupported scaling format 0x%x\n",
@@ -9872,6 +9896,10 @@ skylake_get_initial_plane_config(struct intel_crtc *crtc,
 	fourcc = skl_format_to_fourcc(pixel_format,
 				      val & PLANE_CTL_ORDER_RGBX,
 				      val & PLANE_CTL_ALPHA_MASK);
+	if (fourcc == DRM_FORMAT_NV12) {
+		DRM_DEBUG_KMS("Cannot inherit NV12 fb's yet\n");
+		goto error;
+	}
 	fb->format = drm_format_info(fourcc);
 
 	tiling = val & PLANE_CTL_TILED_MASK;
@@ -15115,9 +15143,10 @@ intel_cleanup_plane_fb(struct drm_plane *plane,
 }
 
 int
-skl_max_scale(struct intel_crtc *intel_crtc, struct intel_crtc_state *crtc_state)
+skl_max_scale(struct intel_crtc *intel_crtc,
+	      struct intel_crtc_state *crtc_state,
+	      struct intel_plane_state *plane_state)
 {
-	int max_scale;
 	int crtc_clock, cdclk;
 
 	if (!intel_crtc || !crtc_state->base.enable)
@@ -15131,13 +15160,17 @@ skl_max_scale(struct intel_crtc *intel_crtc, struct intel_crtc_state *crtc_state
 
 	/*
 	 * skl max scale is lower of:
-	 *    close to 3 but not 3, -1 is for that purpose
+	 *    fixed limit
 	 *            or
 	 *    cdclk/crtc_clock
+	 *
+	 * fixed limit is just under 2.0 (0x1ffff in fixed pt) for NV12
+	 * or just under 3.0 (0x2ffff in fixed pt) for non-NV12
 	 */
-	max_scale = min((1 << 16) * 3 - 1, (1 << 8) * ((cdclk << 8) / crtc_clock));
-
-	return max_scale;
+	if (intel_plane_is_nv12(plane_state))
+		return min(0x1ffff, (1 << 8) * ((cdclk << 8) / crtc_clock));
+	else
+		return min(0x2ffff, (1 << 8) * ((cdclk << 8) / crtc_clock));
 }
 
 static int skl_check_compression(struct drm_i915_private *dev_priv,
@@ -15236,7 +15269,9 @@ intel_check_primary_plane(struct drm_plane *plane,
 		/* use scaler when colorkey is not required */
 		if (state->ckey.flags == I915_SET_COLORKEY_NONE) {
 			min_scale = 1;
-			max_scale = skl_max_scale(to_intel_crtc(crtc), crtc_state);
+			max_scale = skl_max_scale(to_intel_crtc(crtc),
+						  crtc_state,
+						  state);
 		}
 		can_position = true;
 	}
@@ -15514,6 +15549,13 @@ intel_primary_plane_create(struct drm_i915_private *dev_priv, enum pipe pipe)
 	if (INTEL_GEN(dev_priv) >= 9) {
 		intel_primary_formats = skl_primary_formats;
 		num_formats = ARRAY_SIZE(skl_primary_formats);
+
+		/*
+		 * Drop final format (NV12) for pipes or hardware steppings
+		 * that don't support it.
+		 */
+		if (IS_BXT_REVID(dev_priv, 0, BXT_REVID_C0) || pipe >= PIPE_C)
+			num_formats--;
 
 		primary->update_plane = skylake_update_primary_plane;
 		primary->disable_plane = skylake_disable_primary_plane;
@@ -16455,6 +16497,31 @@ static int intel_framebuffer_init(struct drm_device *dev,
 		if (INTEL_GEN(dev_priv) < 5) {
 			DRM_DEBUG("unsupported pixel format: %s\n",
 			          drm_get_format_name(mode_cmd->pixel_format, &format_name));
+			return -EINVAL;
+		}
+		break;
+	case DRM_FORMAT_NV12:
+		if (INTEL_GEN(dev_priv) < 9) {
+			DRM_DEBUG("unsupported pixel format: %s\n",
+				  drm_get_format_name(mode_cmd->pixel_format, &format_name));
+			return -EINVAL;
+		}
+
+		/*
+		 * On current hardware we expect the UV plane to immediately
+		 * follow the Y plane.  This means we can't really allocate
+		 * them as separate bo's since they might be too far apart or
+		 * the UV might come before the Y.
+		 */
+		if (mode_cmd->handles[0] != mode_cmd->handles[1]) {
+			DRM_DEBUG("Y and UV planes should be stored in the same buffer for Intel hardware");
+			return -EINVAL;
+		}
+
+		/* Catch easy/dumb mistakes with overlapping planes */
+		if (mode_cmd->offsets[1] <
+		    mode_cmd->height * mode_cmd->pitches[0]) {
+			DRM_DEBUG("UV plane starts before end of Y plane");
 			return -EINVAL;
 		}
 		break;

@@ -223,6 +223,7 @@ skl_update_plane(struct drm_plane *drm_plane,
 	uint32_t aux_y = plane_state->aux.y;
 	uint32_t src_w = drm_rect_width(&plane_state->base.src) >> 16;
 	uint32_t src_h = drm_rect_height(&plane_state->base.src) >> 16;
+	u32 hphase = 0, vphase = 0;
 
 	plane_ctl = PLANE_CTL_ENABLE |
 		PLANE_CTL_PIPE_GAMMA_ENABLE |
@@ -245,6 +246,17 @@ skl_update_plane(struct drm_plane *drm_plane,
 		   (key->channel_mask & GENMASK(0, 26)));
 	if (key->flags)
 		I915_WRITE(PLANE_KEYVAL(pipe, plane_id), key->min_value);
+
+	if (intel_plane_is_nv12(plane_state)) {
+		/*
+		 * FIXME:  Hardware documentation is very vague about what
+		 * these settings really mean.  These are copied from VPG's
+		 * Android driver, although it's unclear whether they're
+		 * critical to proper NV12 operation or not.
+		 */
+		hphase = (PS_UV_PHASE_TRIP_EN | PS_Y_PHASE_TRIP_EN);
+		vphase = (PS_Y_PHASE_TRIP_EN | PS_UV_PHASE_FRAC_05);
+	}
 
 	if (key->flags & I915_SET_COLORKEY_DESTINATION)
 		plane_ctl |= PLANE_CTL_KEY_ENABLE_DESTINATION;
@@ -289,7 +301,8 @@ skl_update_plane(struct drm_plane *drm_plane,
 		I915_WRITE(SKL_PS_WIN_POS(pipe, scaler_id), (crtc_x << 16) | crtc_y);
 		I915_WRITE(SKL_PS_WIN_SZ(pipe, scaler_id),
 			((crtc_w + 1) << 16)|(crtc_h + 1));
-
+		I915_WRITE(SKL_PS_HPHASE(pipe, scaler_id), hphase);
+		I915_WRITE(SKL_PS_VPHASE(pipe, scaler_id), vphase);
 		I915_WRITE(PLANE_POS(pipe, plane_id), 0);
 	} else {
 		I915_WRITE(PLANE_POS(pipe, plane_id), (crtc_y << 16) | crtc_x);
@@ -812,7 +825,7 @@ intel_check_sprite_plane(struct drm_plane *plane,
 		if (state->ckey.flags == I915_SET_COLORKEY_NONE) {
 			can_scale = 1;
 			min_scale = 1;
-			max_scale = skl_max_scale(intel_crtc, crtc_state);
+			max_scale = skl_max_scale(intel_crtc, crtc_state, state);
 		} else {
 			can_scale = 0;
 			min_scale = DRM_PLANE_HELPER_NO_SCALING;
@@ -1046,6 +1059,12 @@ static uint32_t skl_plane_formats[] = {
 	DRM_FORMAT_YVYU,
 	DRM_FORMAT_UYVY,
 	DRM_FORMAT_VYUY,
+
+	/*
+	 * Keep last --- NV12 only supported on first two pipes and first two
+	 * universal planes.
+	 */
+	DRM_FORMAT_NV12,
 };
 
 struct intel_plane *
@@ -1082,6 +1101,14 @@ intel_sprite_plane_create(struct drm_i915_private *dev_priv,
 
 		plane_formats = skl_plane_formats;
 		num_plane_formats = ARRAY_SIZE(skl_plane_formats);
+
+		/*
+		 * Drop the last format (NV12) for pipes/planes or hardware
+		 * steppings that don't support it.
+		 */
+		if (IS_BXT_REVID(dev_priv, 0, BXT_REVID_C0) ||
+		    pipe >= PIPE_C || plane >= 1)
+			num_plane_formats--;
 	} else if (IS_VALLEYVIEW(dev_priv) || IS_CHERRYVIEW(dev_priv)) {
 		intel_plane->can_scale = false;
 		intel_plane->max_downscale = 1;

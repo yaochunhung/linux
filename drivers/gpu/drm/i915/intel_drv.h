@@ -1300,6 +1300,12 @@ intel_crtc_has_dp_encoder(const struct intel_crtc_state *crtc_state)
 		 (1 << INTEL_OUTPUT_DP_MST) |
 		 (1 << INTEL_OUTPUT_EDP));
 }
+static inline bool
+intel_plane_is_nv12(const struct intel_plane_state *pstate)
+{
+	return pstate && pstate->base.fb &&
+		pstate->base.fb->format->format == DRM_FORMAT_NV12;
+}
 static inline void
 intel_wait_for_vblank(struct drm_i915_private *dev_priv, enum pipe pipe)
 {
@@ -1420,7 +1426,9 @@ void intel_mode_from_pipe_config(struct drm_display_mode *mode,
 				 struct intel_crtc_state *pipe_config);
 
 int skl_update_scaler_crtc(struct intel_crtc_state *crtc_state);
-int skl_max_scale(struct intel_crtc *crtc, struct intel_crtc_state *crtc_state);
+int skl_max_scale(struct intel_crtc *crtc,
+		  struct intel_crtc_state *crtc_state,
+		  struct intel_plane_state *plane_state);
 
 static inline u32 intel_plane_ggtt_offset(const struct intel_plane_state *state)
 {

@@ -3231,7 +3231,7 @@ skl_plane_relative_data_rate(const struct intel_crtc_state *cstate,
 
 	if (pstate->plane->type == DRM_PLANE_TYPE_CURSOR)
 		return 0;
-	if (y && format != DRM_FORMAT_NV12)
+	if (y && !intel_plane_is_nv12(intel_pstate))
 		return 0;
 
 	width = drm_rect_width(&intel_pstate->base.src) >> 16;
@@ -3241,7 +3241,7 @@ skl_plane_relative_data_rate(const struct intel_crtc_state *cstate,
 		swap(width, height);
 
 	/* for planar format */
-	if (format == DRM_FORMAT_NV12) {
+	if (intel_plane_is_nv12(intel_pstate)) {
 		if (y)  /* y-plane data rate */
 			data_rate = width * height *
 				fb->format->cpp[0];
@@ -3314,7 +3314,7 @@ skl_ddb_min_alloc(const struct drm_plane_state *pstate,
 		return 0;
 
 	/* For packed formats, no y-plane, return 0 */
-	if (y && fb->format->format != DRM_FORMAT_NV12)
+	if (y && !intel_plane_is_nv12(intel_pstate))
 		return 0;
 
 	/* For Non Y-tile return 8-blocks */
@@ -3329,12 +3329,12 @@ skl_ddb_min_alloc(const struct drm_plane_state *pstate,
 		swap(src_w, src_h);
 
 	/* Halve UV plane width and height for NV12 */
-	if (fb->format->format == DRM_FORMAT_NV12 && !y) {
+	if (intel_plane_is_nv12(intel_pstate) && !y) {
 		src_w /= 2;
 		src_h /= 2;
 	}
 
-	if (fb->format->format == DRM_FORMAT_NV12 && !y)
+	if (intel_plane_is_nv12(intel_pstate) && !y)
 		plane_bpp = fb->format->cpp[1];
 	else
 		plane_bpp = fb->format->cpp[0];
@@ -3566,6 +3566,7 @@ static int skl_compute_plane_wm(const struct drm_i915_private *dev_priv,
 				struct intel_plane_state *intel_pstate,
 				uint16_t ddb_allocation,
 				int level,
+				bool is_y_plane,
 				uint16_t *out_blocks, /* out */
 				uint8_t *out_lines, /* out */
 				bool *enabled /* out */)
@@ -3589,6 +3590,11 @@ static int skl_compute_plane_wm(const struct drm_i915_private *dev_priv,
 	bool apply_memory_bw_wa = skl_needs_memory_bw_wa(state);
 	bool y_tiled, x_tiled;
 
+	if (WARN_ON(is_y_plane && !intel_plane_is_nv12(intel_pstate))) {
+		*enabled = false;
+		return 0;
+	}
+
 	if (latency == 0 || !cstate->base.active || !intel_pstate->base.visible) {
 		*enabled = false;
 		return 0;
@@ -3611,13 +3617,11 @@ static int skl_compute_plane_wm(const struct drm_i915_private *dev_priv,
 	if (drm_rotation_90_or_270(pstate->rotation))
 		swap(width, height);
 
-	cpp = fb->format->cpp[0];
+	cpp = intel_plane_is_nv12(intel_pstate) && !is_y_plane ?
+		fb->format->cpp[1] : fb->format->cpp[0];
 	plane_pixel_rate = skl_adjusted_plane_pixel_rate(cstate, intel_pstate);
 
 	if (drm_rotation_90_or_270(pstate->rotation)) {
-		int cpp = (fb->format->format == DRM_FORMAT_NV12) ?
-			fb->format->cpp[1] :
-			fb->format->cpp[0];
 
 		switch (cpp) {
 		case 1:
@@ -3760,11 +3764,35 @@ skl_compute_wm_level(const struct drm_i915_private *dev_priv,
 				   intel_pstate,
 				   ddb_blocks,
 				   level,
+				   false,
 				   &result->plane_res_b,
 				   &result->plane_res_l,
 				   &result->plane_en);
 	if (ret)
 		return ret;
+
+	/*
+	 * For NV12, the result values calculated above were for the UV plane.
+	 * According to the bspec, it's important to calculate the UV plane
+	 * watermarks (to ensure they fall within the DDB allocation), but they
+	 * never actually get programmed to the hardware; only the Y plane gets
+	 * programmed.  So for NV12, we now calculate the Y plane's values and
+	 * purposely clobber the UV result structure we just calculated above.
+	 */
+	if (intel_plane_is_nv12(intel_pstate)) {
+		ddb_blocks = skl_ddb_entry_size(&ddb->y_plane[pipe][intel_plane->id]);
+		ret = skl_compute_plane_wm(dev_priv,
+					   cstate,
+					   intel_pstate,
+					   ddb_blocks,
+					   level,
+					   true,
+					   &result->plane_res_b,
+					   &result->plane_res_l,
+					   &result->plane_en);
+		if (ret)
+			return ret;
+	}
 
 	return 0;
 }
