@@ -70,3 +70,13 @@ config SND_SOC_SOF_APOLLOLAKE
           using the Apollolake processors.
           Say Y if you have such a device.
           If unsure select "N".
+
+config SND_SOC_SOF_CANNONLAKE
+	tristate "SOF support for Cannonlake"
+	depends on SND_SOC_SOF_INTEL
+	select SND_SOC_SOF_PCI
+	help
+          This adds support for Sound Open Firmware for Intel(R) platforms
+          using the Cannonlake processors.
+          Say Y if you have such a device.
+          If unsure select "N".
