@@ -1580,6 +1580,7 @@ static int chv_gpio_probe(struct chv_pinctrl *pctrl, int irq)
 	bool need_valid_mask = !dmi_check_system(chv_no_valid_mask);
 	int ret, i, offset;
 	int irq_base;
+	u32 intmask;
 
 	*chip = chv_gpio_chip;
 
@@ -1607,10 +1608,12 @@ static int chv_gpio_probe(struct chv_pinctrl *pctrl, int irq)
 		offset += range->npins;
 	}
 
-	/* Do not add GPIOs that can only generate GPEs to the IRQ domain */
+	intmask = readl(pctrl->regs + CHV_INTMASK);
+
 	for (i = 0; i < pctrl->community->npins; i++) {
 		const struct pinctrl_pin_desc *desc;
 		u32 intsel;
+		u32 intcfg;
 
 		desc = &pctrl->community->pins[i];
 
@@ -1618,9 +1621,27 @@ static int chv_gpio_probe(struct chv_pinctrl *pctrl, int irq)
 		intsel &= CHV_PADCTRL0_INTSEL_MASK;
 		intsel >>= CHV_PADCTRL0_INTSEL_SHIFT;
 
+		/*
+		 * Do not add GPIOs that can only generate GPEs
+		 * to the IRQ domain.
+		 */
 		if (need_valid_mask && intsel >= pctrl->community->nirqs)
 			clear_bit(i, chip->irq_valid_mask);
+
+		/*
+		 * Also make sure pins that are not configured as interrupts
+		 * are masked, or we'll get an interrupt storm.
+		 */
+		if ((intmask & BIT(intsel)) &&
+		    !(intcfg & CHV_PADCTRL1_INTWAKECFG_MASK)) {
+			dev_dbg(pctrl->dev,
+				"%s: pin %d is not configured as interrupt, resetting interrupt mask\n",
+				__func__, desc->number);
+			intmask &= ~BIT(intsel);
+		}
 	}
+
+	chv_writel(intmask, pctrl->regs + CHV_INTMASK);
 
 	/* Clear all interrupts */
 	chv_writel(0xffff, pctrl->regs + CHV_INTSTAT);
