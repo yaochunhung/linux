@@ -148,7 +148,7 @@ static ssize_t sof_dfsentry_trace_read(struct file *file, char __user *buffer,
 
 	/* get available count based on current host offset */
 	err = sof_wait_trace_avail(sdev, &count, lpos, size);
-	if (err < 0 || count == 0) {
+	if (err < 0) {
 		dev_err(sdev->dev,
 			"error: cant get more trace %d\n", err);
 		return 0;
@@ -274,12 +274,16 @@ int snd_sof_trace_update_pos(struct snd_sof_dev *sdev,
 		wake_up(&sdev->trace_sleep);
 	}
 
+	if (posn->overflow != 0)
+		dev_err(sdev->dev, "error: DSP trace buffer overflow %u bytes."
+			" Total messages %d\n", posn->overflow, posn->messages);
+
 	return 0;
 }
 
 void snd_sof_trace_notify_for_error(struct snd_sof_dev *sdev)
 {
-	dev_err(sdev->dev, "ASoC: trace wakes up for error!\n");
+	dev_err(sdev->dev, "error: waking up any trace sleepers\n");
 	wake_up(&sdev->trace_sleep);
 }
 
