@@ -1304,6 +1304,9 @@ static int intel_master_probe(struct platform_device *pdev)
 	/* set driver data, accessed by snd_soc_dai_set_drvdata() */
 	dev_set_drvdata(&pdev->dev, &sdw->cdns);
 
+	/* use generic bandwidth allocation algorithm */
+	sdw->cdns.bus.compute_params = sdw_compute_params;
+
 	ret = sdw_add_bus_master(&sdw->cdns.bus);
 	if (ret) {
 		dev_err(&pdev->dev, "sdw_add_bus_master fail: %d\n", ret);
