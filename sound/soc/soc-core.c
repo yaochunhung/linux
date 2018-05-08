@@ -3053,8 +3053,10 @@ EXPORT_SYMBOL_GPL(snd_soc_component_exit_regmap);
 
 #endif
 
-static void snd_soc_component_add_unlocked(struct snd_soc_component *component)
+static void snd_soc_component_add(struct snd_soc_component *component)
 {
+	mutex_lock(&client_mutex);
+
 	if (!component->driver->write && !component->driver->read) {
 		if (!component->regmap)
 			component->regmap = dev_get_regmap(component->dev, NULL);
@@ -3064,12 +3066,7 @@ static void snd_soc_component_add_unlocked(struct snd_soc_component *component)
 
 	list_add(&component->list, &component_list);
 	INIT_LIST_HEAD(&component->dobj_list);
-}
 
-static void snd_soc_component_add(struct snd_soc_component *component)
-{
-	mutex_lock(&client_mutex);
-	snd_soc_component_add_unlocked(component);
 	mutex_unlock(&client_mutex);
 }
 
