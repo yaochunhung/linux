@@ -306,6 +306,7 @@ static const struct snd_soc_dapm_route byt_rt5651_ssp0_aif2_map[] = {
 };
 
 static const struct snd_soc_dapm_route byt_rt5651_ssp2_aif1_map[] = {
+#if !IS_ENABLED(CONFIG_SND_SOC_SOF_INTEL)
 	{"ssp2 Tx", NULL, "codec_out0"},
 	{"ssp2 Tx", NULL, "codec_out1"},
 	{"codec_in0", NULL, "ssp2 Rx"},
@@ -313,6 +314,7 @@ static const struct snd_soc_dapm_route byt_rt5651_ssp2_aif1_map[] = {
 
 	{"AIF1 Playback", NULL, "ssp2 Tx"},
 	{"ssp2 Rx", NULL, "AIF1 Capture"},
+#endif
 };
 
 static const struct snd_soc_dapm_route byt_rt5651_ssp2_aif2_map[] = {
@@ -786,6 +788,7 @@ static struct snd_soc_card byt_rt5651_card = {
 	.resume_post = byt_rt5651_resume,
 };
 
+#if !IS_ENABLED(CONFIG_SND_SOC_SOF_INTEL)
 static const struct x86_cpu_id baytrail_cpu_ids[] = {
 	{ X86_VENDOR_INTEL, 6, INTEL_FAM6_ATOM_SILVERMONT1 }, /* Valleyview */
 	{}
@@ -868,6 +871,7 @@ struct acpi_chan_package {   /* ACPICA seems to require 64 bit integers */
 	u64 aif_value;       /* 1: AIF1, 2: AIF2 */
 	u64 mclock_value;    /* usually 25MHz (0x17d7940), ignored */
 };
+#endif
 
 static int snd_byt_rt5651_mc_probe(struct platform_device *pdev)
 {
@@ -877,7 +881,9 @@ static int snd_byt_rt5651_mc_probe(struct platform_device *pdev)
 	struct device *codec_dev;
 	const char *i2c_name = NULL;
 	const char *hp_swapped;
+#if !IS_ENABLED(CONFIG_SND_SOC_SOF_INTEL)
 	bool is_bytcr = false;
+#endif
 	int ret_val = 0;
 	int dai_index = 0;
 	int i;
@@ -915,6 +921,7 @@ static int snd_byt_rt5651_mc_probe(struct platform_device *pdev)
 	if (!codec_dev)
 		return -EPROBE_DEFER;
 
+#if !IS_ENABLED(CONFIG_SND_SOC_SOF_INTEL)
 	/*
 	 * swap SSP0 if bytcr is detected
 	 * (will be overridden if DMI quirk is detected)
@@ -973,6 +980,7 @@ static int snd_byt_rt5651_mc_probe(struct platform_device *pdev)
 			byt_rt5651_quirk |= BYT_RT5651_SSP0_AIF2;
 		}
 	}
+#endif
 
 	/* check quirks before creating card */
 	dmi_check_system(byt_rt5651_quirk_table);
@@ -984,6 +992,7 @@ static int snd_byt_rt5651_mc_probe(struct platform_device *pdev)
 		return ret_val;
 	}
 
+#if !IS_ENABLED(CONFIG_SND_SOC_SOF_INTEL)
 	/* Cherry Trail devices use an external amplifier enable gpio */
 	if (x86_match_cpu(cherrytrail_cpu_ids)) {
 		snd_byt_rt5651_mc_add_amp_en_gpio_mapping(codec_dev);
@@ -1007,6 +1016,7 @@ static int snd_byt_rt5651_mc_probe(struct platform_device *pdev)
 			}
 		}
 	}
+#endif
 
 	put_device(codec_dev);
 
