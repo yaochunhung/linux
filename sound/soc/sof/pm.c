@@ -192,10 +192,11 @@ static void sof_suspend_streams(struct snd_sof_dev *sdev)
 {
 	struct snd_sof_pcm *spcm;
 	struct snd_pcm_substream *substream;
-	int state, dir;
+	int dir;
 
 	/* suspend all running streams */
 	list_for_each_entry(spcm, &sdev->pcm_list, list) {
+
 		mutex_lock(&spcm->mutex);
 
 		/* suspend running playback stream */
@@ -203,7 +204,7 @@ static void sof_suspend_streams(struct snd_sof_dev *sdev)
 		substream = spcm->stream[dir].substream;
 
 		if (substream && substream->runtime) {
-			state = substream->runtime->status->state;
+
 			snd_pcm_suspend(substream);
 
 			/*
@@ -218,7 +219,7 @@ static void sof_suspend_streams(struct snd_sof_dev *sdev)
 		substream = spcm->stream[dir].substream;
 
 		if (substream && substream->runtime) {
-			state = substream->runtime->status->state;
+
 			snd_pcm_suspend(substream);
 
 			/*
