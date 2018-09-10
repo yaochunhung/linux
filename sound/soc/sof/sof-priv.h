@@ -140,7 +140,7 @@ struct snd_sof_dsp_ops {
 
 	/* FW loading */
 	int (*load_firmware)(struct snd_sof_dev *sof_dev,
-			     const struct firmware *fw, bool first_boot);
+			     bool first_boot);
 	int (*load_module)(struct snd_sof_dev *sof_dev,
 			   struct snd_sof_mod_hdr *hdr);
 	int (*fw_ready)(struct snd_sof_dev *sdev, u32 msg_id);
@@ -363,6 +363,9 @@ struct snd_sof_dev {
 	void *private;			/* core does not touch this */
 };
 
+#define sof_to_bus(s)  (&(s)->hda->hbus.core)
+#define sof_to_hbus(s) (&(s)->hda->hbus)
+
 /*
  * SOF platform private struct used as drvdata of
  * platform dev (e.g. pci/acpi/spi...) drvdata.
@@ -393,9 +396,9 @@ int snd_sof_create_page_table(struct snd_sof_dev *sdev,
  * Firmware loading.
  */
 int snd_sof_load_firmware(struct snd_sof_dev *sdev,
-			  const struct firmware *fw, bool first_boot);
+			  bool first_boot);
 int snd_sof_load_firmware_memcpy(struct snd_sof_dev *sdev,
-				 const struct firmware *fw, bool first_boot);
+				 bool first_boot);
 int snd_sof_run_firmware(struct snd_sof_dev *sdev);
 int snd_sof_parse_module_memcpy(struct snd_sof_dev *sdev,
 				struct snd_sof_mod_hdr *module);
@@ -518,4 +521,9 @@ static inline void sof_oops(struct snd_sof_dev *sdev, void *oops)
 }
 
 extern const struct sof_arch_ops sof_xtensa_arch_ops;
+
+/*
+ * Utilities
+ */
+int sof_create_platform_device(struct sof_platform_priv *priv);
 #endif

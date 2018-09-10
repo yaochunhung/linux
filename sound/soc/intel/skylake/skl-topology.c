@@ -916,6 +916,87 @@ static int skl_tplg_set_module_bind_params(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
+static int skl_get_module_id(struct skl_sst *ctx, uuid_le *uuid)
+{
+	struct uuid_module *module;
+
+	list_for_each_entry(module, &ctx->uuid_list, list) {
+		if (uuid_le_cmp(*uuid, module->uuid) == 0)
+			return module->id;
+	}
+
+	return -EINVAL;
+}
+
+static int skl_tplg_find_moduleid_from_uuid(struct skl *skl,
+					const struct snd_kcontrol_new *k)
+{
+	struct soc_bytes_ext *sb = (void *) k->private_value;
+	struct skl_algo_data *bc = (struct skl_algo_data *)sb->dobj.private;
+	struct skl_kpb_params *uuid_params, *params;
+	struct hdac_bus *bus = skl_to_bus(skl);
+	int i, size, module_id;
+
+	if (bc->set_params == SKL_PARAM_BIND && bc->max) {
+		uuid_params = (struct skl_kpb_params *)bc->params;
+		size = uuid_params->num_modules *
+			sizeof(struct skl_mod_inst_map) +
+			sizeof(uuid_params->num_modules);
+
+		params = devm_kzalloc(bus->dev, size, GFP_KERNEL);
+		if (!params)
+			return -ENOMEM;
+
+		params->num_modules = uuid_params->num_modules;
+
+		for (i = 0; i < uuid_params->num_modules; i++) {
+			module_id = skl_get_module_id(skl->skl_sst,
+				&uuid_params->u.map_uuid[i].mod_uuid);
+			if (module_id < 0) {
+				devm_kfree(bus->dev, params);
+				return -EINVAL;
+			}
+
+			params->u.map[i].mod_id = module_id;
+			params->u.map[i].inst_id =
+				uuid_params->u.map_uuid[i].inst_id;
+		}
+
+		devm_kfree(bus->dev, bc->params);
+		bc->params = (char *)params;
+		bc->max = size;
+	}
+
+	return 0;
+}
+
+/*
+ * Retrieve the module id from UUID mentioned in the
+ * post bind params
+ */
+void skl_tplg_add_moduleid_in_bind_params(struct skl *skl,
+				struct snd_soc_dapm_widget *w)
+{
+	struct skl_module_cfg *mconfig = w->priv;
+	int i;
+
+	/*
+	 * Post bind params are used for only for KPB
+	 * to set copier instances to drain the data
+	 * in fast mode
+	 */
+	if (mconfig->m_type != SKL_MODULE_TYPE_KPB)
+		return;
+
+	for (i = 0; i < w->num_kcontrols; i++)
+		if ((w->kcontrol_news[i].access &
+			SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK) &&
+			(skl_tplg_find_moduleid_from_uuid(skl,
+			&w->kcontrol_news[i]) < 0))
+			dev_err(skl->skl_sst->dev,
+				"%s: invalid kpb post bind params\n",
+				__func__);
+}
 
 static int skl_tplg_module_add_deferred_bind(struct skl *skl,
 	struct skl_module_cfg *src, struct skl_module_cfg *dst)
@@ -2776,9 +2857,8 @@ static int skl_tplg_widget_load(struct snd_soc_component *cmpnt, int index,
 				struct snd_soc_tplg_dapm_widget *tplg_w)
 {
 	int ret;
-	struct hdac_ext_bus *ebus = snd_soc_component_get_drvdata(cmpnt);
-	struct skl *skl = ebus_to_skl(ebus);
-	struct hdac_bus *bus = ebus_to_hbus(ebus);
+	struct hdac_bus *bus = snd_soc_component_get_drvdata(cmpnt);
+	struct skl *skl = bus_to_skl(bus);
 	struct skl_module_cfg *mconfig;
 
 	if (!tplg_w->priv.size)
@@ -2885,8 +2965,7 @@ static int skl_tplg_control_load(struct snd_soc_component *cmpnt,
 	struct soc_bytes_ext *sb;
 	struct snd_soc_tplg_bytes_control *tplg_bc;
 	struct snd_soc_tplg_enum_control *tplg_ec;
-	struct hdac_ext_bus *ebus  = snd_soc_component_get_drvdata(cmpnt);
-	struct hdac_bus *bus = ebus_to_hbus(ebus);
+	struct hdac_bus *bus  = snd_soc_component_get_drvdata(cmpnt);
 	struct soc_enum *se;
 
 	switch (hdr->ops.info) {
@@ -3370,9 +3449,8 @@ static int skl_tplg_get_manifest_data(struct snd_soc_tplg_manifest *manifest,
 static int skl_manifest_load(struct snd_soc_component *cmpnt, int index,
 				struct snd_soc_tplg_manifest *manifest)
 {
-	struct hdac_ext_bus *ebus = snd_soc_component_get_drvdata(cmpnt);
-	struct hdac_bus *bus = ebus_to_hbus(ebus);
-	struct skl *skl = ebus_to_skl(ebus);
+	struct hdac_bus *bus = snd_soc_component_get_drvdata(cmpnt);
+	struct skl *skl = bus_to_skl(bus);
 
 	/* proceed only if we have private data defined */
 	if (manifest->priv.size == 0)
@@ -3461,12 +3539,11 @@ static void skl_tplg_set_pipe_type(struct skl *skl, struct skl_pipe *pipe)
 /*
  * SKL topology init routine
  */
-int skl_tplg_init(struct snd_soc_platform *platform, struct hdac_ext_bus *ebus)
+int skl_tplg_init(struct snd_soc_component *component, struct hdac_bus *bus)
 {
 	int ret;
 	const struct firmware *fw;
-	struct hdac_bus *bus = ebus_to_hbus(ebus);
-	struct skl *skl = ebus_to_skl(ebus);
+	struct skl *skl = bus_to_skl(bus);
 	struct skl_pipeline *ppl;
 
 	ret = request_firmware(&fw, skl->tplg_name, bus->dev);
