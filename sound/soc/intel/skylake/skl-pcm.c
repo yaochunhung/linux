@@ -1397,19 +1397,19 @@ static int skl_populate_modules(struct skl *skl)
 
 static int skl_platform_soc_probe(struct snd_soc_platform *platform)
 {
-	struct hdac_bus *bus = dev_get_drvdata(component->dev);
+	struct hdac_bus *bus = dev_get_drvdata(platform->component.dev);
 	struct skl *skl = bus_to_skl(bus);
 	const struct skl_dsp_ops *ops;
 	int ret;
 
-	pm_runtime_get_sync(component->dev);
+	pm_runtime_get_sync(platform->component.dev);
 	if (bus->ppcap) {
-		skl->component = component;
+		skl->platform = platform;
 
 		/* init debugfs */
 		skl->debugfs = skl_debugfs_init(skl);
 
-		ret = skl_tplg_init(component, bus);
+		ret = skl_tplg_init(&platform->component, bus);
 		if (ret < 0) {
 			dev_err(platform->dev, "Failed to init topology!\n");
 			return ret;
