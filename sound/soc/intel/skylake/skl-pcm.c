@@ -1409,7 +1409,7 @@ static int skl_platform_soc_probe(struct snd_soc_platform *platform)
 		/* init debugfs */
 		skl->debugfs = skl_debugfs_init(skl);
 
-		ret = skl_tplg_init(&platform->component, bus);
+		ret = skl_tplg_init(platform, bus);
 		if (ret < 0) {
 			dev_err(platform->dev, "Failed to init topology!\n");
 			return ret;

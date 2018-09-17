@@ -3470,7 +3470,7 @@ static void skl_tplg_set_pipe_type(struct skl *skl, struct skl_pipe *pipe)
 /*
  * SKL topology init routine
  */
-int skl_tplg_init(struct snd_soc_component *component, struct hdac_bus *bus)
+int skl_tplg_init(struct snd_soc_platform *platform, struct hdac_bus *bus)
 {
 	int ret;
 	const struct firmware *fw;
@@ -3493,7 +3493,7 @@ int skl_tplg_init(struct snd_soc_component *component, struct hdac_bus *bus)
 	 * The complete tplg for SKL is loaded as index 0, we don't use
 	 * any other index
 	 */
-	ret = snd_soc_tplg_component_load(component,
+	ret = snd_soc_tplg_component_load(&platform->component,
 					&skl_tplg_ops, fw, 0);
 	if (ret < 0) {
 		dev_err(bus->dev, "tplg component load failed%d\n", ret);
