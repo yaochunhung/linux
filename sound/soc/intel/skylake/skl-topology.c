@@ -916,19 +916,6 @@ static int skl_tplg_set_module_bind_params(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
-static int skl_get_module_id(struct skl_sst *ctx, uuid_le *uuid)
-{
-	struct uuid_module *module;
-
-	list_for_each_entry(module, &ctx->uuid_list, list) {
-		if (uuid_le_cmp(*uuid, module->uuid) == 0)
-			return module->id;
-	}
-
-	return -EINVAL;
-}
-
-
 static int skl_tplg_module_add_deferred_bind(struct skl *skl,
 	struct skl_module_cfg *src, struct skl_module_cfg *dst)
 {
