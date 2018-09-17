@@ -95,31 +95,6 @@ static void skl_enable_miscbdcge(struct device *dev, bool enable)
 	update_pci_dword(pci, AZX_PCIREG_CGCTL, AZX_CGCTL_MISCBDCGE_MASK, val);
 }
 
-/**
- * skl_clock_power_gating: Enable/Disable clock and power gating
- *
- * @dev: Device pointer
- * @enable: Enable/Disable flag
- */
-static void skl_clock_power_gating(struct device *dev, bool enable)
-{
-	struct pci_dev *pci = to_pci_dev(dev);
-	struct hdac_bus *bus = pci_get_drvdata(pci);
-	u32 val;
-
-	/* Update PDCGE bit of CGCTL register */
-	val = enable ? AZX_CGCTL_ADSPDCGE : 0;
-	update_pci_dword(pci, AZX_PCIREG_CGCTL, AZX_CGCTL_ADSPDCGE, val);
-
-	/* Update L1SEN bit of EM2 register */
-	val = enable ? AZX_REG_VS_EM2_L1SEN : 0;
-	snd_hdac_chip_updatel(bus, VS_EM2, AZX_REG_VS_EM2_L1SEN, val);
-
-	/* Update ADSPPGD bit of PGCTL register */
-	val = enable ? 0 : AZX_PGCTL_ADSPPGD;
-	update_pci_dword(pci, AZX_PCIREG_PGCTL, AZX_PGCTL_ADSPPGD, val);
-}
-
 /*
  * While performing reset, controller may not come back properly causing
  * issues, so recommendation is to set CGCTL.MISCBDCGE to 0 then do reset
