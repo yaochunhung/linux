@@ -951,15 +951,15 @@ static int skl_tplg_find_moduleid_from_uuid(struct skl *skl,
 
 		for (i = 0; i < uuid_params->num_modules; i++) {
 			module_id = skl_get_module_id(skl->skl_sst,
-				&uuid_params->u.map_uuid[i].mod_uuid);
+				&uuid_params->map[i].mod_id);
 			if (module_id < 0) {
 				devm_kfree(bus->dev, params);
 				return -EINVAL;
 			}
 
-			params->u.map[i].mod_id = module_id;
-			params->u.map[i].inst_id =
-				uuid_params->u.map_uuid[i].inst_id;
+			params->map[i].mod_id = module_id;
+			params->map[i].inst_id =
+				uuid_params->map[i].inst_id;
 		}
 
 		devm_kfree(bus->dev, bc->params);
@@ -3562,7 +3562,7 @@ int skl_tplg_init(struct snd_soc_component *component, struct hdac_bus *bus)
 	 * The complete tplg for SKL is loaded as index 0, we don't use
 	 * any other index
 	 */
-	ret = snd_soc_tplg_component_load(&platform->component,
+	ret = snd_soc_tplg_component_load(component,
 					&skl_tplg_ops, fw, 0);
 	if (ret < 0) {
 		dev_err(bus->dev, "tplg component load failed%d\n", ret);
