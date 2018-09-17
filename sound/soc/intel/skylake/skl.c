@@ -793,8 +793,8 @@ static void skl_probe_work(struct work_struct *work)
 	/*
 	 * we are done probing so decrement link counts
 	 */
-	list_for_each_entry(hlink, &ebus->hlink_list, list)
-		snd_hdac_ext_bus_link_put(ebus, hlink);
+	list_for_each_entry(hlink, &bus->hlink_list, list)
+		snd_hdac_ext_bus_link_put(bus, hlink);
 
 	if (IS_ENABLED(CONFIG_SND_SOC_HDAC_HDMI)) {
 		err = snd_hdac_display_power(bus, false);
@@ -929,7 +929,7 @@ static int skl_first_init(struct hdac_bus *bus)
 	if (err < 0)
 		return err;
 
-	err = skl_acquire_irq(ebus, 0);
+	err = skl_acquire_irq(bus, 0);
 	if (err < 0)
 		return err;
 
