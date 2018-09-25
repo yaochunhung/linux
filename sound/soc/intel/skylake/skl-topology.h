@@ -461,7 +461,7 @@ int skl_dsp_set_dma_control(struct skl_sst *ctx, u32 *caps,
 void skl_tplg_set_be_dmic_config(struct snd_soc_dai *dai,
 	struct skl_pipe_params *params, int stream);
 
-int skl_tplg_init(struct snd_soc_component *component,
+int skl_tplg_init(struct snd_soc_platform *platform,
 				struct hdac_bus *ebus);
 
 struct skl_module_cfg *skl_tplg_fe_get_cpr_module(
