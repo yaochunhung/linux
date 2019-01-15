@@ -1208,7 +1208,8 @@ static int soc_init_dai_link(struct snd_soc_card *card,
 	 * Defer card registartion if cpu dai component is not added to
 	 * component list.
 	 */
-	if (!soc_find_component(link->cpu_of_node, link->cpu_name))
+	if ((link->cpu_of_node || link->cpu_name) &&
+	    !soc_find_component(link->cpu_of_node, link->cpu_name))
 		return -EPROBE_DEFER;
 
 	/*
