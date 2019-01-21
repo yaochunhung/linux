@@ -1999,6 +1999,29 @@ static void soc_check_tplg_fes(struct snd_soc_card *card)
 	}
 }
 
+static int soc_cleanup_card_resources(struct snd_soc_card *card)
+{
+	/* free the ALSA card at first; this syncs with pending operations */
+	if (card->snd_card)
+		snd_card_free(card->snd_card);
+
+	/* remove and free each DAI */
+	soc_remove_dai_links(card);
+	soc_remove_pcm_runtimes(card);
+
+	/* remove auxiliary devices */
+	soc_remove_aux_devices(card);
+
+	snd_soc_dapm_free(&card->dapm);
+	soc_cleanup_card_debugfs(card);
+
+	/* remove the card */
+	if (card->remove)
+		card->remove(card);
+
+	return 0;
+}
+
 static int snd_soc_instantiate_card(struct snd_soc_card *card)
 {
 	struct snd_soc_pcm_runtime *rtd;
@@ -2008,6 +2031,11 @@ static int snd_soc_instantiate_card(struct snd_soc_card *card)
 	mutex_lock(&client_mutex);
 	mutex_lock_nested(&card->mutex, SND_SOC_CARD_CLASS_INIT);
 
+	card->dapm.bias_level = SND_SOC_BIAS_OFF;
+	card->dapm.dev = card->dev;
+	card->dapm.card = card;
+	list_add(&card->dapm.list, &card->dapm_list);
+
 	/* check whether any platform is ignore machine FE and using topology */
 	soc_check_tplg_fes(card);
 
@@ -2015,14 +2043,14 @@ static int snd_soc_instantiate_card(struct snd_soc_card *card)
 	for_each_card_prelinks(card, i, dai_link) {
 		ret = soc_bind_dai_link(card, dai_link);
 		if (ret != 0)
-			goto base_error;
+			goto probe_end;
 	}
 
 	/* bind aux_devs too */
 	for (i = 0; i < card->num_aux_devs; i++) {
 		ret = soc_bind_aux_dev(card, i);
 		if (ret != 0)
-			goto base_error;
+			goto probe_end;
 	}
 
 	/* add predefined DAI links to the list */
@@ -2036,15 +2064,10 @@ static int snd_soc_instantiate_card(struct snd_soc_card *card)
 		dev_err(card->dev,
 			"ASoC: can't create sound card for card %s: %d\n",
 			card->name, ret);
-		goto base_error;
+		goto probe_end;
 	}
 
 	soc_init_card_debugfs(card);
-
-	card->dapm.bias_level = SND_SOC_BIAS_OFF;
-	card->dapm.dev = card->dev;
-	card->dapm.card = card;
-	list_add(&card->dapm.list, &card->dapm_list);
 
 #ifdef CONFIG_DEBUG_FS
 	snd_soc_dapm_debugfs_init(&card->dapm, card->debugfs_card_root);
@@ -2067,7 +2090,7 @@ static int snd_soc_instantiate_card(struct snd_soc_card *card)
 	if (card->probe) {
 		ret = card->probe(card);
 		if (ret < 0)
-			goto card_probe_error;
+			goto probe_end;
 	}
 
 	/* probe all components used by DAI links on this card */
@@ -2078,7 +2101,7 @@ static int snd_soc_instantiate_card(struct snd_soc_card *card)
 				dev_err(card->dev,
 					"ASoC: failed to instantiate card %d\n",
 					ret);
-				goto probe_dai_err;
+				goto probe_end;
 			}
 		}
 	}
@@ -2086,7 +2109,7 @@ static int snd_soc_instantiate_card(struct snd_soc_card *card)
 	/* probe auxiliary components */
 	ret = soc_probe_aux_devices(card);
 	if (ret < 0)
-		goto probe_dai_err;
+		goto probe_end;
 
 	/*
 	 * Find new DAI links added during probing components and bind them.
@@ -2098,10 +2121,10 @@ static int snd_soc_instantiate_card(struct snd_soc_card *card)
 
 		ret = soc_init_dai_link(card, dai_link);
 		if (ret)
-			goto probe_dai_err;
+			goto probe_end;
 		ret = soc_bind_dai_link(card, dai_link);
 		if (ret)
-			goto probe_dai_err;
+			goto probe_end;
 	}
 
 	/* probe all DAI links on this card */
@@ -2112,7 +2135,7 @@ static int snd_soc_instantiate_card(struct snd_soc_card *card)
 				dev_err(card->dev,
 					"ASoC: failed to instantiate card %d\n",
 					ret);
-				goto probe_dai_err;
+				goto probe_end;
 			}
 		}
 	}
@@ -2159,7 +2182,7 @@ static int snd_soc_instantiate_card(struct snd_soc_card *card)
 		if (ret < 0) {
 			dev_err(card->dev, "ASoC: %s late_probe() failed: %d\n",
 				card->name, ret);
-			goto probe_aux_dev_err;
+			goto probe_end;
 		}
 	}
 
@@ -2169,33 +2192,17 @@ static int snd_soc_instantiate_card(struct snd_soc_card *card)
 	if (ret < 0) {
 		dev_err(card->dev, "ASoC: failed to register soundcard %d\n",
 				ret);
-		goto probe_aux_dev_err;
+		goto probe_end;
 	}
 
 	card->instantiated = 1;
 	dapm_mark_endpoints_dirty(card);
 	snd_soc_dapm_sync(&card->dapm);
-	mutex_unlock(&card->mutex);
-	mutex_unlock(&client_mutex);
 
-	return 0;
+probe_end:
+	if (ret < 0)
+		soc_cleanup_card_resources(card);
 
-probe_aux_dev_err:
-	soc_remove_aux_devices(card);
-
-probe_dai_err:
-	soc_remove_dai_links(card);
-
-card_probe_error:
-	if (card->remove)
-		card->remove(card);
-
-	snd_soc_dapm_free(&card->dapm);
-	soc_cleanup_card_debugfs(card);
-	snd_card_free(card->snd_card);
-
-base_error:
-	soc_remove_pcm_runtimes(card);
 	mutex_unlock(&card->mutex);
 	mutex_unlock(&client_mutex);
 
@@ -2222,31 +2229,6 @@ static int soc_probe(struct platform_device *pdev)
 	card->dev = &pdev->dev;
 
 	return snd_soc_register_card(card);
-}
-
-static int soc_cleanup_card_resources(struct snd_soc_card *card)
-{
-	/* make sure any delayed work runs */
-	snd_soc_flush_all_delayed_work(card);
-
-	/* free the ALSA card at first; this syncs with pending operations */
-	snd_card_free(card->snd_card);
-
-	/* remove and free each DAI */
-	soc_remove_dai_links(card);
-	soc_remove_pcm_runtimes(card);
-
-	/* remove auxiliary devices */
-	soc_remove_aux_devices(card);
-
-	snd_soc_dapm_free(&card->dapm);
-	soc_cleanup_card_debugfs(card);
-
-	/* remove the card */
-	if (card->remove)
-		card->remove(card);
-
-	return 0;
 }
 
 /* removes a socdev */
@@ -2814,6 +2796,7 @@ static void snd_soc_unbind_card(struct snd_soc_card *card, bool unregister)
 	if (card->instantiated) {
 		card->instantiated = false;
 		snd_soc_dapm_shutdown(card);
+		snd_soc_flush_all_delayed_work(card);
 		soc_cleanup_card_resources(card);
 		if (!unregister)
 			list_add(&card->list, &unbind_card_list);
