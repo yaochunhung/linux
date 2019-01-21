@@ -30,8 +30,12 @@ struct asoc_simple_jack {
 struct simple_card_data {
 	struct snd_soc_card snd_card;
 	struct simple_dai_props {
-		struct asoc_simple_dai cpu_dai;
-		struct asoc_simple_dai codec_dai;
+		struct asoc_simple_dai *cpu_dai;
+		struct asoc_simple_dai *codec_dai;
+		struct snd_soc_dai_link_component codecs; /* single codec */
+		struct snd_soc_dai_link_component platforms;
+		struct asoc_simple_card_data adata;
+		struct snd_soc_codec_conf *codec_conf;
 		unsigned int mclk_fs;
 	} *dai_props;
 	unsigned int mclk_fs;
@@ -419,8 +423,23 @@ static int asoc_simple_card_probe(struct platform_device *pdev)
 	if (!dai_props || !dai_link)
 		return -ENOMEM;
 
-	priv->dai_props			= dai_props;
-	priv->dai_link			= dai_link;
+	/*
+	 * Use snd_soc_dai_link_component instead of legacy style
+	 * It is codec only. but cpu/platform will be supported in the future.
+	 * see
+	 *	soc-core.c :: snd_soc_init_multicodec()
+	 */
+	for (i = 0; i < li.link; i++) {
+		dai_link[i].codecs	= &dai_props[i].codecs;
+		dai_link[i].num_codecs	= 1;
+		dai_link[i].platforms	= &dai_props[i].platforms;
+		dai_link[i].num_platforms = 1;
+	}
+
+	priv->dai_props		= dai_props;
+	priv->dai_link		= dai_link;
+	priv->dais		= dais;
+	priv->codec_conf	= cconf;
 
 	/* Init snd_soc_card */
 	card = simple_priv_to_card(priv);
@@ -455,6 +474,16 @@ static int asoc_simple_card_probe(struct platform_device *pdev)
 			dev_err(dev, "insufficient asoc_simple_card_info settings\n");
 			return -EINVAL;
 		}
+
+		dai_props->cpu_dai	= &priv->dais[dai_idx++];
+		dai_props->codec_dai	= &priv->dais[dai_idx++];
+
+		codecs			= dai_link->codecs;
+		codecs->name		= cinfo->codec;
+		codecs->dai_name	= cinfo->codec_dai.name;
+
+		platform		= dai_link->platforms;
+		platform->name		= cinfo->platform;
 
 		card->name		= (cinfo->card) ? cinfo->card : cinfo->name;
 		dai_link->name		= cinfo->name;

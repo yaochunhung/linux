@@ -27,8 +27,13 @@
 struct graph_card_data {
 	struct snd_soc_card snd_card;
 	struct graph_dai_props {
-		struct asoc_simple_dai cpu_dai;
-		struct asoc_simple_dai codec_dai;
+		struct asoc_simple_dai *cpu_dai;
+		struct asoc_simple_dai *codec_dai;
+		struct snd_soc_dai_link_component codecs; /* single codec */
+		struct snd_soc_dai_link_component platforms;
+		struct asoc_simple_card_data adata;
+		struct snd_soc_codec_conf *codec_conf;
+		unsigned int mclk_fs;
 	} *dai_props;
 	struct snd_soc_dai_link *dai_link;
 	struct gpio_desc *pa_gpio;
@@ -270,6 +275,22 @@ static int asoc_graph_card_probe(struct platform_device *pdev)
 	if (!dai_props || !dai_link)
 		return -ENOMEM;
 
+<<<<<<< HEAD
+=======
+	/*
+	 * Use snd_soc_dai_link_component instead of legacy style
+	 * It is codec only. but cpu/platform will be supported in the future.
+	 * see
+	 *	soc-core.c :: snd_soc_init_multicodec()
+	 */
+	for (i = 0; i < li.link; i++) {
+		dai_link[i].codecs	= &dai_props[i].codecs;
+		dai_link[i].num_codecs	= 1;
+		dai_link[i].platforms	= &dai_props[i].platforms;
+		dai_link[i].num_platforms = 1;
+	}
+
+>>>>>>> 910fdcabedd2... ASoC: soc-core: add .num_platform for dai_link
 	priv->pa_gpio = devm_gpiod_get_optional(dev, "pa", GPIOD_OUT_LOW);
 	if (IS_ERR(priv->pa_gpio)) {
 		ret = PTR_ERR(priv->pa_gpio);
