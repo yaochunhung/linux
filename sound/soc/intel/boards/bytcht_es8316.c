@@ -238,6 +238,7 @@ static int snd_byt_cht_es8316_mc_probe(struct platform_device *pdev)
 {
 	struct byt_cht_es8316_private *priv;
 	struct snd_soc_acpi_mach *mach;
+	const char *platform_name;
 	const char *i2c_name = NULL;
 	int dai_index = 0;
 	int i;
@@ -265,9 +266,34 @@ static int snd_byt_cht_es8316_mc_probe(struct platform_device *pdev)
 		byt_cht_es8316_dais[dai_index].codec_name = codec_name;
 	}
 
-	/* register the soc card */
-	byt_cht_es8316_card.dev = &pdev->dev;
-	snd_soc_card_set_drvdata(&byt_cht_es8316_card, priv);
+	/* override plaform name, if required */
+	platform_name = mach->mach_params.platform;
+
+	ret = snd_soc_fixup_dai_links_platform_name(&byt_cht_es8316_card,
+						    platform_name);
+	if (ret)
+		return ret;
+
+	/* Check for BYTCR or other platform and setup quirks */
+	if (x86_match_cpu(baytrail_cpu_ids) &&
+	    mach->mach_params.acpi_ipc_irq_index == 0) {
+		/* On BYTCR default to SSP0, internal-mic-in2-map, mono-spk */
+		quirk = BYT_CHT_ES8316_SSP0 | BYT_CHT_ES8316_INTMIC_IN2_MAP |
+			BYT_CHT_ES8316_MONO_SPEAKER;
+	} else {
+		/* Others default to internal-mic-in1-map, mono-speaker */
+		quirk = BYT_CHT_ES8316_INTMIC_IN1_MAP |
+			BYT_CHT_ES8316_MONO_SPEAKER;
+	}
+	if (quirk_override != -1) {
+		dev_info(dev, "Overriding quirk 0x%x => 0x%x\n", quirk,
+			 quirk_override);
+		quirk = quirk_override;
+	}
+	log_quirks(dev);
+
+	if (quirk & BYT_CHT_ES8316_SSP0)
+		byt_cht_es8316_dais[dai_index].cpu_dai_name = "ssp0-port";
 
 	priv->mclk = devm_clk_get(&pdev->dev, "pmc_plt_clk_3");
 	if (IS_ERR(priv->mclk)) {
