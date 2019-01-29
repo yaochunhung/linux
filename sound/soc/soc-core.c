@@ -2043,6 +2043,7 @@ static int soc_cleanup_card_resources(struct snd_soc_card *card)
 	/* remove and free each DAI */
 	soc_remove_dai_links(card);
 	soc_remove_pcm_runtimes(card);
+	soc_cleanup_platform(card);
 
 	/* remove auxiliary devices */
 	soc_remove_aux_devices(card);
