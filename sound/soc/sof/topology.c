@@ -293,6 +293,36 @@ static int sof_control_load_volume(struct snd_soc_component *scomp,
 	return 0;
 }
 
+static int sof_control_load_enum(struct snd_soc_component *scomp,
+				   struct snd_sof_control *scontrol,
+				   struct snd_kcontrol_new *kc,
+				   struct snd_soc_tplg_ctl_hdr *hdr)
+{
+	struct snd_sof_dev *sdev = snd_soc_component_get_drvdata(scomp);
+	struct snd_soc_tplg_enum_control *ec =
+		(struct snd_soc_tplg_enum_control *)hdr;
+
+	/* validate topology data */
+	if (le32_to_cpu(ec->num_channels) > SND_SOC_TPLG_MAX_CHAN)
+		return -EINVAL;
+
+	/* init the volume get/put data */
+	scontrol->size = sizeof(struct sof_ipc_ctrl_data) +
+			 sizeof(struct sof_ipc_ctrl_value_chan) *
+			 le32_to_cpu(ec->num_channels);
+	scontrol->control_data = kzalloc(scontrol->size, GFP_KERNEL);
+	if (!scontrol->control_data)
+		return -ENOMEM;
+
+	scontrol->comp_id = sdev->next_comp_id;
+	scontrol->num_channels = le32_to_cpu(ec->num_channels);
+
+	dev_dbg(sdev->dev, "tplg: load kcontrol index %d chans %d\n",
+		scontrol->comp_id, scontrol->num_channels);
+
+	return 0;
+}
+
 static int sof_control_load_bytes(struct snd_soc_component *scomp,
 				  struct snd_sof_control *scontrol,
 				  struct snd_kcontrol_new *kc,
@@ -800,7 +830,8 @@ static int sof_control_load(struct snd_soc_component *scomp, int index,
 			    struct snd_soc_tplg_ctl_hdr *hdr)
 {
 	struct soc_mixer_control *sm;
-	struct soc_bytes_ext  *sbe;
+	struct soc_bytes_ext *sbe;
+	struct soc_enum *se;
 	struct snd_sof_dev *sdev = snd_soc_component_get_drvdata(scomp);
 	struct snd_soc_dobj *dobj = NULL;
 	struct snd_sof_control *scontrol;
@@ -831,6 +862,10 @@ static int sof_control_load(struct snd_soc_component *scomp, int index,
 		break;
 	case SND_SOC_TPLG_CTL_ENUM:
 	case SND_SOC_TPLG_CTL_ENUM_VALUE:
+		se = (struct soc_enum *)kc->private_value;
+		dobj = &se->dobj;
+		ret = sof_control_load_enum(scomp, scontrol, kc, hdr);
+		break;
 	case SND_SOC_TPLG_CTL_RANGE:
 	case SND_SOC_TPLG_CTL_STROBE:
 	case SND_SOC_TPLG_DAPM_CTL_VOLSW:
@@ -1236,6 +1271,53 @@ static int sof_widget_load_mixer(struct snd_soc_component *scomp, int index,
 				 sizeof(*mixer), r, sizeof(*r));
 	if (ret < 0)
 		kfree(mixer);
+
+	return ret;
+}
+
+/*
+ * Mux topology
+ */
+static int sof_widget_load_mux(struct snd_soc_component *scomp, int index,
+				 struct snd_sof_widget *swidget,
+				 struct snd_soc_tplg_dapm_widget *tw,
+				 struct sof_ipc_comp_reply *r)
+{
+	struct snd_sof_dev *sdev = snd_soc_component_get_drvdata(scomp);
+	struct snd_soc_tplg_private *private = &tw->priv;
+	struct sof_ipc_comp_mux *mux;
+	int ret;
+
+	mux = kzalloc(sizeof(*mux), GFP_KERNEL);
+	if (!mux)
+		return -ENOMEM;
+
+	/* configure mixer IPC message */
+	mux->comp.hdr.size = sizeof(*mux);
+	mux->comp.hdr.cmd = SOF_IPC_GLB_TPLG_MSG | SOF_IPC_TPLG_COMP_NEW;
+	mux->comp.id = swidget->comp_id;
+	mux->comp.type = SOF_COMP_MUX;
+	mux->comp.pipeline_id = index;
+	mux->config.hdr.size = sizeof(mux->config);
+
+	ret = sof_parse_tokens(scomp, &mux->config, comp_tokens,
+			       ARRAY_SIZE(comp_tokens), private->array,
+			       le32_to_cpu(private->size));
+	if (ret != 0) {
+		dev_err(sdev->dev, "error: parse mux.cfg tokens failed %d\n",
+			private->size);
+		kfree(mux);
+		return ret;
+	}
+
+	sof_dbg_comp_config(scomp, &mux->config);
+
+	swidget->private = (void *)mux;
+
+	ret = sof_ipc_tx_message(sdev->ipc, mux->comp.hdr.cmd, mux,
+				 sizeof(*mux), r, sizeof(*r));
+	if (ret < 0)
+		kfree(mux);
 
 	return ret;
 }
@@ -1755,6 +1837,8 @@ static int sof_widget_ready(struct snd_soc_component *scomp, int index,
 		break;
 	case snd_soc_dapm_mux:
 	case snd_soc_dapm_demux:
+		ret = sof_widget_load_mux(scomp, index, swidget, tw, &reply);
+		break;
 	case snd_soc_dapm_switch:
 	case snd_soc_dapm_dai_link:
 	case snd_soc_dapm_kcontrol:
@@ -2713,6 +2797,8 @@ static int sof_manifest(struct snd_soc_component *scomp, int index,
 static const struct snd_soc_tplg_kcontrol_ops sof_io_ops[] = {
 	{SOF_TPLG_KCTL_VOL_ID, snd_sof_volume_get, snd_sof_volume_put},
 	{SOF_TPLG_KCTL_BYTES_ID, snd_sof_bytes_get, snd_sof_bytes_put},
+	{SOF_TPLG_KCTL_ENUM_ID, snd_sof_enum_get, snd_sof_enum_put},
+	{SOF_TPLG_KCTL_SWITCH_ID, snd_sof_switch_get, snd_sof_switch_put},
 };
 
 /* vendor specific bytes ext handlers available for binding */
