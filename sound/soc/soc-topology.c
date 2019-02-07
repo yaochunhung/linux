@@ -1364,6 +1364,10 @@ static struct snd_kcontrol_new *soc_tplg_dapm_widget_denum_create(
 
 	for (i = 0; i < num_kcontrols; i++) {
 		ec = (struct snd_soc_tplg_enum_control *)tplg->pos;
+
+		tplg->pos += (sizeof(struct snd_soc_tplg_enum_control) +
+				ec->priv.size);
+
 		/* validate kcontrol */
 		if (strnlen(ec->hdr.name, SNDRV_CTL_ELEM_ID_NAME_MAXLEN) ==
 			    SNDRV_CTL_ELEM_ID_NAME_MAXLEN)
@@ -1437,9 +1441,6 @@ static struct snd_kcontrol_new *soc_tplg_dapm_widget_denum_create(
 				ec->hdr.name);
 			goto err_se;
 		}
-
-		tplg->pos += (sizeof(struct snd_soc_tplg_enum_control) +
-				ec->priv.size);
 	}
 
 	return kc;
