@@ -241,7 +241,7 @@ static int sof_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	struct snd_sof_pcm *spcm = rtd->private;
 	struct sof_ipc_stream stream;
 	struct sof_ipc_reply reply;
-	int ret = 0;
+	int ret = 0, permit_d0i3;
 
 	/* nothing todo for BE */
 	if (rtd->dai_link->no_pcm)
@@ -325,6 +325,42 @@ static int sof_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	/* send IPC to the DSP */
 	ret = sof_ipc_tx_message(sdev->ipc, stream.hdr.cmd, &stream,
 				 sizeof(stream), &reply, sizeof(reply));
+	if (ret < 0)
+		return ret;
+
+	/* do we need to inform runtime PM we can enter D3 ? */
+	permit_d0i3 = snd_sof_pipeline_permit_d0i3(sdev,
+						   spcm->swidget->pipeline_id);
+	if (!permit_d0i3)
+		return 0;
+
+	/* inform runtime PM driver can enter D3 */
+	switch (cmd) {
+	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
+		/* fall through */
+	case SNDRV_PCM_TRIGGER_START:
+		/* fall through */
+	case SNDRV_PCM_TRIGGER_RESUME:
+		/* we can enter D3 */
+		pm_runtime_mark_last_busy(sdev->dev);
+
+		ret = pm_runtime_put_autosuspend(sdev->dev);
+		if (ret < 0)
+			dev_err(sdev->dev, "error: pcm close failed to idle %d\n",
+				ret);
+		break;
+	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
+		/* fall through */
+	case SNDRV_PCM_TRIGGER_SUSPEND:
+		/* fallthrough */
+	case SNDRV_PCM_TRIGGER_STOP:
+		/* stay in D0 until close or stream restart */
+		ret = pm_runtime_get_sync(sdev->dev);
+		if (ret < 0)
+			dev_err(sdev->dev, "error: pcm open failed to resume %d\n",
+				ret);
+		break;
+	}
 
 	return ret;
 }
@@ -378,6 +414,13 @@ static int sof_pcm_open(struct snd_pcm_substream *substream)
 
 	dev_dbg(sdev->dev, "pcm: open stream %d dir %d\n", spcm->pcm.pcm_id,
 		substream->stream);
+
+	/* make sure there is a valid widget set by topology */
+	if (!spcm->swidget) {
+		dev_err(sdev->dev, "error: no widget bound for PCM %d dir %d\n",
+			spcm->pcm.pcm_id, substream->stream);
+		return -EINVAL;
+	}
 
 	mutex_lock(&spcm->mutex);
 

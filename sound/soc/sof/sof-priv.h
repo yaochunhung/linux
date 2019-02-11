@@ -245,6 +245,7 @@ struct snd_sof_pcm {
 	struct list_head list;	/* list in sdev pcm list */
 	struct snd_pcm_hw_params params[2];
 	int restore_stream[2]; /* restore hw_params for paused stream */
+	struct snd_sof_widget *swidget;
 };
 
 /* ALSA SOF Kcontrol device */
@@ -269,6 +270,8 @@ struct snd_sof_widget {
 	int pipeline_id;
 	int complete;
 	int id;
+	int pm_permit_d0i3;
+	int pm_wake_source;
 
 	struct snd_soc_dapm_widget *widget;
 	struct mutex mutex;	/* access mutex */
@@ -471,6 +474,8 @@ int snd_sof_complete_pipeline(struct snd_sof_dev *sdev,
 int sof_load_pipeline_ipc(struct snd_sof_dev *sdev,
 			  struct sof_ipc_pipe_new *pipeline,
 			  struct sof_ipc_comp_reply *r);
+int snd_sof_pipeline_permit_d0i3(struct snd_sof_dev *sdev,
+				 int pipeline_id);
 
 /*
  * Trace/debug

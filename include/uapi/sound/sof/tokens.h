@@ -101,4 +101,8 @@
 /* Detection */
 #define	SOF_TKN_DETECT_ITEM1			1000
 
+/* PM */
+#define	SOF_TKN_PM_COMP_WAKE_SOURCE		1100
+#define	SOF_TKN_PM_COMP_PERMIT_D0I3		1101
+
 #endif

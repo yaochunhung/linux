@@ -183,6 +183,23 @@ static int set_up_volume_table(struct snd_sof_control *scontrol,
 	return 0;
 }
 
+/* Can this pipeline run when driver is D3 ? */
+int snd_sof_pipeline_permit_d0i3(struct snd_sof_dev *sdev,
+				 int pipeline_id)
+{
+	struct snd_sof_widget *swidget = NULL;
+
+	list_for_each_entry(swidget, &sdev->widget_list, list) {
+		if (swidget->pipeline_id != pipeline_id)
+			continue;
+		if (swidget->pm_permit_d0i3)
+			return 0;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(snd_sof_pipeline_permit_d0i3);
+
 struct sof_dai_types {
 	const char *name;
 	enum sof_ipc_dai_type type;
@@ -514,6 +531,16 @@ static const struct sof_topology_token process_tokens[] = {
 static const struct sof_topology_token pcm_tokens[] = {
 	{SOF_TKN_PCM_DMAC_CONFIG, SND_SOC_TPLG_TUPLE_TYPE_WORD, get_token_u32,
 		offsetof(struct sof_ipc_comp_host, dmac_config), 0},
+};
+
+/* Generic components PM */
+static const struct sof_topology_token pm_tokens[] = {
+	{SOF_TKN_PM_COMP_WAKE_SOURCE,
+		SND_SOC_TPLG_TUPLE_TYPE_WORD, get_token_u32,
+		offsetof(struct snd_sof_widget, pm_wake_source), 0},
+	{SOF_TKN_PM_COMP_PERMIT_D0I3,
+		SND_SOC_TPLG_TUPLE_TYPE_WORD, get_token_u32,
+		offsetof(struct snd_sof_widget, pm_permit_d0i3), 0},
 };
 
 /* Generic components */
@@ -1761,6 +1788,7 @@ static int sof_widget_ready(struct snd_soc_component *scomp, int index,
 	struct snd_sof_dai *dai;
 	struct sof_ipc_comp_reply reply;
 	struct snd_sof_control *scontrol = NULL;
+	struct snd_soc_tplg_private *private = &tw->priv;
 	int ret = 0;
 
 	swidget = kzalloc(sizeof(*swidget), GFP_KERNEL);
@@ -1849,6 +1877,17 @@ static int sof_widget_ready(struct snd_soc_component *scomp, int index,
 		dev_warn(sdev->dev, "warning: widget type %d name %s not handled\n",
 			 swidget->id, tw->name);
 		break;
+	}
+
+	/* check for driver specific tojens */
+	ret = sof_parse_tokens(scomp, swidget, pm_tokens,
+			       ARRAY_SIZE(pm_tokens), private->array,
+			       le32_to_cpu(private->size));
+	if (ret != 0) {
+		dev_err(sdev->dev, "error: parse swidget.pm tokens failed %d\n",
+			ret);
+		kfree(swidget);
+		return ret;
 	}
 
 	/* check IPC reply */
@@ -2617,6 +2656,8 @@ static int spcm_bind(struct snd_soc_component *scomp, struct snd_sof_pcm *spcm,
 			host_widget->id);
 		return -EINVAL;
 	}
+
+	spcm->swidget = host_widget;
 
 	return 0;
 }
