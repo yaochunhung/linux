@@ -505,7 +505,7 @@ static const struct sof_topology_token tone_tokens[] = {
 
 /* EFFECT */
 static const struct sof_topology_token process_tokens[] = {
-	{SOF_TKN_EFFECT_TYPE, SND_SOC_TPLG_TUPLE_TYPE_STRING,
+	{SOF_TKN_PROCESS_TYPE, SND_SOC_TPLG_TUPLE_TYPE_STRING,
 		get_token_process_type,
 		offsetof(struct sof_ipc_comp_process, type), 0},
 };
@@ -1858,6 +1858,7 @@ static int sof_widget_ready(struct snd_soc_component *scomp, int index,
 		kfree(swidget);
 		return ret;
 	}
+
 
 	w->dobj.private = swidget;
 	mutex_init(&swidget->mutex);
