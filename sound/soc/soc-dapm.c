@@ -1016,8 +1016,8 @@ static int dapm_new_mux(struct snd_soc_dapm_widget *w)
 
 	if (w->num_kcontrols != 1) {
 		dev_err(dapm->dev,
-			"ASoC: %s %s has incorrect number of controls\n", type,
-			w->name);
+			"ASoC: %s %s has incorrect number of controls %d\n",
+			type, w->name, w->num_kcontrols);
 		return -EINVAL;
 	}
 
