@@ -97,4 +97,7 @@
 /* Processing Components */
 #define SOF_TKN_PROCESS_TYPE                    900
 
+/* Detection */
+#define	SOF_TKN_DETECT_ITEM1			1000
+
 #endif
