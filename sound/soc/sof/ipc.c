@@ -46,6 +46,16 @@ struct snd_sof_ipc {
 	struct list_head empty_list;
 };
 
+struct sof_ipc_ctrl_data_params {
+	size_t msg_bytes;
+	size_t hdr_bytes;
+	size_t pl_size;
+	u32 num_msg;
+	u32 elems;
+	u8 *src;
+	u8 *dst;
+};
+
 /* locks held by caller */
 static struct snd_sof_ipc_msg *msg_get_empty(struct snd_sof_ipc *ipc)
 {
@@ -636,93 +646,198 @@ int snd_sof_ipc_stream_posn(struct snd_sof_dev *sdev,
 }
 EXPORT_SYMBOL(snd_sof_ipc_stream_posn);
 
+static int sof_get_ctrl_copy_params(enum sof_ipc_ctrl_type ctrl_type,
+				    struct sof_ipc_ctrl_data *src,
+				    struct sof_ipc_ctrl_data *dst,
+				    struct sof_ipc_ctrl_data_params *sparams)
+{
+	switch (ctrl_type) {
+	case SOF_CTRL_TYPE_VALUE_CHAN_GET:
+	case SOF_CTRL_TYPE_VALUE_CHAN_SET:
+		sparams->src = (u8 *)src->chanv;
+		sparams->dst = (u8 *)dst->chanv;
+		break;
+	case SOF_CTRL_TYPE_VALUE_COMP_GET:
+	case SOF_CTRL_TYPE_VALUE_COMP_SET:
+		sparams->src = (u8 *)src->compv;
+		sparams->dst = (u8 *)dst->compv;
+		break;
+	case SOF_CTRL_TYPE_DATA_GET:
+	case SOF_CTRL_TYPE_DATA_SET:
+		sparams->src = (u8 *)src->data->data;
+		sparams->dst = (u8 *)dst->data->data;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	/* calculate payload size and number of messages */
+	sparams->pl_size = SOF_IPC_MSG_MAX_SIZE - sparams->hdr_bytes;
+	sparams->num_msg = DIV_ROUND_UP(sparams->msg_bytes, sparams->pl_size);
+
+	return 0;
+}
+
+static int sof_set_get_large_ctrl_data(struct snd_sof_dev *sdev,
+				       struct sof_ipc_ctrl_data *cdata,
+				       struct sof_ipc_ctrl_data_params *sparams,
+				       bool send)
+{
+	struct sof_ipc_ctrl_data *partdata;
+	u32 send_bytes;
+	u32 offset;
+	int err = 0;
+	int i;
+
+	/* allocate max ipc size because we have at least one */
+	partdata = kzalloc(SOF_IPC_MSG_MAX_SIZE, GFP_KERNEL);
+	if (!partdata)
+		return -ENOMEM;
+
+	if (send)
+		sof_get_ctrl_copy_params(cdata->type, cdata, partdata, sparams);
+	else
+		sof_get_ctrl_copy_params(cdata->type, partdata, cdata, sparams);
+
+	/* copy the header data */
+	memcpy(partdata, cdata, sparams->hdr_bytes);
+
+	/* copy the payload data in a loop */
+	offset = 0;
+	for (i = 0; i < sparams->num_msg; i++) {
+		send_bytes = sparams->msg_bytes > sparams->pl_size ?
+			sparams->pl_size : sparams->msg_bytes;
+		partdata->num_elems = send_bytes;
+		partdata->rhdr.hdr.size = sparams->hdr_bytes + send_bytes;
+		partdata->msg_id = i;
+
+		if (send)
+			memcpy(sparams->dst, sparams->src + offset, send_bytes);
+
+		err = sof_ipc_tx_message(sdev->ipc,
+					 partdata->rhdr.hdr.cmd,
+					 partdata,
+					 partdata->rhdr.hdr.size,
+					 partdata,
+					 partdata->rhdr.hdr.size);
+		if (err < 0)
+			break;
+
+		if (!send)
+			memcpy(sparams->dst + offset, sparams->src, send_bytes);
+
+		offset += sparams->pl_size;
+		sparams->msg_bytes -= send_bytes;
+	}
+
+	kfree(partdata);
+	return err;
+}
+
 /*
  * IPC get()/set() for kcontrols.
  */
-
-int snd_sof_ipc_set_comp_data(struct snd_sof_ipc *ipc,
-			      struct snd_sof_control *scontrol, u32 ipc_cmd,
-			      enum sof_ipc_ctrl_type ctrl_type,
-			      enum sof_ipc_ctrl_cmd ctrl_cmd)
+int snd_sof_ipc_set_get_comp_data(struct snd_sof_ipc *ipc,
+				  struct snd_sof_control *scontrol,
+				  u32 ipc_cmd,
+				  enum sof_ipc_ctrl_type ctrl_type,
+				  enum sof_ipc_ctrl_cmd ctrl_cmd,
+				  bool send)
 {
 	struct snd_sof_dev *sdev = ipc->sdev;
 	struct sof_ipc_ctrl_data *cdata = scontrol->control_data;
-	int err;
+	size_t send_bytes;
+	struct sof_ipc_ctrl_data_params sparams;
+	struct sof_ipc_fw_ready *ready = &sdev->fw_ready;
+	struct sof_ipc_fw_version *v = &ready->version;
+	int err = 0;
 
-	/* read firmware volume */
+	/* read or write firmware volume */
 	if (scontrol->readback_offset != 0) {
-		/* we can read value header via mmaped region */
-		snd_sof_dsp_block_write(sdev, sdev->mmio_bar,
-					scontrol->readback_offset, cdata->chanv,
-					sizeof(struct sof_ipc_ctrl_value_chan) *
-					cdata->num_elems);
+		/* write/read value header via mmaped region */
+		send_bytes = sizeof(struct sof_ipc_ctrl_value_chan) *
+		cdata->num_elems;
+		if (send)
+			snd_sof_dsp_block_write(sdev, sdev->mmio_bar,
+						scontrol->readback_offset,
+						cdata->chanv, send_bytes);
 
-	} else {
-		/* write value via slower IPC */
-		cdata->rhdr.hdr.cmd = SOF_IPC_GLB_COMP_MSG | ipc_cmd;
-		cdata->cmd = ctrl_cmd;
-		cdata->type = ctrl_type;
-		cdata->rhdr.hdr.size = scontrol->size;
-		cdata->comp_id = scontrol->comp_id;
-		cdata->num_elems = scontrol->num_channels;
-
-		/* send IPC to the DSP */
-		err = sof_ipc_tx_message(sdev->ipc,
-					 cdata->rhdr.hdr.cmd, cdata,
-					 cdata->rhdr.hdr.size,
-					 cdata, cdata->rhdr.hdr.size);
-		if (err < 0) {
-			dev_err(sdev->dev, "error: failed to set control %d values\n",
-				cdata->comp_id);
-			return err;
-		}
+		else
+			snd_sof_dsp_block_read(sdev, sdev->mmio_bar,
+					       scontrol->readback_offset,
+					       cdata->chanv, send_bytes);
+		return 0;
 	}
 
-	return 0;
-}
-EXPORT_SYMBOL(snd_sof_ipc_set_comp_data);
+	cdata->rhdr.hdr.cmd = SOF_IPC_GLB_COMP_MSG | ipc_cmd;
+	cdata->cmd = ctrl_cmd;
+	cdata->type = ctrl_type;
+	cdata->comp_id = scontrol->comp_id;
+	cdata->msg_id = 0;
 
-int snd_sof_ipc_get_comp_data(struct snd_sof_ipc *ipc,
-			      struct snd_sof_control *scontrol, u32 ipc_cmd,
-			      enum sof_ipc_ctrl_type ctrl_type,
-			      enum sof_ipc_ctrl_cmd ctrl_cmd)
-{
-	struct snd_sof_dev *sdev = ipc->sdev;
-	struct sof_ipc_ctrl_data *cdata = scontrol->control_data;
-	int err;
-
-	/* read firmware byte counters */
-	if (scontrol->readback_offset != 0) {
-		/* we can read values via mmaped region */
-		snd_sof_dsp_block_read(sdev, sdev->mmio_bar,
-				       scontrol->readback_offset, cdata->chanv,
-				       sizeof(struct sof_ipc_ctrl_value_chan) *
-				       cdata->num_elems);
-
-	} else {
-		/* read position via slower IPC */
-		cdata->rhdr.hdr.cmd = SOF_IPC_GLB_COMP_MSG | ipc_cmd;
-		cdata->cmd = ctrl_cmd;
-		cdata->type = ctrl_type;
-		cdata->rhdr.hdr.size = scontrol->size;
-		cdata->comp_id = scontrol->comp_id;
-		cdata->num_elems = scontrol->num_channels;
-
-		/* send IPC to the DSP */
-		err = sof_ipc_tx_message(sdev->ipc,
-					 cdata->rhdr.hdr.cmd, cdata,
-					 cdata->rhdr.hdr.size,
-					 cdata, cdata->rhdr.hdr.size);
-		if (err < 0) {
-			dev_err(sdev->dev, "error: failed to get control %d values\n",
-				cdata->comp_id);
-			return err;
-		}
+	/* calculate header and data size */
+	switch (cdata->type) {
+	case SOF_CTRL_TYPE_VALUE_CHAN_GET:
+	case SOF_CTRL_TYPE_VALUE_CHAN_SET:
+		sparams.msg_bytes = scontrol->num_channels *
+			sizeof(struct sof_ipc_ctrl_value_chan);
+		sparams.hdr_bytes = sizeof(struct sof_ipc_ctrl_data);
+		sparams.elems = scontrol->num_channels;
+		break;
+	case SOF_CTRL_TYPE_VALUE_COMP_GET:
+	case SOF_CTRL_TYPE_VALUE_COMP_SET:
+		sparams.msg_bytes = scontrol->num_channels *
+			sizeof(struct sof_ipc_ctrl_value_comp);
+		sparams.hdr_bytes = sizeof(struct sof_ipc_ctrl_data);
+		sparams.elems = scontrol->num_channels;
+		break;
+	case SOF_CTRL_TYPE_DATA_GET:
+	case SOF_CTRL_TYPE_DATA_SET:
+		sparams.msg_bytes = cdata->data->size;
+		sparams.hdr_bytes = sizeof(struct sof_ipc_ctrl_data) +
+			sizeof(struct sof_abi_hdr);
+		sparams.elems = cdata->data->size;
+		break;
+	default:
+		return -EINVAL;
 	}
 
-	return 0;
+	cdata->rhdr.hdr.size = sparams.msg_bytes + sparams.hdr_bytes;
+	cdata->num_elems = sparams.elems;
+	cdata->total_elems = sparams.elems;
+
+	/* send normal size ipc in one part */
+	if (cdata->rhdr.hdr.size <= SOF_IPC_MSG_MAX_SIZE) {
+		err = sof_ipc_tx_message(sdev->ipc, cdata->rhdr.hdr.cmd, cdata,
+					 cdata->rhdr.hdr.size, cdata,
+					 cdata->rhdr.hdr.size);
+
+		if (err < 0)
+			dev_err(sdev->dev, "error: set/get ctrl ipc comp %d\n",
+				cdata->comp_id);
+
+		return err;
+	}
+
+	/* data is bigger than max ipc size, chop to smaller pieces */
+	dev_dbg(sdev->dev, "large ipc size %u, control size %u\n",
+		cdata->rhdr.hdr.size, scontrol->size);
+
+	/* large messages is only supported from abi 3.2.0 onwards */
+	if (v->abi_version < SOF_ABI_VER(3, 3, 0)) {
+		dev_err(sdev->dev, "error: incompatible FW ABI version\n");
+		return -EINVAL;
+	}
+
+	err = sof_set_get_large_ctrl_data(sdev, cdata, &sparams, send);
+
+	if (err < 0)
+		dev_err(sdev->dev, "error: set/get large ctrl ipc comp %d\n",
+			cdata->comp_id);
+
+	return err;
 }
-EXPORT_SYMBOL(snd_sof_ipc_get_comp_data);
+EXPORT_SYMBOL(snd_sof_ipc_set_get_comp_data);
 
 /*
  * IPC layer enumeration.
