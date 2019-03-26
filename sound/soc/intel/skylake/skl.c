@@ -314,7 +314,7 @@ static int skl_suspend(struct device *dev)
 	struct pci_dev *pci = to_pci_dev(dev);
 	struct hdac_bus *bus = pci_get_drvdata(pci);
 	struct skl *skl  = bus_to_skl(bus);
-	int ret;
+	int ret = 0;
 
 	/*
 	 * Do not suspend if streams which are marked ignore suspend are
@@ -795,7 +795,7 @@ static int skl_i915_init(struct hdac_bus *bus)
 	if (err < 0)
 		dev_err(bus->dev, "Cannot turn on display power on i915\n");
 
-	return 0;
+	return err;
 }
 
 static void skl_probe_work(struct work_struct *work)

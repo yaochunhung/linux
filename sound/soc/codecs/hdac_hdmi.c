@@ -2074,6 +2074,7 @@ static int hdac_hdmi_runtime_suspend(struct device *dev)
 	struct hdac_device *hdev = dev_to_hdac_dev(dev);
 	struct hdac_bus *bus = hdev->bus;
 	struct hdac_ext_link *hlink = NULL;
+	int err;
 
 	dev_dbg(dev, "Enter: %s\n", __func__);
 
@@ -2103,7 +2104,7 @@ static int hdac_hdmi_runtime_suspend(struct device *dev)
 	if (err < 0)
 		dev_err(dev, "Cannot turn off display power on i915\n");
 
-	return 0;
+	return err;
 }
 
 static int hdac_hdmi_runtime_resume(struct device *dev)
@@ -2111,6 +2112,7 @@ static int hdac_hdmi_runtime_resume(struct device *dev)
 	struct hdac_device *hdev = dev_to_hdac_dev(dev);
 	struct hdac_bus *bus = hdev->bus;
 	struct hdac_ext_link *hlink = NULL;
+	int err;
 
 	dev_dbg(dev, "Enter: %s\n", __func__);
 

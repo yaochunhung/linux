@@ -33,6 +33,7 @@ static inline int snd_hdac_set_codec_wakeup(struct hdac_bus *bus, bool enable)
 static inline int snd_hdac_display_power(struct hdac_bus *bus,
 					 unsigned int idx, bool enable)
 {
+	return 0;
 }
 static inline int snd_hdac_sync_audio_rate(struct hdac_device *codec,
 					   hda_nid_t nid, int dev_id, int rate)
