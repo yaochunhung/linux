@@ -1075,7 +1075,7 @@ static void soc_cleanup_platform(struct snd_soc_card *card)
 	for_each_card_prelinks(card, i, link) {
 		if (link->legacy_platform) {
 			link->legacy_platform = 0;
-			link->platform        = NULL;
+			link->platforms       = NULL;
 		}
 	}
 }
