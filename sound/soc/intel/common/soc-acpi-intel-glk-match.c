@@ -39,7 +39,6 @@ struct snd_soc_acpi_mach snd_soc_acpi_intel_glk_machines[] = {
 		.quirk_data = &glk_codecs,
 		.sof_fw_filename = "intel/sof-glk.ri",
 		.sof_tplg_filename = "intel/sof-glk-rt5682.tplg",
-		.asoc_plat_name = "0000:00:0e.0",
 	},
 	{},
 };
