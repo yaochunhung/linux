@@ -240,7 +240,6 @@ static int broxton_hdmi_init(struct snd_soc_pcm_runtime *rtd)
 	return 0;
 }
 
-#if !IS_ENABLED(CONFIG_SND_SOC_SOF_INTEL)
 static int broxton_da7219_fe_init(struct snd_soc_pcm_runtime *rtd)
 {
 	struct snd_soc_dapm_context *dapm;
@@ -251,7 +250,6 @@ static int broxton_da7219_fe_init(struct snd_soc_pcm_runtime *rtd)
 
 	return 0;
 }
-#endif
 
 static const unsigned int rates[] = {
 	48000,
@@ -380,7 +378,6 @@ static const struct snd_soc_ops broxton_refcap_ops = {
 
 /* broxton digital audio interface glue - connects codec <--> CPU */
 static struct snd_soc_dai_link broxton_dais[] = {
-#if !IS_ENABLED(CONFIG_SND_SOC_SOF_INTEL)
 	/* Front End DAI links */
 	[BXT_DPCM_AUDIO_PB] =
 	{
@@ -480,7 +477,6 @@ static struct snd_soc_dai_link broxton_dais[] = {
 		.nonatomic = 1,
 		.dynamic = 1,
 	},
-#endif
 	/* Back End DAI links */
 	{
 		/* SSP5 - Codec */
@@ -564,7 +560,6 @@ static struct snd_soc_dai_link broxton_dais[] = {
 
 /* geminilake digital audio interface glue - connects codec <--> CPU */
 static struct snd_soc_dai_link geminilake_dais[] = {
-#if !IS_ENABLED(CONFIG_SND_SOC_SOF_INTEL)
 	/* Front End DAI links */
 	[BXT_DPCM_AUDIO_PB] = {
 		.name = "Bxt Audio Port",
@@ -678,7 +673,6 @@ static struct snd_soc_dai_link geminilake_dais[] = {
 		.dynamic = 1,
 		.ops = &geminilake_hdmi_fe_ops,
 	},
-#endif
 	/* Back End DAI links */
 	{
 		/* SSP1 - Codec */
@@ -811,7 +805,6 @@ static int bxt_card_late_probe(struct snd_soc_card *card)
 		return -EINVAL;
 
 	return hdac_hdmi_jack_port_init(component, &card->dapm);
-
 }
 
 /* broxton audio machine driver for SPT + da7219 */
