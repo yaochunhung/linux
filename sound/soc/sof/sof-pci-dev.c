@@ -341,9 +341,9 @@ static struct pci_driver snd_sof_pci_driver = {
 	.name = "sof-audio-pci",
 	.id_table = sof_pci_ids,
 	.probe = sof_pci_probe,
-	.remove = sof_pci_remove,
+//	.remove = sof_pci_remove,
 	.driver = {
-		.pm = &sof_pci_pm,
+//		.pm = &sof_pci_pm,
 	},
 };
 module_pci_driver(snd_sof_pci_driver);

@@ -440,6 +440,9 @@ irqreturn_t hda_dsp_stream_interrupt(int irq, void *context)
 
 	spin_unlock(&bus->reg_lock);
 
+	dev_dbg(bus->dev, "INTSTS 0x%x\n",
+		 snd_hdac_chip_readl(bus, INTSTS));
+
 	return snd_hdac_chip_readl(bus, INTSTS) ? IRQ_WAKE_THREAD : IRQ_HANDLED;
 }
 
@@ -456,7 +459,7 @@ irqreturn_t hda_dsp_stream_threaded_handler(int irq, void *context)
 		if (status & (1 << s->index) && s->opened) {
 			sd_status = snd_hdac_stream_readb(s, SD_STS);
 
-			dev_vdbg(bus->dev, "stream %d status 0x%x\n",
+			dev_dbg(bus->dev, "stream %d status 0x%x\n",
 				 s->index, sd_status);
 
 			snd_hdac_stream_writeb(s, SD_STS, SD_INT_MASK);

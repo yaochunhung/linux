@@ -223,7 +223,7 @@ static void sof_set_restore_stream(struct snd_sof_dev *sdev)
 }
 
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_DEBUG_ENABLE_DEBUGFS_CACHE)
-static void sof_cache_debugfs(struct snd_sof_dev *sdev)
+void sof_cache_debugfs(struct snd_sof_dev *sdev)
 {
 	struct snd_sof_dfsentry *dfse;
 
@@ -239,6 +239,7 @@ static void sof_cache_debugfs(struct snd_sof_dev *sdev)
 				      dfse->size);
 	}
 }
+EXPORT_SYMBOL(sof_cache_debugfs);
 #endif
 
 static int sof_resume(struct device *dev, bool runtime_resume)

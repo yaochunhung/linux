@@ -26,6 +26,7 @@ static ssize_t sof_dfsentry_read(struct file *file, char __user *buffer,
 	u32 *buf;
 	loff_t pos = *ppos;
 	size_t size_ret;
+	int ret = 0;
 
 	size = dfse->size;
 
@@ -43,6 +44,8 @@ static ssize_t sof_dfsentry_read(struct file *file, char __user *buffer,
 	buf = kzalloc(size, GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
+
+	pm_runtime_get_noresume(sdev->dev);
 
 	if (dfse->type == SOF_DFSENTRY_TYPE_IOMEM) {
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_DEBUG_ENABLE_DEBUGFS_CACHE)
@@ -75,6 +78,16 @@ static ssize_t sof_dfsentry_read(struct file *file, char __user *buffer,
 	} else {
 		memcpy(buf, dfse->buf + pos, size);
 	}
+
+	/*
+	 * TODO: revisit to check if we need mark_last_busy, or if we
+	 * should change to use xxx_put_sync[_suspend]().
+	 */
+	ret = pm_runtime_put_sync_autosuspend(sdev->dev);
+	if (ret < 0)
+		dev_warn(sdev->dev, "warn: debugFS failed to autosuspend %d\n",
+			 ret);
+
 
 	/* copy to userspace */
 	size_ret = copy_to_user(buffer, buf, count);

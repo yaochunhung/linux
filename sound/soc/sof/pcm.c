@@ -63,8 +63,8 @@ static int sof_pcm_hw_params(struct snd_pcm_substream *substream,
 	if (!spcm)
 		return -EINVAL;
 
-	dev_dbg(sdev->dev, "pcm: hw params stream %d dir %d\n",
-		spcm->pcm.pcm_id, substream->stream);
+	dev_dbg(sdev->dev, "pcm: hw params stream %d dir %d period_bytes %d\n",
+		spcm->pcm.pcm_id, substream->stream, params_period_bytes(params));
 
 	memset(&pcm, 0, sizeof(pcm));
 

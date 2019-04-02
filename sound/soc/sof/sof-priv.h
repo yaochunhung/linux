@@ -550,6 +550,7 @@ int snd_sof_get_status(struct snd_sof_dev *sdev, u32 panic_code,
 		       struct sof_ipc_panic_info *panic_info,
 		       void *stack, size_t stack_words);
 int snd_sof_init_trace_ipc(struct snd_sof_dev *sdev);
+void sof_cache_debugfs(struct snd_sof_dev *sdev);
 
 /*
  * Platform specific ops.

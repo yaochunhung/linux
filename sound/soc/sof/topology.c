@@ -88,6 +88,8 @@ static int ipc_pcm_params(struct snd_sof_widget *swidget, int dir)
 		return -EINVAL;
 	}
 
+printk(KERN_DEBUG "Keyon: fram_fmt:%d, channels:%d", pcm.params.frame_fmt, pcm.params.channels);
+
 	/* send IPC to the DSP */
 	ret = sof_ipc_tx_message(sdev->ipc, pcm.hdr.cmd, &pcm, sizeof(pcm),
 				 &ipc_params_reply, sizeof(ipc_params_reply));
@@ -1872,6 +1874,10 @@ static int sof_process_load(struct snd_soc_component *scomp, int index,
 
 	process->size = ipc_data_size;
 	swidget->private = (void *)process;
+
+printk("Keyon: dumping ipc raw data...\n");
+	for (i = 0; i < ipc_size; i+=4)
+printk("0x%04x ", ((char *)process)[i]);
 
 	ret = sof_ipc_tx_message(sdev->ipc, process->comp.hdr.cmd, process,
 				 ipc_size, r, sizeof(*r));

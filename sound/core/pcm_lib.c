@@ -192,16 +192,22 @@ int snd_pcm_update_state(struct snd_pcm_substream *substream,
 {
 	snd_pcm_uframes_t avail;
 
+	printk(KERN_DEBUG "Keyon: %s, %d, hw_ptr:%d, appl_ptr:%d\n", __func__, __LINE__,
+		substream->runtime->status->hw_ptr, substream->runtime->control->appl_ptr);
+
 	avail = snd_pcm_avail(substream);
+	printk(KERN_DEBUG "Keyon: %s, %d, avail:%d\n", __func__, __LINE__, avail);
 	if (avail > runtime->avail_max)
 		runtime->avail_max = avail;
 	if (runtime->status->state == SNDRV_PCM_STATE_DRAINING) {
 		if (avail >= runtime->buffer_size) {
 			snd_pcm_drain_done(substream);
+			printk(KERN_DEBUG "Keyon: %s, %d\n", __func__, __LINE__);
 			return -EPIPE;
 		}
 	} else {
 		if (avail >= runtime->stop_threshold) {
+			printk(KERN_DEBUG "Keyon: %s, %d, threshold:%d\n", __func__, __LINE__, runtime->stop_threshold);
 			__snd_pcm_xrun(substream);
 			return -EPIPE;
 		}
@@ -211,6 +217,7 @@ int snd_pcm_update_state(struct snd_pcm_substream *substream,
 			wake_up(&runtime->tsleep);
 	} else if (avail >= runtime->control->avail_min)
 		wake_up(&runtime->sleep);
+	printk(KERN_DEBUG "Keyon: %s, %d\n", __func__, __LINE__);
 	return 0;
 }
 
@@ -281,6 +288,7 @@ static int snd_pcm_update_hw_ptr0(struct snd_pcm_substream *substream,
 	 * corrections for hw_ptr position
 	 */
 	pos = substream->ops->pointer(substream);
+	printk(KERN_DEBUG "Keyon: %s, %d, pos:%d, hw_ptr:%d\n", __func__, __LINE__, pos, runtime->status->hw_ptr);
 	curr_jiffies = jiffies;
 	if (runtime->tstamp_mode == SNDRV_PCM_TSTAMP_ENABLE) {
 		if ((substream->ops->get_time_info) &&
@@ -299,6 +307,7 @@ static int snd_pcm_update_hw_ptr0(struct snd_pcm_substream *substream,
 
 	if (pos == SNDRV_PCM_POS_XRUN) {
 		__snd_pcm_xrun(substream);
+		printk(KERN_DEBUG "Keyon: %s, %d\n", __func__, __LINE__);
 		return -EPIPE;
 	}
 	if (pos >= runtime->buffer_size) {
@@ -316,10 +325,14 @@ static int snd_pcm_update_hw_ptr0(struct snd_pcm_substream *substream,
 	trace_hwptr(substream, pos, in_interrupt);
 	hw_base = runtime->hw_ptr_base;
 	new_hw_ptr = hw_base + pos;
+	printk(KERN_DEBUG "Keyon: %s, %d, hw_ptr_base:%d, new_hw_ptr:%d\n", __func__, __LINE__, runtime->hw_ptr_base, new_hw_ptr);
 	if (in_interrupt) {
+		printk(KERN_DEBUG "Keyon: %s, %d, hw_ptr_base:%d, new_hw_ptr:%d\n", __func__, __LINE__, runtime->hw_ptr_base, new_hw_ptr);
 		/* we know that one period was processed */
 		/* delta = "expected next hw_ptr" for in_interrupt != 0 */
 		delta = runtime->hw_ptr_interrupt + runtime->period_size;
+		printk(KERN_DEBUG "Keyon: %s, %d, hw_ptr_interrupt:%d, delta:%d\n", __func__, __LINE__, runtime->hw_ptr_interrupt, delta);
+		dump_stack();
 		if (delta > new_hw_ptr) {
 			/* check for double acknowledged interrupts */
 			hdelta = curr_jiffies - runtime->hw_ptr_jiffies;
@@ -330,6 +343,7 @@ static int snd_pcm_update_hw_ptr0(struct snd_pcm_substream *substream,
 					crossed_boundary++;
 				}
 				new_hw_ptr = hw_base + pos;
+				printk(KERN_DEBUG "Keyon: %s, %d, hw_ptr_base:%d, new_hw_ptr:%d\n", __func__, __LINE__, runtime->hw_ptr_base, new_hw_ptr);
 				goto __delta;
 			}
 		}
@@ -345,12 +359,14 @@ static int snd_pcm_update_hw_ptr0(struct snd_pcm_substream *substream,
 		new_hw_ptr = hw_base + pos;
 	}
       __delta:
+	      printk(KERN_DEBUG "Keyon: %s, %d, hw_ptr_base:%d, new_hw_ptr:%d\n", __func__, __LINE__, runtime->hw_ptr_base, new_hw_ptr);
 	delta = new_hw_ptr - old_hw_ptr;
 	if (delta < 0)
 		delta += runtime->boundary;
 
 	if (runtime->no_period_wakeup) {
 		snd_pcm_sframes_t xrun_threshold;
+		printk(KERN_DEBUG "Keyon: %s, %d, hw_ptr_base:%d, new_hw_ptr:%d\n", __func__, __LINE__, runtime->hw_ptr_base, new_hw_ptr);
 		/*
 		 * Without regular period interrupts, we have to check
 		 * the elapsed time to detect xruns.
@@ -360,6 +376,7 @@ static int snd_pcm_update_hw_ptr0(struct snd_pcm_substream *substream,
 			goto no_delta_check;
 		hdelta = jdelta - delta * HZ / runtime->rate;
 		xrun_threshold = runtime->hw_ptr_buffer_jiffies / 2 + 1;
+		printk(KERN_DEBUG "Keyon: %s, %d, hdelta:%d, xrun_threshold:%d\n", __func__, __LINE__, hdelta, xrun_threshold);
 		while (hdelta > xrun_threshold) {
 			delta += runtime->buffer_size;
 			hw_base += runtime->buffer_size;
@@ -368,6 +385,7 @@ static int snd_pcm_update_hw_ptr0(struct snd_pcm_substream *substream,
 				crossed_boundary++;
 			}
 			new_hw_ptr = hw_base + pos;
+			printk(KERN_DEBUG "Keyon: %s, %d, hw_base:%d, new_hw_ptr:%d\n", __func__, __LINE__, hw_base, new_hw_ptr);
 			hdelta -= runtime->hw_ptr_buffer_jiffies;
 		}
 		goto no_delta_check;
@@ -379,6 +397,7 @@ static int snd_pcm_update_hw_ptr0(struct snd_pcm_substream *substream,
 			     "(stream=%i, pos=%ld, new_hw_ptr=%ld, old_hw_ptr=%ld)\n",
 			     substream->stream, (long)pos,
 			     (long)new_hw_ptr, (long)old_hw_ptr);
+		printk(KERN_DEBUG "Keyon: %s, %d\n", __func__, __LINE__);
 		return 0;
 	}
 
@@ -401,6 +420,7 @@ static int snd_pcm_update_hw_ptr0(struct snd_pcm_substream *substream,
 		delta = jdelta /
 			(((runtime->period_size * HZ) / runtime->rate)
 								+ HZ/100);
+		printk(KERN_DEBUG "Keyon: %s, %d, hw_ptr_base:%d, new_hw_ptr:%d\n", __func__, __LINE__, runtime->hw_ptr_base, new_hw_ptr);
 		/* move new_hw_ptr according jiffies not pos variable */
 		new_hw_ptr = old_hw_ptr;
 		hw_base = delta;
@@ -425,6 +445,7 @@ static int snd_pcm_update_hw_ptr0(struct snd_pcm_substream *substream,
 		/* reset values to proper state */
 		delta = 0;
 		hw_base = new_hw_ptr - (new_hw_ptr % runtime->buffer_size);
+		printk(KERN_DEBUG "Keyon: %s, %d, hw_ptr_base:%d, new_hw_ptr:%d\n", __func__, __LINE__, runtime->hw_ptr_base, new_hw_ptr);
 	}
  no_jiffies_check:
 	if (delta > runtime->period_size + runtime->period_size / 2) {
@@ -465,6 +486,7 @@ static int snd_pcm_update_hw_ptr0(struct snd_pcm_substream *substream,
 
 	update_audio_tstamp(substream, &curr_tstamp, &audio_tstamp);
 
+	printk(KERN_DEBUG "Keyon: %s, %d, hw_ptr_base:%d, new_hw_ptr:%d\n", __func__, __LINE__, runtime->hw_ptr_base, new_hw_ptr);
 	return snd_pcm_update_state(substream, runtime);
 }
 

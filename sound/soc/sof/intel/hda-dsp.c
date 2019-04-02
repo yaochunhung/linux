@@ -19,6 +19,7 @@
 #include <sound/hda_register.h>
 #include "../ops.h"
 #include "hda.h"
+#include "../sof-priv.h"
 
 /*
  * DSP Core control.
@@ -221,6 +222,14 @@ int hda_dsp_core_reset_power_down(struct snd_sof_dev *sdev,
 				  unsigned int core_mask)
 {
 	int ret;
+
+#if IS_ENABLED(CONFIG_SND_SOC_SOF_DEBUG_ENABLE_DEBUGFS_CACHE)
+        /* cache debugfs contents during runtime suspend */
+//        if (runtime_suspend)
+                sof_cache_debugfs(sdev);
+#endif
+
+return 0;
 
 	/* place core in reset prior to power down */
 	ret = hda_dsp_core_stall_reset(sdev, core_mask);
