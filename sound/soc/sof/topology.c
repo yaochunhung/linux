@@ -1146,9 +1146,8 @@ static int sof_connect_dai_widget(struct snd_soc_component *scomp,
 
 	/* check we have a connection */
 	if (!dai->name) {
-		dev_err(sdev->dev, "error: can't connect DAI %s stream %s\n",
+		dev_warn(sdev->dev, "warn: can't connect DAI %s stream %s\n",
 			w->name, w->sname);
-		return -EINVAL;
 	}
 
 	return 0;
@@ -1741,9 +1740,9 @@ static int sof_process_load(struct snd_soc_component *scomp, int index,
 	int ret, i, offset = 0;
 
 	if (type == SOF_COMP_NONE) {
-		dev_err(sdev->dev, "error: invalid process comp type %d\n",
+		dev_warn(sdev->dev, "warn: unkwown process comp type %d\n ",
 			type);
-		return -EINVAL;
+		return 0;
 	}
 
 	/*
@@ -2790,8 +2789,7 @@ static int sof_link_load(struct snd_soc_component *scomp, int index,
 					&config);
 		break;
 	default:
-		dev_err(sdev->dev, "error: invalid DAI type %d\n", config.type);
-		ret = -EINVAL;
+		dev_warn(sdev->dev, "warn: unknowm DAI type %d\n", config.type);
 		break;
 	}
 	if (ret < 0)
@@ -3005,6 +3003,7 @@ int snd_sof_complete_pipeline(struct snd_sof_dev *sdev,
 {
 	struct sof_ipc_pipe_ready ready;
 	struct sof_ipc_reply reply;
+	struct sof_ipc_pipe_free free;
 	int ret;
 
 	dev_dbg(sdev->dev, "tplg: complete pipeline %s id %d\n",
@@ -3018,8 +3017,27 @@ int snd_sof_complete_pipeline(struct snd_sof_dev *sdev,
 	ret = sof_ipc_tx_message(sdev->ipc,
 				 ready.hdr.cmd, &ready, sizeof(ready), &reply,
 				 sizeof(reply));
-	if (ret < 0)
-		return ret;
+
+	/* pipeline completion may fail for a number of reasons */
+	if (ret < 0) {
+
+		/* delete pipeline from DAPM */
+		snd_soc_tplg_widget_remove_all(swidget->widget->dapm,
+					       swidget->comp_id);
+
+		/* dismantle this pipeline to free up DSP resources */
+		memset(&free, 0, sizeof(free));
+		free.hdr.size = sizeof(free);
+		free.hdr.cmd = SOF_IPC_GLB_TPLG_MSG | SOF_IPC_TPLG_PIPE_FREE;
+		free.comp_id = swidget->comp_id;
+
+		ret = sof_ipc_tx_message(sdev->ipc,
+				 ready.hdr.cmd, &ready, sizeof(ready), &reply,
+				 sizeof(reply));
+		if (ret < 0)
+			return ret;
+	}
+
 	return 1;
 }
 
