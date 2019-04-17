@@ -3066,10 +3066,23 @@ static int sof_manifest(struct snd_soc_component *scomp, int index,
 			 man->priv.data[0], man->priv.data[1],
 			 man->priv.data[2], SOF_ABI_MAJOR, SOF_ABI_MINOR,
 			 SOF_ABI_PATCH);
-		if (SOF_ABI_VER(man->priv.data[0], man->priv.data[1],
-				man->priv.data[2]) <= SOF_ABI_VERSION)
-			return 0;
+
+		/* check major ABI is the same otherwise it's incompatible */
+		if (man->priv.data[0] != SOF_ABI_MAJOR)
+			goto error;
+
+		/* inform users if kernel MINOR features are older */
+		if (man->priv.data[1] > SOF_ABI_MINOR) {
+			dev_warn(sdev->dev, "warn: topology feature level %d "
+				 "is newer than kernel feature level %d.\n",
+				 man->priv.data[1], SOF_ABI_MINOR);
+			dev_warn(sdev->dev, "warn: some features in this "
+				 "topology may not be available, please try a"
+				 "newer kernel with same ABI MINOR level.\n");
+		}
 	}
+
+error:
 	dev_err(sdev->dev,
 		"error: Incompatible ABI version %d:%d:%d\n",
 		man->priv.data[0], man->priv.data[1], man->priv.data[2]);
