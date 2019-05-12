@@ -37,8 +37,8 @@ struct snd_soc_acpi_mach snd_soc_acpi_intel_glk_machines[] = {
 		.fw_filename = "intel/dsp_fw_glk.bin",
 		.machine_quirk = snd_soc_acpi_codec_list,
 		.quirk_data = &glk_codecs,
-		.sof_fw_filename = "intel/sof-glk.ri",
-		.sof_tplg_filename = "intel/sof-glk-rt5682.tplg",
+		.sof_fw_filename = "sof-glk.ri",
+		.sof_tplg_filename = "sof-glk-rt5682.tplg",
 	},
 	{},
 };
