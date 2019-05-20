@@ -372,6 +372,8 @@ struct sof_intel_hda_dev {
 
 	int irq;
 
+	u32 polling_mode;
+
 	/* DMIC device */
 	struct platform_device *dmic_dev;
 };

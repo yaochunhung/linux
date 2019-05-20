@@ -14,9 +14,44 @@
 
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_HDA)
 
+int sof_hdac_bus_get_response(struct hdac_bus *bus, unsigned int addr,
+                              unsigned int *res)
+{
+	struct sof_intel_hda_dev *sof_hda = bus_to_sof_hda(bus);
+	unsigned long timeout;
+	unsigned long loopcounter;
+
+	timeout = jiffies + msecs_to_jiffies(1000);
+
+	for (loopcounter = 0;; loopcounter++) {
+		spin_lock_irq(&bus->reg_lock);
+		if (sof_hda->polling_mode)
+			snd_hdac_bus_update_rirb(bus);
+		if (!bus->rirb.cmds[addr]) {
+			if (res)
+				*res = bus->rirb.res[addr]; /* the last value */
+			spin_unlock_irq(&bus->reg_lock);
+			return 0;
+		}
+		spin_unlock_irq(&bus->reg_lock);
+		if (time_after(jiffies, timeout))
+			break;
+		if (loopcounter > 3000)
+			msleep(2); /* temporary workaround */
+		else {
+			udelay(10);
+			cond_resched();
+		}
+	}
+	dev_err(bus->dev, "%s timed out\n", __func__);
+
+	return -EIO;
+
+}
+
 static const struct hdac_bus_ops bus_ops = {
 	.command = snd_hdac_bus_send_cmd,
-	.get_response = snd_hdac_bus_get_response,
+	.get_response = sof_hdac_bus_get_response,
 };
 
 #endif
