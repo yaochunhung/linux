@@ -1820,6 +1820,10 @@ static int azx_create(struct snd_card *card, struct pci_dev *pci,
 		return err;
 	}
 
+	/* use the non-cached pages in non-snoop mode */
+	if (!azx_snoop(chip))
+		azx_bus(chip)->dma_type = SNDRV_DMA_TYPE_DEV_UC;
+
 	/* Workaround for a communication error on CFL (bko#199007) and CNL */
 	if (IS_CFL(pci) || IS_CNL(pci))
 		azx_bus(chip)->polling_mode = 1;
@@ -2105,55 +2109,6 @@ static int disable_msi_reset_irq(struct azx *chip)
 	return 0;
 }
 
-/* DMA page allocation helpers.  */
-static int dma_alloc_pages(struct hdac_bus *bus,
-			   int type,
-			   size_t size,
-			   struct snd_dma_buffer *buf)
-{
-	struct azx *chip = bus_to_azx(bus);
-	int err;
-
-	err = snd_dma_alloc_pages(type,
-				  bus->dev,
-				  size, buf);
-	if (err < 0)
-		return err;
-	mark_pages_wc(chip, buf, true);
-	return 0;
-}
-
-static void dma_free_pages(struct hdac_bus *bus, struct snd_dma_buffer *buf)
-{
-	struct azx *chip = bus_to_azx(bus);
-
-	mark_pages_wc(chip, buf, false);
-	snd_dma_free_pages(buf);
-}
-
-static int substream_alloc_pages(struct azx *chip,
-				 struct snd_pcm_substream *substream,
-				 size_t size)
-{
-	struct azx_dev *azx_dev = get_azx_dev(substream);
-	int ret;
-
-	mark_runtime_wc(chip, azx_dev, substream, false);
-	ret = snd_pcm_lib_malloc_pages(substream, size);
-	if (ret < 0)
-		return ret;
-	mark_runtime_wc(chip, azx_dev, substream, true);
-	return 0;
-}
-
-static int substream_free_pages(struct azx *chip,
-				struct snd_pcm_substream *substream)
-{
-	struct azx_dev *azx_dev = get_azx_dev(substream);
-	mark_runtime_wc(chip, azx_dev, substream, false);
-	return snd_pcm_lib_free_pages(substream);
-}
-
 static void pcm_mmap_prepare(struct snd_pcm_substream *substream,
 			     struct vm_area_struct *area)
 {
@@ -2172,14 +2127,10 @@ static const struct hdac_io_ops pci_hda_io_ops = {
 	.reg_readw = pci_azx_readw,
 	.reg_writeb = pci_azx_writeb,
 	.reg_readb = pci_azx_readb,
-	.dma_alloc_pages = dma_alloc_pages,
-	.dma_free_pages = dma_free_pages,
 };
 
 static const struct hda_controller_ops pci_hda_ops = {
 	.disable_msi_reset_irq = disable_msi_reset_irq,
-	.substream_alloc_pages = substream_alloc_pages,
-	.substream_free_pages = substream_free_pages,
 	.pcm_mmap_prepare = pcm_mmap_prepare,
 	.position_check = azx_position_check,
 };

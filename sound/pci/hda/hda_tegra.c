@@ -86,33 +86,6 @@ MODULE_PARM_DESC(power_save,
 #endif
 
 /*
- * DMA page allocation ops.
- */
-static int dma_alloc_pages(struct hdac_bus *bus, int type, size_t size,
-			   struct snd_dma_buffer *buf)
-{
-	return snd_dma_alloc_pages(type, bus->dev, size, buf);
-}
-
-static void dma_free_pages(struct hdac_bus *bus, struct snd_dma_buffer *buf)
-{
-	snd_dma_free_pages(buf);
-}
-
-static int substream_alloc_pages(struct azx *chip,
-				 struct snd_pcm_substream *substream,
-				 size_t size)
-{
-	return snd_pcm_lib_malloc_pages(substream, size);
-}
-
-static int substream_free_pages(struct azx *chip,
-				struct snd_pcm_substream *substream)
-{
-	return snd_pcm_lib_free_pages(substream);
-}
-
-/*
  * Register access ops. Tegra HDA register access is DWORD only.
  */
 static void hda_tegra_writel(u32 value, u32 __iomem *addr)
@@ -176,8 +149,6 @@ static const struct hdac_io_ops hda_tegra_io_ops = {
 	.reg_readw = hda_tegra_readw,
 	.reg_writeb = hda_tegra_writeb,
 	.reg_readb = hda_tegra_readb,
-	.dma_alloc_pages = dma_alloc_pages,
-	.dma_free_pages = dma_free_pages,
 };
 
 static const struct hda_controller_ops hda_tegra_ops = {
