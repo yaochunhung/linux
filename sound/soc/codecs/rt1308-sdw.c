@@ -231,6 +231,57 @@ int rt1308_clock_config(struct device *dev)
 	return 0;
 }
 
+static int rt1308_read_prop(struct sdw_slave *slave)
+{
+	struct sdw_slave_prop *prop = &slave->prop;
+	int nval, i, num_of_ports = 1;
+	u32 bit;
+	unsigned long addr;
+	struct sdw_dpn_prop *dpn;
+
+	prop->paging_support = false;
+
+	/* first we need to allocate memory for set bits in port lists */
+	prop->source_ports = 0x00;	/* BITMAP: 00010100 (not enable yet) */
+	prop->sink_ports = 0x2;	/* BITMAP:  00000010 */
+
+	/* for sink */
+	nval = hweight32(prop->sink_ports);
+	num_of_ports += nval;
+	prop->sink_dpn_prop = devm_kcalloc(&slave->dev, nval,
+					   sizeof(*prop->sink_dpn_prop),
+					   GFP_KERNEL);
+	if (!prop->sink_dpn_prop)
+		return -ENOMEM;
+
+	i = 0;
+	dpn = prop->sink_dpn_prop;
+	addr = prop->sink_ports;
+	for_each_set_bit(bit, &addr, 32) {
+		dpn[i].num = bit;
+		dpn[i].type = SDW_DPN_FULL;
+		dpn[i].simple_ch_prep_sm = true;
+		dpn[i].ch_prep_timeout = 10;
+		i++;
+	}
+
+	/* Allocate port_ready based on num_of_ports */
+	slave->port_ready = devm_kcalloc(&slave->dev, num_of_ports,
+					 sizeof(*slave->port_ready),
+					 GFP_KERNEL);
+	if (!slave->port_ready)
+		return -ENOMEM;
+
+	/* Initialize completion */
+	for (i = 0; i < num_of_ports; i++)
+		init_completion(&slave->port_ready[i]);
+
+	/* set the timeout values */
+	prop->clk_stop_timeout = 20;
+
+	return 0;
+}
+
 static int rt1308_update_status(struct sdw_slave *slave,
 			       enum sdw_slave_status status)
 {
@@ -512,7 +563,7 @@ static int rt1308_sdw_pcm_hw_free(struct snd_pcm_substream *substream,
  * port_prep are not defined for now
  */
 static struct sdw_slave_ops rt1308_slave_ops = {
-	.read_prop = sdw_slave_read_prop,
+	.read_prop = rt1308_read_prop,
 	.interrupt_callback = rt1308_interrupt_callback,
 	.update_status = rt1308_update_status,
 	.bus_config = rt1308_bus_config,
