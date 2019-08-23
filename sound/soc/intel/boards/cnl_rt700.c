@@ -115,31 +115,19 @@ static const struct snd_kcontrol_new cnl_rt700_controls[] = {
 	SOC_DAPM_PIN_SWITCH("Speaker"),
 };
 
-static struct snd_soc_dai_link_component cnl_rt700_component[] = {
-	{
-		.name = "sdw:1:25d:700:0:0",
-		.dai_name = "rt700-aif1",
-	}
-};
-
-static struct snd_soc_dai_link_component sdw1_pin2_component[] = {
-	{
-		.dai_name = "SDW1 Pin2",
-	}
-};
-
-static struct snd_soc_dai_link_component sdw1_pin3_component[] = {
-	{
-		.dai_name = "SDW1 Pin3",
-	}
-};
-
 SND_SOC_DAILINK_DEF(sdw0_pin2,
 	DAILINK_COMP_ARRAY(COMP_CPU("SDW0 Pin2")));
 SND_SOC_DAILINK_DEF(sdw0_pin3,
 	DAILINK_COMP_ARRAY(COMP_CPU("SDW0 Pin3")));
 SND_SOC_DAILINK_DEF(sdw0_codec,
 	DAILINK_COMP_ARRAY(COMP_CODEC("sdw:0:25d:700:0:0", "rt700-aif1")));
+
+SND_SOC_DAILINK_DEF(sdw1_pin2,
+	DAILINK_COMP_ARRAY(COMP_CPU("SDW1 Pin2")));
+SND_SOC_DAILINK_DEF(sdw1_pin3,
+	DAILINK_COMP_ARRAY(COMP_CPU("SDW1 Pin3")));
+SND_SOC_DAILINK_DEF(sdw1_codec,
+	DAILINK_COMP_ARRAY(COMP_CODEC("sdw:1:25d:700:0:0", "rt700-aif1")));
 
 SND_SOC_DAILINK_DEF(dmic_pin,
 	DAILINK_COMP_ARRAY(COMP_CPU("DMIC01 Pin")));
@@ -265,17 +253,22 @@ static int snd_cnl_rt700_mc_probe(struct platform_device *pdev)
 #endif
 
 	product = dmi_get_system_info(DMI_PRODUCT_NAME);
-	if (strstr(product, "CometLake")) {
-		cnl_rt700_msic_dailink[0].codecs = cnl_rt700_component;
+	if (strstr(product, "CometLake")) { /* FIXME: test against RVP */
+		cnl_rt700_msic_dailink[0].name = "SDW1-Playback";
+		cnl_rt700_msic_dailink[0].codecs = sdw1_codec;
 		cnl_rt700_msic_dailink[0].num_codecs =
-			ARRAY_SIZE(cnl_rt700_component);
-		cnl_rt700_msic_dailink[0].cpus = sdw1_pin2_component;
-		cnl_rt700_msic_dailink[0].num_cpus = 1;
-		cnl_rt700_msic_dailink[1].codecs = cnl_rt700_component;
+			ARRAY_SIZE(sdw1_codec);
+		cnl_rt700_msic_dailink[0].cpus = sdw1_pin2;
+		cnl_rt700_msic_dailink[0].num_cpus =
+			ARRAY_SIZE(sdw1_pin2);
+
+		cnl_rt700_msic_dailink[0].name = "SDW1-Capture";
+		cnl_rt700_msic_dailink[1].codecs = sdw1_codec;
 		cnl_rt700_msic_dailink[1].num_codecs =
-			ARRAY_SIZE(cnl_rt700_component);
-		cnl_rt700_msic_dailink[1].cpus = sdw1_pin3_component;
-		cnl_rt700_msic_dailink[1].num_cpus = 1;
+			ARRAY_SIZE(sdw1_codec);
+		cnl_rt700_msic_dailink[1].cpus = sdw1_pin3;
+		cnl_rt700_msic_dailink[1].num_cpus =
+			ARRAY_SIZE(sdw1_pin3);
 	}
 
 	card = &snd_soc_card_cnl_rt700;
