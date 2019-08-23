@@ -14,6 +14,7 @@
 #include <linux/init.h>
 #include <linux/input.h>
 #include <linux/io.h>
+#include <linux/dmi.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <sound/jack.h>
@@ -120,6 +121,13 @@ SND_SOC_DAILINK_DEF(sdw0_pin3,
 	DAILINK_COMP_ARRAY(COMP_CPU("SDW0 Pin3")));
 SND_SOC_DAILINK_DEF(sdw0_codec,
 	DAILINK_COMP_ARRAY(COMP_CODEC("sdw:0:25d:700:0:0", "rt700-aif1")));
+
+SND_SOC_DAILINK_DEF(sdw1_pin2,
+	DAILINK_COMP_ARRAY(COMP_CPU("SDW1 Pin2")));
+SND_SOC_DAILINK_DEF(sdw1_pin3,
+	DAILINK_COMP_ARRAY(COMP_CPU("SDW1 Pin3")));
+SND_SOC_DAILINK_DEF(sdw1_codec,
+	DAILINK_COMP_ARRAY(COMP_CODEC("sdw:1:25d:700:0:0", "rt700-aif1")));
 
 SND_SOC_DAILINK_DEF(dmic_pin,
 	DAILINK_COMP_ARRAY(COMP_CPU("DMIC01 Pin")));
@@ -231,6 +239,7 @@ static int snd_cnl_rt700_mc_probe(struct platform_device *pdev)
 	struct snd_soc_acpi_mach *mach;
 	const char *platform_name;
 	struct snd_soc_card *card;
+	const char *product;
 	int ret;
 
 	dev_dbg(&pdev->dev, "Entry %s\n", __func__);
@@ -242,6 +251,25 @@ static int snd_cnl_rt700_mc_probe(struct platform_device *pdev)
 #if IS_ENABLED(CONFIG_SND_SOC_HDAC_HDMI)
 	INIT_LIST_HEAD(&ctx->hdmi_pcm_list);
 #endif
+
+	product = dmi_get_system_info(DMI_PRODUCT_NAME);
+	if (strstr(product, "CometLake")) { /* FIXME: test against RVP */
+		cnl_rt700_msic_dailink[0].name = "SDW1-Playback";
+		cnl_rt700_msic_dailink[0].codecs = sdw1_codec;
+		cnl_rt700_msic_dailink[0].num_codecs =
+			ARRAY_SIZE(sdw1_codec);
+		cnl_rt700_msic_dailink[0].cpus = sdw1_pin2;
+		cnl_rt700_msic_dailink[0].num_cpus =
+			ARRAY_SIZE(sdw1_pin2);
+
+		cnl_rt700_msic_dailink[0].name = "SDW1-Capture";
+		cnl_rt700_msic_dailink[1].codecs = sdw1_codec;
+		cnl_rt700_msic_dailink[1].num_codecs =
+			ARRAY_SIZE(sdw1_codec);
+		cnl_rt700_msic_dailink[1].cpus = sdw1_pin3;
+		cnl_rt700_msic_dailink[1].num_cpus =
+			ARRAY_SIZE(sdw1_pin3);
+	}
 
 	card = &snd_soc_card_cnl_rt700;
 	card->dev = &pdev->dev;
