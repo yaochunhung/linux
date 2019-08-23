@@ -333,19 +333,7 @@ static struct sdw_driver rt715_sdw_driver = {
 	.ops = &rt715_slave_ops,
 	.id_table = rt715_id,
 };
-
-static int __init sdw_slave_init(void)
-{
-	return sdw_register_driver(&rt715_sdw_driver);
-}
-
-static void __exit sdw_slave_exit(void)
-{
-	sdw_unregister_driver(&rt715_sdw_driver);
-}
-
-module_init(sdw_slave_init);
-module_exit(sdw_slave_exit);
+module_sdw_driver(rt715_sdw_driver);
 
 MODULE_DESCRIPTION("ASoC RT715 driver SDW");
 MODULE_AUTHOR("Jack Yu <jack.yu@realtek.com>");
