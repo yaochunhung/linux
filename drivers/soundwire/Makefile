@@ -2,9 +2,11 @@
 #
 # Makefile for soundwire core
 #
+ccflags-y += -DDEBUG
 
 #Bus Objs
-soundwire-bus-objs := bus_type.o bus.o slave.o mipi_disco.o stream.o
+soundwire-bus-objs := bus_type.o bus.o slave.o mipi_disco.o stream.o \
+	algo_dynamic_allocation.o
 obj-$(CONFIG_SOUNDWIRE) += soundwire-bus.o
 
 ifdef CONFIG_DEBUG_FS
