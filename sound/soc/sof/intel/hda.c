@@ -479,20 +479,9 @@ static const char *fixup_tplg_name(struct snd_sof_dev *sdev,
 static int hda_init_caps(struct snd_sof_dev *sdev)
 {
 	struct hdac_bus *bus = sof_to_bus(sdev);
-	struct snd_soc_acpi_mach *mach;
-	struct snd_sof_pdata *pdata = sdev->pdata;
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_HDA)
 	struct hdac_ext_link *hlink;
-	struct snd_soc_acpi_mach *hda_mach;
-	struct snd_soc_acpi_mach_params *mach_params;
-	const char *tplg_filename;
-	const char *idisp_str;
-	const char *dmic_str;
-	int dmic_num;
-	int codec_num = 0;
-	int i;
 #endif
-	u32 link_mask = 0;
 	int ret = 0;
 
 	device_disable_async_suspend(bus->dev);
@@ -521,38 +510,6 @@ static int hda_init_caps(struct snd_sof_dev *sdev)
 		return ret;
 	}
 
-	/* need to power-up core before setting-up capabilities */
-	ret = hda_dsp_core_power_up(sdev, HDA_DSP_CORE_MASK(0));
-	if (ret < 0) {
-		dev_err(sdev->dev, "error: could not power-up DSP subsystem\n");
-		return ret;
-	}
-
-	/* initialize SoundWire capabilities */
-	ret = hda_sdw_init(sdev, &link_mask);
-	if (ret < 0) {
-		dev_err(sdev->dev, "error: SoundWire get caps error\n");
-		hda_dsp_core_power_down(sdev, HDA_DSP_CORE_MASK(0));
-		return ret;
-	}
-
-	if (!pdata->machine && link_mask != 0) {
-		/* SoundWire enabled, revisit machine driver selection */
-		mach = pdata->desc->alt_machines;
-		while (mach && mach->link_mask && mach->link_mask != link_mask)
-			mach++;
-		if (mach && mach->link_mask) {
-			dev_dbg(bus->dev,
-				"SoundWire machine driver %s topology %s\n",
-				mach->drv_name,
-				mach->sof_tplg_filename);
-			pdata->machine = mach;
-			mach->mach_params.platform = dev_name(sdev->dev);
-			pdata->fw_filename = mach->sof_fw_filename;
-			pdata->tplg_filename = mach->sof_tplg_filename;
-		}
-	}
-
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_HDA)
 	if (bus->mlcap)
 		snd_hdac_ext_bus_get_ml_capabilities(bus);
@@ -564,76 +521,6 @@ static int hda_init_caps(struct snd_sof_dev *sdev)
 		dev_info(bus->dev, "hda codecs found, mask %lx\n",
 			 bus->codec_mask);
 
-		for (i = 0; i < HDA_MAX_CODECS; i++) {
-			if (bus->codec_mask & (1 << i))
-				codec_num++;
-		}
-
-		/*
-		 * If no machine driver is found, then:
-		 *
-		 * hda machine driver is used if :
-		 * 1. there is one HDMI codec and one external HDAudio codec
-		 * 2. only HDMI codec
-		 */
-		if (!pdata->machine && codec_num <= 2 &&
-		    HDA_IDISP_CODEC(bus->codec_mask)) {
-			hda_mach = snd_soc_acpi_intel_hda_machines;
-			pdata->machine = hda_mach;
-
-			/* topology: use the info from hda_machines */
-			pdata->tplg_filename =
-				hda_mach->sof_tplg_filename;
-
-			/* firmware: pick the first in machine list */
-			mach = pdata->desc->machines;
-			pdata->fw_filename = mach->sof_fw_filename;
-
-			dev_info(bus->dev, "using HDA machine driver %s now\n",
-				 hda_mach->drv_name);
-
-			if (codec_num == 1)
-				idisp_str = "-idisp";
-			else
-				idisp_str = "";
-
-			/* first check NHLT for DMICs */
-			dmic_num = check_nhlt_dmic(sdev);
-
-			/* allow for module parameter override */
-			if (hda_dmic_num != -1)
-				dmic_num = hda_dmic_num;
-
-			switch (dmic_num) {
-			case 2:
-				dmic_str = "-2ch";
-				break;
-			case 4:
-				dmic_str = "-4ch";
-				break;
-			default:
-				dmic_num = 0;
-				dmic_str = "";
-				break;
-			}
-
-			tplg_filename = pdata->tplg_filename;
-			tplg_filename = fixup_tplg_name(sdev, tplg_filename,
-							idisp_str, dmic_str);
-			if (!tplg_filename) {
-				hda_codec_i915_exit(sdev);
-				return ret;
-			}
-			pdata->tplg_filename = tplg_filename;
-		}
-	}
-
-	/* used by hda machine driver to create dai links */
-	if (pdata->machine) {
-		mach_params = (struct snd_soc_acpi_mach_params *)
-			&pdata->machine->mach_params;
-		mach_params->codec_mask = bus->codec_mask;
-		mach_params->platform = dev_name(sdev->dev);
 	}
 
 	/* create codec instances */
@@ -661,6 +548,116 @@ static const struct sof_intel_dsp_desc
 	return chip_info;
 }
 
+static int machine_autodetect(struct snd_sof_dev *sdev, u32 sdw_link_mask)
+{
+	struct hdac_bus *bus = sof_to_bus(sdev);
+	struct snd_soc_acpi_mach *mach;
+	struct snd_sof_pdata *pdata = sdev->pdata;
+	struct snd_soc_acpi_mach_params *mach_params;
+#if IS_ENABLED(CONFIG_SND_SOC_SOF_HDA)
+	struct snd_soc_acpi_mach *hda_mach;
+	const char *tplg_filename;
+	const char *idisp_str;
+	const char *dmic_str;
+	int dmic_num;
+	int codec_num = 0;
+	int i;
+#endif
+
+	if (!pdata->machine && sdw_link_mask != 0) {
+		/* SoundWire enabled, revisit machine driver selection */
+		mach = pdata->desc->alt_machines;
+		while (mach && mach->link_mask &&
+		       mach->link_mask != sdw_link_mask)
+			mach++;
+		if (mach && mach->link_mask) {
+			dev_dbg(bus->dev,
+				"SoundWire machine driver %s topology %s\n",
+				mach->drv_name,
+				mach->sof_tplg_filename);
+			pdata->machine = mach;
+			mach->mach_params.platform = dev_name(sdev->dev);
+			pdata->fw_filename = mach->sof_fw_filename;
+			pdata->tplg_filename = mach->sof_tplg_filename;
+		}
+	}
+
+#if IS_ENABLED(CONFIG_SND_SOC_SOF_HDA)
+	for (i = 0; i < HDA_MAX_CODECS; i++) {
+		if (bus->codec_mask & (1 << i))
+			codec_num++;
+	}
+
+	/*
+	 * If no machine driver is found, then:
+	 *
+	 * hda machine driver is used if :
+	 * 1. there is one HDMI codec and one external HDAudio codec
+	 * 2. only HDMI codec
+	 */
+	if (!pdata->machine && codec_num <= 2 &&
+	    HDA_IDISP_CODEC(bus->codec_mask)) {
+		hda_mach = snd_soc_acpi_intel_hda_machines;
+		pdata->machine = hda_mach;
+
+		/* topology: use the info from hda_machines */
+		pdata->tplg_filename =
+			hda_mach->sof_tplg_filename;
+
+		/* firmware: pick the first in machine list */
+		mach = pdata->desc->machines;
+		pdata->fw_filename = mach->sof_fw_filename;
+
+		dev_info(bus->dev, "using HDA machine driver %s now\n",
+			 hda_mach->drv_name);
+
+		if (codec_num == 1)
+			idisp_str = "-idisp";
+		else
+			idisp_str = "";
+
+		/* first check NHLT for DMICs */
+		dmic_num = check_nhlt_dmic(sdev);
+
+		/* allow for module parameter override */
+		if (hda_dmic_num != -1)
+			dmic_num = hda_dmic_num;
+
+		switch (dmic_num) {
+		case 2:
+			dmic_str = "-2ch";
+			break;
+		case 4:
+			dmic_str = "-4ch";
+			break;
+		default:
+			dmic_num = 0;
+			dmic_str = "";
+			break;
+		}
+
+		tplg_filename = pdata->tplg_filename;
+		tplg_filename = fixup_tplg_name(sdev, tplg_filename,
+						idisp_str, dmic_str);
+		if (!tplg_filename) {
+			hda_codec_i915_exit(sdev);
+			return -EINVAL;
+		}
+		pdata->tplg_filename = tplg_filename;
+	}
+#endif
+
+	/* used by machine driver to create dai links */
+	if (pdata->machine) {
+		mach_params = (struct snd_soc_acpi_mach_params *)
+			&pdata->machine->mach_params;
+		mach_params->codec_mask = bus->codec_mask;
+		mach_params->platform = dev_name(sdev->dev);
+	}
+
+	return 0;
+}
+
 int hda_dsp_probe(struct snd_sof_dev *sdev)
 {
 	struct pci_dev *pci = to_pci_dev(sdev->dev);
@@ -668,6 +665,7 @@ int hda_dsp_probe(struct snd_sof_dev *sdev)
 	struct hdac_bus *bus;
 	const struct sof_intel_dsp_desc *chip;
 	int ret = 0;
+	u32 link_mask = 0;
 
 	/*
 	 * detect DSP by checking class/subclass/prog-id information
@@ -826,8 +824,33 @@ int hda_dsp_probe(struct snd_sof_dev *sdev)
 	/* set default mailbox offset for FW ready message */
 	sdev->dsp_box.offset = HDA_DSP_MBOX_UPLINK_OFFSET;
 
+	/* need to power-up core before setting-up capabilities */
+	ret = hda_dsp_core_power_up(sdev, HDA_DSP_CORE_MASK(0));
+	if (ret < 0) {
+		dev_err(sdev->dev, "error: could not power-up DSP subsystem\n");
+		goto free_ipc_irq;
+	}
+
+	/* initialize SoundWire capabilities */
+	ret = hda_sdw_init(sdev, &link_mask);
+	if (ret < 0) {
+		dev_err(sdev->dev, "error: SoundWire get caps error\n");
+		goto core_power_down;
+	}
+
+	/* try to figure out which machine driver to use */
+	ret = machine_autodetect(sdev, link_mask);
+	if (ret < 0) {
+		dev_err(sdev->dev, "error: machine driver config issue\n");
+		goto sdw_exit;
+	}
+
 	return 0;
 
+sdw_exit:
+	hda_sdw_exit(sdev);
+core_power_down:
+	hda_dsp_core_power_down(sdev, HDA_DSP_CORE_MASK(0));
 free_ipc_irq:
 	free_irq(sdev->ipc_irq, sdev);
 free_hda_irq:
