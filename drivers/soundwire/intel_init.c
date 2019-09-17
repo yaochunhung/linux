@@ -414,7 +414,6 @@ void sdw_intel_exit(struct sdw_intel_ctx *ctx)
 	free_irq(ctx->irq, ctx);
 	sdw_intel_cleanup(ctx);
 	kfree(ctx);
-	ctx = NULL;
 }
 EXPORT_SYMBOL(sdw_intel_exit);
 
