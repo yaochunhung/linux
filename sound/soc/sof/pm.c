@@ -433,12 +433,48 @@ EXPORT_SYMBOL(snd_sof_set_d0_substate);
 
 int snd_sof_resume(struct device *dev)
 {
+	struct snd_sof_dev *sdev = dev_get_drvdata(dev);
+	int ret;
+
+	if (sdev->s0_suspend && sof_ops(sdev)->set_power_state) {
+		/* resume from D0I3 */
+		dev_dbg(sdev->dev, "ADSP will exit from D0i3...\n");
+		ret = snd_sof_set_d0_substate(sdev, SOF_DSP_D0I0);
+		if (ret < 0) {
+			dev_err(sdev->dev, "error: failed to exit from D0I3 %d\n",
+				ret);
+			return ret;
+		}
+
+		/* platform-specific resume from S0ix */
+		return snd_sof_dsp_resume(sdev);
+	}
+
+	/* resume from D3 */
 	return sof_resume(dev, false);
 }
 EXPORT_SYMBOL(snd_sof_resume);
 
 int snd_sof_suspend(struct device *dev)
 {
+	struct snd_sof_dev *sdev = dev_get_drvdata(dev);
+	int ret;
+
+	if (sdev->s0_suspend && sof_ops(sdev)->set_power_state) {
+		/* suspend to D0i3 */
+		dev_dbg(sdev->dev, "DSP is trying to enter D0i3...\n");
+		ret = snd_sof_set_d0_substate(sdev, SOF_DSP_D0I3);
+		if (ret < 0) {
+			dev_warn(sdev->dev, "error: failed to enter D0I3, %d\n",
+				 ret);
+			return ret;
+		}
+
+		/* platform-specific suspend to D0i3 */
+		return snd_sof_dsp_suspend(sdev);
+	}
+
+	/* suspend to D3 */
 	return sof_suspend(dev, false);
 }
 EXPORT_SYMBOL(snd_sof_suspend);
