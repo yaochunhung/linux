@@ -18,6 +18,7 @@
 #include <sound/hda_register.h>
 #include <sound/pcm_params.h>
 #include "../ops.h"
+#include "../ipc-ops.h"
 #include "hda.h"
 
 #define SDnFMT_BASE(x)	((x) << 14)
@@ -83,13 +84,12 @@ static inline u32 get_bits(struct snd_sof_dev *sdev, int sample_bits)
 int hda_dsp_pcm_hw_params(struct snd_sof_dev *sdev,
 			  struct snd_pcm_substream *substream,
 			  struct snd_pcm_hw_params *params,
-			  struct sof_ipc_stream_params *ipc_params)
+			  void *ipc_params)
 {
 	struct hdac_stream *hstream = substream->runtime->private_data;
 	struct hdac_ext_stream *stream = stream_to_hdac_ext_stream(hstream);
 	struct sof_intel_hda_dev *hda = sdev->pdata->hw_pdata;
 	struct snd_dma_buffer *dmab;
-	struct sof_ipc_fw_version *v = &sdev->fw_ready.version;
 	int ret;
 	u32 size, rate, bits;
 
@@ -117,19 +117,7 @@ int hda_dsp_pcm_hw_params(struct snd_sof_dev *sdev,
 	/* disable SPIB, to enable buffer wrap for stream */
 	hda_dsp_stream_spib_config(sdev, stream, HDA_DSP_SPIB_DISABLE, 0);
 
-	/* update no_stream_position flag for ipc params */
-	if (hda && hda->no_ipc_position) {
-		/* For older ABIs set host_period_bytes to zero to inform
-		 * FW we don't want position updates. Newer versions use
-		 * no_stream_position for this purpose.
-		 */
-		if (v->abi_version < SOF_ABI_VER(3, 10, 0))
-			ipc_params->host_period_bytes = 0;
-		else
-			ipc_params->no_stream_position = 1;
-	}
-
-	ipc_params->stream_tag = hstream->stream_tag;
+	snd_sof_set_hda_stream_config(sdev, hstream, hda);
 
 	return 0;
 }
@@ -161,7 +149,8 @@ snd_pcm_uframes_t hda_dsp_pcm_pointer(struct snd_sof_dev *sdev,
 
 	if (hda && !hda->no_ipc_position) {
 		/* read position from IPC position */
-		pos = spcm->stream[substream->stream].posn.host_posn;
+		pos = snd_sof_host_posn_bytes(sdev,
+				spcm->stream[substream->stream].ipc_posn);
 		goto found;
 	}
 

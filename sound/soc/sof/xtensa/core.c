@@ -10,7 +10,7 @@
 
 #include <linux/module.h>
 #include <sound/sof.h>
-#include <sound/sof/xtensa.h>
+#include <sound/sof-ipc-v1/xtensa.h>
 #include "../sof-priv.h"
 
 struct xtensa_exception_cause {

@@ -21,9 +21,10 @@
 #include <linux/module.h>
 #include <sound/intel-nhlt.h>
 #include <sound/sof.h>
-#include <sound/sof/xtensa.h>
+#include <sound/sof-ipc-v1/xtensa.h>
 #include "../ops.h"
 #include "hda.h"
+#include "../ipc-ops.h"
 
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_HDA)
 #include <sound/soc-acpi-intel-match.h>
@@ -120,40 +121,19 @@ static void hda_dsp_get_status(struct snd_sof_dev *sdev)
 	dev_dbg(sdev->dev, "unknown ROM status value %8.8x\n", status);
 }
 
-static void hda_dsp_get_registers(struct snd_sof_dev *sdev,
-				  struct sof_ipc_dsp_oops_xtensa *xoops,
-				  struct sof_ipc_panic_info *panic_info,
-				  u32 *stack, size_t stack_words)
-{
-	u32 offset = sdev->dsp_oops_offset;
-
-	/* first read registers */
-	sof_mailbox_read(sdev, offset, xoops, sizeof(*xoops));
-
-	/* note: variable AR register array is not read */
-
-	/* then get panic info */
-	if (xoops->arch_hdr.totalsize > EXCEPT_MAX_HDR_SIZE) {
-		dev_err(sdev->dev, "invalid header size 0x%x. FW oops is bogus\n",
-			xoops->arch_hdr.totalsize);
-		return;
-	}
-	offset += xoops->arch_hdr.totalsize;
-	sof_block_read(sdev, sdev->mmio_bar, offset,
-		       panic_info, sizeof(*panic_info));
-
-	/* then get the stack */
-	offset += sizeof(*panic_info);
-	sof_block_read(sdev, sdev->mmio_bar, offset, stack,
-		       stack_words * sizeof(u32));
-}
-
 void hda_dsp_dump_skl(struct snd_sof_dev *sdev, u32 flags)
 {
-	struct sof_ipc_dsp_oops_xtensa xoops;
-	struct sof_ipc_panic_info panic_info;
+	struct snd_sof_oops oops;
 	u32 stack[HDA_DSP_STACK_DUMP_SIZE];
 	u32 status, panic;
+
+	/* fill in oops config */
+	oops.arch_oops = NULL;
+	oops.ipc_panic = NULL;
+	oops.stack = stack;
+	oops.stack_words = HDA_DSP_STACK_DUMP_SIZE;
+	oops.panic_mmio_bar = sdev->mmio_bar;
+	oops.stack_mmio_bar = sdev->mmio_bar;
 
 	/* try APL specific status message types first */
 	hda_dsp_get_status_skl(sdev);
@@ -167,10 +147,10 @@ void hda_dsp_dump_skl(struct snd_sof_dev *sdev, u32 flags)
 				 HDA_ADSP_ERROR_CODE_SKL + 0x4);
 
 	if (sdev->boot_complete) {
-		hda_dsp_get_registers(sdev, &xoops, &panic_info, stack,
-				      HDA_DSP_STACK_DUMP_SIZE);
-		snd_sof_get_status(sdev, status, panic, &xoops, &panic_info,
-				   stack, HDA_DSP_STACK_DUMP_SIZE);
+		snd_sof_oops_get_registers(sdev, &oops);
+		snd_sof_panic_get_status(sdev, status, panic, &oops);
+		kfree(&oops.arch_oops);
+		kfree(&oops.ipc_panic);
 	} else {
 		dev_err(sdev->dev, "error: status = 0x%8.8x panic = 0x%8.8x\n",
 			status, panic);
@@ -180,10 +160,17 @@ void hda_dsp_dump_skl(struct snd_sof_dev *sdev, u32 flags)
 
 void hda_dsp_dump(struct snd_sof_dev *sdev, u32 flags)
 {
-	struct sof_ipc_dsp_oops_xtensa xoops;
-	struct sof_ipc_panic_info panic_info;
+	struct snd_sof_oops oops;
 	u32 stack[HDA_DSP_STACK_DUMP_SIZE];
 	u32 status, panic;
+
+	/* fill in oops config */
+	oops.arch_oops = NULL;
+	oops.ipc_panic = NULL;
+	oops.stack = stack;
+	oops.stack_words = HDA_DSP_STACK_DUMP_SIZE;
+	oops.panic_mmio_bar = sdev->mmio_bar;
+	oops.stack_mmio_bar = sdev->mmio_bar;
 
 	/* try APL specific status message types first */
 	hda_dsp_get_status(sdev);
@@ -194,10 +181,10 @@ void hda_dsp_dump(struct snd_sof_dev *sdev, u32 flags)
 	panic = snd_sof_dsp_read(sdev, HDA_DSP_BAR, HDA_DSP_SRAM_REG_FW_TRACEP);
 
 	if (sdev->boot_complete) {
-		hda_dsp_get_registers(sdev, &xoops, &panic_info, stack,
-				      HDA_DSP_STACK_DUMP_SIZE);
-		snd_sof_get_status(sdev, status, panic, &xoops, &panic_info,
-				   stack, HDA_DSP_STACK_DUMP_SIZE);
+		snd_sof_oops_get_registers(sdev, &oops);
+		snd_sof_panic_get_status(sdev, status, panic, &oops);
+		kfree(&oops.arch_oops);
+		kfree(&oops.ipc_panic);
 	} else {
 		dev_err(sdev->dev, "error: status = 0x%8.8x panic = 0x%8.8x\n",
 			status, panic);

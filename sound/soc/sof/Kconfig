@@ -67,6 +67,13 @@ config SND_SOC_SOF_NOCODEC_SUPPORT
 	  Say Y if you need this nocodec fallback option
 	  If unsure select "N".
 
+config SND_SOC_SOF_IPC_LEGACY_SUPPORT_V1
+	tristate "SOF Legacy IPC V1 support"
+	help
+	  This option allows the driver to support firmwares that use the
+	  legacy V1 IPC and topology ABIs.
+	  Say Y here if you want to run older firmwares.
+
 config SND_SOC_SOF_STRICT_ABI_CHECKS
 	bool "SOF strict ABI checks"
 	help

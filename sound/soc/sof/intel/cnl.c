@@ -16,6 +16,7 @@
  */
 
 #include "../ops.h"
+#include "../ipc-ops.h"
 #include "hda.h"
 
 static const struct snd_sof_debugfs_map cnl_dsp_debugfs[] = {
@@ -60,7 +61,6 @@ static irqreturn_t cnl_ipc_irq_thread(int irq, void *context)
 		spin_lock_irq(&sdev->ipc_lock);
 
 		/* handle immediate reply from DSP core */
-		hda_dsp_ipc_get_reply(sdev);
 		snd_sof_ipc_reply(sdev, msg);
 
 		if (sdev->code_loading)	{
@@ -85,8 +85,7 @@ static irqreturn_t cnl_ipc_irq_thread(int irq, void *context)
 			 msg, msg_ext);
 
 		/* handle messages from DSP */
-		if ((hipctdr & SOF_IPC_PANIC_MAGIC_MASK) ==
-		   SOF_IPC_PANIC_MAGIC) {
+		if (snd_sof_is_exception(sdev,hipctdr)) {
 			snd_sof_dsp_panic(sdev, HDA_DSP_PANIC_OFFSET(msg_ext));
 		} else {
 			snd_sof_ipc_msgs_rx(sdev);

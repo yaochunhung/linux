@@ -12,19 +12,9 @@
 #define __SOUND_SOC_SOF_PRIV_H
 
 #include <linux/device.h>
-
 #include <sound/hdaudio.h>
 #include <sound/soc.h>
-
 #include <sound/sof.h>
-#include <sound/sof/stream.h> /* needs to be included before control.h */
-#include <sound/sof/control.h>
-#include <sound/sof/dai.h>
-#include <sound/sof/info.h>
-#include <sound/sof/pm.h>
-#include <sound/sof/topology.h>
-#include <sound/sof/trace.h>
-
 #include <uapi/sound/sof/fw.h>
 
 /* debug flags */
@@ -37,6 +27,32 @@
 
 /* global debug state set by SOF_DBG_ flags */
 extern int sof_core_debug;
+
+/* high level PM actions */
+#define SOF_PM_CTX_SAVE		0
+#define SOF_PM_CTX_RESTORE	1
+
+/* high level control actions */
+#define SOF_KCTRL_COMP_SET_DATA		3000
+#define SOF_KCTRL_COMP_GET_DATA		3001
+#define SOF_KCTRL_COMP_SET_VALUE	3002
+#define SOF_KCTRL_COMP_GET_VALUE	3003
+
+/*  per channel data - uses struct sof_ipc_ctrl_value_chan */
+#define SOF_KCTRL_CHAN_GET	4000
+#define SOF_KCTRL_CHAN_SET	4001
+/* component data - uses struct sof_ipc_ctrl_value_comp */
+#define SOF_KCTRL_COMP_GET	4002
+#define SOF_KCTRL_COMP_SET	4003
+/* bespoke data - uses struct sof_abi_hdr */
+#define SOF_KCTRL_DATA_GET	4004
+#define SOF_KCTRL_DATA_SET	4005
+
+#define SOF_KCTRL_CMD_VOLUME	5000 	/**< maps to ALSA volume style controls */
+#define SOF_KCTRL_CMD_ENUM	5001	/**< maps to ALSA enum style controls */
+#define SOF_KCTRL_CMD_SWITCH	5002	/**< maps to ALSA switch style controls */
+#define SOF_KCTRL_CMD_BINARY	5003	/**< maps to ALSA binary style controls */
+
 
 /* max BARs mmaped devices can use */
 #define SND_SOF_BARS	8
@@ -52,6 +68,9 @@ extern int sof_core_debug;
 
 #define SOF_IPC_DSP_REPLY		0
 #define SOF_IPC_HOST_REPLY		1
+
+/* maximum message size for mailbox Tx/Rx - TODO make this bigger */
+#define SOF_IPC_MSG_MAX_SIZE			384
 
 /* convenience constructor for DAI driver streams */
 #define SOF_DAI_STREAM(sname, scmin, scmax, srates, sfmt) \
@@ -73,6 +92,8 @@ enum sof_d0_substate {
 	SOF_DSP_D0I3,		/* DSP D0i3(low power) substate*/
 };
 
+#define SOF_COMPONENT_NAME	"sof-audio-component"
+
 struct snd_sof_dev;
 struct snd_sof_ipc_msg;
 struct snd_sof_ipc;
@@ -80,11 +101,135 @@ struct snd_sof_debugfs_map;
 struct snd_soc_tplg_ops;
 struct snd_soc_component;
 struct snd_sof_pdata;
+struct snd_sof_control;
+struct snd_sof_pcm;
+struct snd_sof_widget;
+struct snd_sof_route;
+struct snd_sof_dai;
+struct snd_sof_oops;
+
+/*
+ * SOF IPC abstraction operations.
+ * Used to abstract different flavours of IPC between DSP and host.
+ *
+ * TODO: move to IPC abstraction header.
+ */
+struct ipc_ops {
+	/* IPC */
+	int (*ipc_mailbox_init)(struct snd_sof_dev *sdev, u32 dspbox,
+				size_t dspbox_size, u32 hostbox,
+				size_t hostbox_size);
+	void (*ipc_log_header)(struct snd_sof_dev *sdev, u8 *text, u32 cmd);
+	void (*ipc_msgs_rx)(struct snd_sof_dev *sdev);
+	bool (*ipc_is_valid)(struct snd_sof_dev *sdev, u32 mask, u32 msg);
+	void (*ipc_get_reply)(struct snd_sof_dev *sdev);
+	int (*ipc_tx_wait_done)(struct snd_sof_dev *sdev,
+				struct snd_sof_ipc *ipc,
+				struct snd_sof_ipc_msg *msg, void *reply_data);
+	int (*ipc_ping)(struct snd_sof_dev *sdev);
+
+	/* stream */
+	int (*stream_update_posn)(struct snd_sof_dev *sdev,
+			    struct snd_sof_pcm *spcm, int direction,
+			    void *posn);
+	void (*stream_notification)(struct snd_sof_dev *sdev, u32 msg_cmd);
+	int (*stream_host_posn_bytes)(struct snd_sof_dev *sdev, void *posn);
+	int (*stream_dai_posn_bytes)(struct snd_sof_dev *sdev, void *posn);
+
+	/* DAI */
+	int (*dai_hda_link_config)(struct snd_sof_dev *sdev, void *hdastream,
+			       	   const char *dai_name, int channel, int dir);
+	int (*dai_link_fixup)(struct snd_sof_dev *sdev,
+			      struct snd_soc_pcm_runtime *rtd,
+			      struct snd_pcm_hw_params *params);
+	int (*dai_hda_stream_config)(struct snd_sof_dev *sdev,
+				     struct hdac_stream *hstream,
+				     void *params);
+
+	/* controls */
+	int (*kctrl_set_get_comp_data)(struct snd_sof_ipc *ipc,
+				  struct snd_sof_control *scontrol,
+				  u32 ipc_cmd,
+				  int ipc_ctrl_type,
+				  int ipc_ctrl_cmd,
+				  bool send);
+	void (*kctrl_volume_to_ipc)(struct snd_sof_dev *sdev, void *control_data,
+			      unsigned int channel, unsigned int value,
+			      u32 *volume_map, int size);
+	u32 (*kctrl_ipc_to_volume)(struct snd_sof_dev *sdev, void *control_data,
+			     u32 channel, u32 *volume_map, int size);
+
+	void (*kctrl_value_to_ipc)(struct snd_sof_dev *sdev, void *control_data,
+			      unsigned int channel, unsigned int value);
+	u32 (*kctrl_ipc_to_value)(struct snd_sof_dev *sdev, void *control_data,
+			     u32 channel);
+	int (*kctrl_bytes_get)(struct snd_sof_dev *sdev,
+				 struct snd_kcontrol *kcontrol,
+				 struct snd_ctl_elem_value *ucontrol);
+	int (*kctrl_bytes_put)(struct snd_sof_dev *sdev,
+				 struct snd_kcontrol *kcontrol,
+				 struct snd_ctl_elem_value *ucontrol);
+	int (*kctrl_bytes_ext_get)(struct snd_sof_dev *sdev,
+				     struct snd_kcontrol *kcontrol,
+				     unsigned int __user *binary_data,
+				     unsigned int size);
+	int (*kctrl_bytes_ext_put)(struct snd_sof_dev *sdev,
+				     struct snd_kcontrol *kcontrol,
+				     struct snd_ctl_tlv *header,
+				     const unsigned int __user *binary_data,
+				     unsigned int size);
+
+	/* topology */
+	int (*complete_pipeline)(struct snd_sof_dev *sdev,
+			      struct snd_sof_widget *swidget);
+
+	/* PM */
+	int (*pm_restore_pipeline)(struct snd_sof_dev *sdev,
+			    struct snd_sof_widget *swidget);
+	int (*pm_restore_connection)(struct snd_sof_dev *sdev,
+			      struct snd_sof_route *sroute);
+	int (*pm_restore_dai_link)(struct snd_sof_dev *sdev,
+			    struct snd_sof_dai *dai);
+	int (*pm_restore_kcontrol)(struct snd_sof_dev *sdev,
+			    struct snd_sof_control *scontrol);
+	int (*pm_set_state)(struct snd_sof_dev *sdev, int cmd);
+
+	/* trace */
+	int (*trace_enable)(struct snd_sof_dev *sdev);
+
+	/* PCM */
+	int (*pcm_open)(struct snd_sof_dev *sdev,
+			struct snd_pcm_substream *substream,
+			struct snd_sof_pcm *spcm);
+	int (*pcm_close)(struct snd_sof_dev *sdev,
+			struct snd_pcm_substream *substream,
+			struct snd_sof_pcm *spcm);
+	int (*pcm_trigger)(struct snd_sof_dev *sdev,
+			   struct snd_pcm_substream *substream,
+			   struct snd_sof_pcm *spcm, int cmd,
+			   bool *reset_needed);
+	int (*pcm_free)(struct snd_sof_dev *sdev,
+		    struct snd_pcm_substream *substream,
+		    struct snd_sof_pcm *spcm);
+	int (*pcm_hw_params)(struct snd_sof_dev *sdev,
+			     struct snd_pcm_substream *substream,
+			     struct snd_pcm_hw_params *params,
+			     struct snd_sof_pcm *spcm, int new_buffer);
+
+	/* debug */
+	void (*panic_get_registers)(struct snd_sof_dev *sdev,
+				   struct snd_sof_oops *oops);
+	int (*panic_is_exception)(struct snd_sof_dev *sdev, u32 token);
+	void (*panic_get_status)(struct snd_sof_dev *sdev, u32 panic_code,
+				u32 tracep_code, struct snd_sof_oops *oops);
+};
 
 /*
  * SOF DSP HW abstraction operations.
  * Used to abstract DSP HW architecture and any IO busses between host CPU
  * and DSP device(s).
+ *
+ * TODO: move to HW abstraction header.
  */
 struct snd_sof_dsp_ops {
 
@@ -152,7 +297,7 @@ struct snd_sof_dsp_ops {
 	int (*pcm_hw_params)(struct snd_sof_dev *sdev,
 			     struct snd_pcm_substream *substream,
 			     struct snd_pcm_hw_params *params,
-			     struct sof_ipc_stream_params *ipc_params); /* optional */
+			     void *ipc_params); /* optional */
 
 	/* host stream hw_free */
 	int (*pcm_hw_free)(struct snd_sof_dev *sdev,
@@ -175,7 +320,7 @@ struct snd_sof_dsp_ops {
 	/* host configure DSP HW parameters */
 	int (*ipc_pcm_params)(struct snd_sof_dev *sdev,
 			      struct snd_pcm_substream *substream,
-			      const struct sof_ipc_pcm_params_reply *reply); /* mandatory */
+			      size_t posn_offset); /* mandatory */
 
 	/* pre/post firmware run */
 	int (*pre_fw_run)(struct snd_sof_dev *sof_dev); /* optional */
@@ -220,7 +365,10 @@ struct snd_sof_dsp_ops {
 	int num_drv;
 };
 
-/* DSP architecture specific callbacks for oops and stack dumps */
+/* 
+ * DSP architecture specific callbacks for oops and stack dumps.
+ * TODO: move to DSP arch abstraction header.
+ */
 struct sof_arch_ops {
 	void (*dsp_oops)(struct snd_sof_dev *sdev, void *oops);
 	void (*dsp_stack)(struct snd_sof_dev *sdev, void *oops,
@@ -228,6 +376,8 @@ struct sof_arch_ops {
 };
 
 #define sof_arch_ops(sdev) ((sdev)->pdata->desc->arch_ops)
+
+// TODO: some structure here are obviously private, so lets move them to C files.
 
 /* DSP device HW descriptor mapping between bus ID and ops */
 struct sof_ops_table {
@@ -266,6 +416,21 @@ struct snd_sof_dfsentry {
 	};
 };
 
+/* Generic FW version - Not IPC specific */
+struct fw_version {
+	uint16_t major;
+	uint16_t minor;
+	uint16_t micro;
+	uint16_t build;
+	uint8_t date[12];
+	uint8_t time[10];
+	uint8_t tag[6];
+	uint32_t abi_version;
+
+	/* reserved for future use */
+	uint32_t reserved[4];
+} __packed;
+
 /* Debug mapping for any DSP memory or registers that can used for debug */
 struct snd_sof_debugfs_map {
 	const char *name;
@@ -285,7 +450,7 @@ struct snd_sof_mailbox {
 	size_t size;
 };
 
-/* IPC message descriptor for host <-> DSP IO */
+/* Generic IPC message descriptor for host <-> DSP IO */
 struct snd_sof_ipc_msg {
 	/* message data */
 	u32 header;
@@ -299,17 +464,17 @@ struct snd_sof_ipc_msg {
 	bool ipc_complete;
 };
 
-/* PCM stream, mapped to FW component  */
+/* Generic PCM stream, mapped to FW component  */
 struct snd_sof_pcm_stream {
 	u32 comp_id;
 	struct snd_dma_buffer page_table;
-	struct sof_ipc_stream_posn posn;
+	void *ipc_posn;	/* IPC specific position data */
 	struct snd_pcm_substream *substream;
 	struct work_struct period_elapsed_work;
 	bool d0i3_compatible; /* DSP can be in D0I3 when this pcm is opened */
 };
 
-/* ALSA SOF PCM device */
+/* Generic ALSA SOF PCM device */
 struct snd_sof_pcm {
 	struct snd_sof_dev *sdev;
 	struct snd_soc_tplg_pcm pcm;
@@ -319,7 +484,7 @@ struct snd_sof_pcm {
 	bool prepared[2]; /* PCM_PARAMS set successfully */
 };
 
-/* ALSA SOF Kcontrol device */
+/* Generic ALSA SOF Kcontrol device */
 struct snd_sof_control {
 	struct snd_sof_dev *sdev;
 	int comp_id;
@@ -327,15 +492,16 @@ struct snd_sof_control {
 	int max_volume_step; /* max volume step for volume_table */
 	int num_channels;
 	u32 readback_offset; /* offset to mmaped data if used */
-	struct sof_ipc_ctrl_data *control_data;
+
+	void *ipc_control_data; /* IPC specific kcontrol data */
 	u32 size;	/* cdata size */
-	enum sof_ipc_ctrl_cmd cmd;
+	int ipc_ctrl_cmd;
 	u32 *volume_table; /* volume table computed from tlv data*/
 
 	struct list_head list;	/* list in sdev control list */
 };
 
-/* ASoC SOF DAPM widget */
+/* Generic ASoC SOF DAPM widget */
 struct snd_sof_widget {
 	struct snd_sof_dev *sdev;
 	int comp_id;
@@ -349,7 +515,7 @@ struct snd_sof_widget {
 	void *private;		/* core does not touch this */
 };
 
-/* ASoC SOF DAPM route */
+/* Generic ASoC SOF DAPM route */
 struct snd_sof_route {
 	struct snd_sof_dev *sdev;
 
@@ -359,19 +525,41 @@ struct snd_sof_route {
 	void *private;
 };
 
-/* ASoC DAI device */
+/* Generic ASoC DAI device */
 struct snd_sof_dai {
 	struct snd_sof_dev *sdev;
 	const char *name;
 	const char *cpu_dai_name;
-
-	struct sof_ipc_comp_dai comp_dai;
-	struct sof_ipc_dai_config *dai_config;
+	void *ipc_comp_dai;	/* IPC specific component DAI data */
+	void *ipc_dai_config;	/* IPC specific DAI config */
 	struct list_head list;	/* list in sdev dai list */
+};
+
+/* Generic SOF generic IPC data */
+struct snd_sof_ipc {
+	struct snd_sof_dev *sdev;
+
+	/* protects messages and the disable flag */
+	struct mutex tx_mutex;
+	/* disables further sending of ipc's */
+	bool disable_ipc_tx;
+
+	struct snd_sof_ipc_msg msg;
+};
+
+/* SOF generic crash data. */
+struct snd_sof_oops {
+	void *arch_oops;
+	void *ipc_panic;
+	void *stack;
+	size_t stack_words;
+	int panic_mmio_bar;
+	int stack_mmio_bar;
 };
 
 /*
  * SOF Device Level.
+ * TODO: this needs split up.
  */
 struct snd_sof_dev {
 	struct device *dev;
@@ -406,6 +594,8 @@ struct snd_sof_dev {
 	struct snd_sof_ipc_msg *msg;
 	int ipc_irq;
 	u32 next_comp_id; /* monotonic - reset during S3 */
+	const struct ipc_ops *ipc_ops;		/* runtime detected */
+	void *ipc_private;			/* used by IPC only */
 
 	/* memory bases for mmaped DSPs - set by dsp_init() */
 	void __iomem *bar[SND_SOF_BARS];	/* DSP base address */
@@ -420,8 +610,6 @@ struct snd_sof_dev {
 	/* firmware loader */
 	struct snd_dma_buffer dmab;
 	struct snd_dma_buffer dmab_bdl;
-	struct sof_ipc_fw_ready fw_ready;
-	struct sof_ipc_fw_version fw_version;
 
 	/* topology */
 	struct snd_soc_tplg_ops *tplg_ops;
@@ -433,9 +621,10 @@ struct snd_sof_dev {
 	struct snd_soc_component *component;
 	u32 enabled_cores_mask; /* keep track of enabled cores */
 
-	/* FW configuration */
+	/* FW configuration TODO: move IPC specific structs */
 	struct sof_ipc_dma_buffer_data *info_buffer;
 	struct sof_ipc_window *info_window;
+	struct fw_version fw_version;
 
 	/* IPC timeouts in ms */
 	int ipc_timeout;
@@ -481,6 +670,11 @@ int snd_sof_create_page_table(struct snd_sof_dev *sdev,
 			      unsigned char *page_table, size_t size);
 
 /*
+ * PCM ops.
+ */
+int snd_sof_pcm_prepare(struct snd_pcm_substream *substream);
+
+/*
  * Firmware loading.
  */
 int snd_sof_load_firmware(struct snd_sof_dev *sdev);
@@ -498,13 +692,6 @@ int snd_sof_fw_parse_ext_data(struct snd_sof_dev *sdev, u32 bar, u32 offset);
 struct snd_sof_ipc *snd_sof_ipc_init(struct snd_sof_dev *sdev);
 void snd_sof_ipc_free(struct snd_sof_dev *sdev);
 int snd_sof_ipc_reply(struct snd_sof_dev *sdev, u32 msg_id);
-void snd_sof_ipc_msgs_rx(struct snd_sof_dev *sdev);
-int snd_sof_ipc_stream_pcm_params(struct snd_sof_dev *sdev,
-				  struct sof_ipc_pcm_params *params);
-int snd_sof_dsp_mailbox_init(struct snd_sof_dev *sdev, u32 dspbox,
-			     size_t dspbox_size, u32 hostbox,
-			     size_t hostbox_size);
-int snd_sof_ipc_valid(struct snd_sof_dev *sdev);
 int sof_ipc_tx_message(struct snd_sof_ipc *ipc, u32 header,
 		       void *msg_data, size_t msg_bytes, void *reply_data,
 		       size_t reply_bytes);
@@ -515,6 +702,9 @@ struct snd_sof_widget *snd_sof_find_swidget_sname(struct snd_sof_dev *sdev,
 						  int dir);
 struct snd_sof_dai *snd_sof_find_dai(struct snd_sof_dev *sdev,
 				     const char *name);
+int sof_ipc_tx_message_unlocked(struct snd_sof_ipc *ipc, u32 header,
+				void *msg_data, size_t msg_bytes,
+				void *reply_data, size_t reply_bytes);
 
 static inline
 struct snd_sof_pcm *snd_sof_find_spcm_dai(struct snd_sof_dev *sdev,
@@ -539,21 +729,6 @@ struct snd_sof_pcm *snd_sof_find_spcm_pcm_id(struct snd_sof_dev *sdev,
 					     unsigned int pcm_id);
 void snd_sof_pcm_period_elapsed(struct snd_pcm_substream *substream);
 
-/*
- * Stream IPC
- */
-int snd_sof_ipc_stream_posn(struct snd_sof_dev *sdev,
-			    struct snd_sof_pcm *spcm, int direction,
-			    struct sof_ipc_stream_posn *posn);
-
-/*
- * Mixer IPC
- */
-int snd_sof_ipc_set_get_comp_data(struct snd_sof_ipc *ipc,
-				  struct snd_sof_control *scontrol, u32 ipc_cmd,
-				  enum sof_ipc_ctrl_type ctrl_type,
-				  enum sof_ipc_ctrl_cmd ctrl_cmd,
-				  bool send);
 
 /*
  * Topology.
@@ -565,10 +740,6 @@ int snd_sof_init_topology(struct snd_sof_dev *sdev,
 int snd_sof_load_topology(struct snd_sof_dev *sdev, const char *file);
 int snd_sof_complete_pipeline(struct snd_sof_dev *sdev,
 			      struct snd_sof_widget *swidget);
-
-int sof_load_pipeline_ipc(struct snd_sof_dev *sdev,
-			  struct sof_ipc_pipe_new *pipeline,
-			  struct sof_ipc_comp_reply *r);
 
 /*
  * Trace/debug
@@ -585,14 +756,7 @@ int snd_sof_debugfs_io_item(struct snd_sof_dev *sdev,
 int snd_sof_debugfs_buf_item(struct snd_sof_dev *sdev,
 			     void *base, size_t size,
 			     const char *name, mode_t mode);
-int snd_sof_trace_update_pos(struct snd_sof_dev *sdev,
-			     struct sof_ipc_dma_trace_posn *posn);
 void snd_sof_trace_notify_for_error(struct snd_sof_dev *sdev);
-void snd_sof_get_status(struct snd_sof_dev *sdev, u32 panic_code,
-			u32 tracep_code, void *oops,
-			struct sof_ipc_panic_info *panic_info,
-			void *stack, size_t stack_words);
-int snd_sof_init_trace_ipc(struct snd_sof_dev *sdev);
 void snd_sof_handle_fw_exception(struct snd_sof_dev *sdev);
 
 /*
@@ -668,11 +832,18 @@ void intel_ipc_msg_data(struct snd_sof_dev *sdev,
 			void *p, size_t sz);
 int intel_ipc_pcm_params(struct snd_sof_dev *sdev,
 			 struct snd_pcm_substream *substream,
-			 const struct sof_ipc_pcm_params_reply *reply);
+			 size_t posn_offset);
 
 int intel_pcm_open(struct snd_sof_dev *sdev,
 		   struct snd_pcm_substream *substream);
 int intel_pcm_close(struct snd_sof_dev *sdev,
 		    struct snd_pcm_substream *substream);
+
+/*
+ * IPC / Topology Flavours
+ */
+extern struct snd_soc_tplg_ops sof_legacy_v1_tplg_ops;
+int ipc_legacy_v1_validate(struct snd_sof_dev *sdev, u32 token, int bar,
+			   int offset);
 
 #endif

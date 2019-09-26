@@ -9,7 +9,7 @@
 #ifndef __INCLUDE_SOUND_SOF_TOPOLOGY_H__
 #define __INCLUDE_SOUND_SOF_TOPOLOGY_H__
 
-#include <sound/sof/header.h>
+#include <sound/sof-ipc-v1/header.h>
 
 /*
  * Component

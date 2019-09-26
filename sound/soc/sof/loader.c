@@ -13,209 +13,28 @@
 #include <linux/firmware.h>
 #include <sound/sof.h>
 #include "ops.h"
+#include "ipc-ops.h"
 
-static int get_ext_windows(struct snd_sof_dev *sdev,
-			   struct sof_ipc_ext_data_hdr *ext_hdr)
-{
-	struct sof_ipc_window *w =
-		container_of(ext_hdr, struct sof_ipc_window, ext_hdr);
+struct fw_ipc_flavour {
+	const char *name;
+	int (*ipc_validate)(struct snd_sof_dev *sdev, u32 token, int bar,
+			    int offset);
+};
 
-	if (w->num_windows == 0 || w->num_windows > SOF_IPC_MAX_ELEMS)
-		return -EINVAL;
-
-	/* keep a local copy of the data */
-	sdev->info_window = kmemdup(w, struct_size(w, window, w->num_windows),
-				    GFP_KERNEL);
-	if (!sdev->info_window)
-		return -ENOMEM;
-
-	return 0;
-}
-
-/* parse the extended FW boot data structures from FW boot message */
-int snd_sof_fw_parse_ext_data(struct snd_sof_dev *sdev, u32 bar, u32 offset)
-{
-	struct sof_ipc_ext_data_hdr *ext_hdr;
-	void *ext_data;
-	int ret = 0;
-
-	ext_data = kzalloc(PAGE_SIZE, GFP_KERNEL);
-	if (!ext_data)
-		return -ENOMEM;
-
-	/* get first header */
-	snd_sof_dsp_block_read(sdev, bar, offset, ext_data,
-			       sizeof(*ext_hdr));
-	ext_hdr = ext_data;
-
-	while (ext_hdr->hdr.cmd == SOF_IPC_FW_READY) {
-		/* read in ext structure */
-		offset += sizeof(*ext_hdr);
-		snd_sof_dsp_block_read(sdev, bar, offset,
-				   (void *)((u8 *)ext_data + sizeof(*ext_hdr)),
-				   ext_hdr->hdr.size - sizeof(*ext_hdr));
-
-		dev_dbg(sdev->dev, "found ext header type %d size 0x%x\n",
-			ext_hdr->type, ext_hdr->hdr.size);
-
-		/* process structure data */
-		switch (ext_hdr->type) {
-		case SOF_IPC_EXT_DMA_BUFFER:
-			break;
-		case SOF_IPC_EXT_WINDOW:
-			ret = get_ext_windows(sdev, ext_hdr);
-			break;
-		default:
-			break;
-		}
-
-		if (ret < 0) {
-			dev_err(sdev->dev, "error: failed to parse ext data type %d\n",
-				ext_hdr->type);
-			break;
-		}
-
-		/* move to next header */
-		offset += ext_hdr->hdr.size;
-		snd_sof_dsp_block_read(sdev, bar, offset, ext_data,
-				       sizeof(*ext_hdr));
-		ext_hdr = ext_data;
-	}
-
-	kfree(ext_data);
-	return ret;
-}
-EXPORT_SYMBOL(snd_sof_fw_parse_ext_data);
-
-/*
- * IPC Firmware ready.
- */
-static void sof_get_windows(struct snd_sof_dev *sdev)
-{
-	struct sof_ipc_window_elem *elem;
-	u32 outbox_offset = 0;
-	u32 stream_offset = 0;
-	u32 inbox_offset = 0;
-	u32 outbox_size = 0;
-	u32 stream_size = 0;
-	u32 inbox_size = 0;
-	int window_offset;
-	int bar;
-	int i;
-
-	if (!sdev->info_window) {
-		dev_err(sdev->dev, "error: have no window info\n");
-		return;
-	}
-
-	bar = snd_sof_dsp_get_bar_index(sdev, SOF_FW_BLK_TYPE_SRAM);
-	if (bar < 0) {
-		dev_err(sdev->dev, "error: have no bar mapping\n");
-		return;
-	}
-
-	for (i = 0; i < sdev->info_window->num_windows; i++) {
-		elem = &sdev->info_window->window[i];
-
-		window_offset = snd_sof_dsp_get_window_offset(sdev, elem->id);
-		if (window_offset < 0) {
-			dev_warn(sdev->dev, "warn: no offset for window %d\n",
-				 elem->id);
-			continue;
-		}
-
-		switch (elem->type) {
-		case SOF_IPC_REGION_UPBOX:
-			inbox_offset = window_offset + elem->offset;
-			inbox_size = elem->size;
-			snd_sof_debugfs_io_item(sdev,
-						sdev->bar[bar] +
-						inbox_offset,
-						elem->size, "inbox",
-						SOF_DEBUGFS_ACCESS_D0_ONLY);
-			break;
-		case SOF_IPC_REGION_DOWNBOX:
-			outbox_offset = window_offset + elem->offset;
-			outbox_size = elem->size;
-			snd_sof_debugfs_io_item(sdev,
-						sdev->bar[bar] +
-						outbox_offset,
-						elem->size, "outbox",
-						SOF_DEBUGFS_ACCESS_D0_ONLY);
-			break;
-		case SOF_IPC_REGION_TRACE:
-			snd_sof_debugfs_io_item(sdev,
-						sdev->bar[bar] +
-						window_offset +
-						elem->offset,
-						elem->size, "etrace",
-						SOF_DEBUGFS_ACCESS_D0_ONLY);
-			break;
-		case SOF_IPC_REGION_DEBUG:
-			snd_sof_debugfs_io_item(sdev,
-						sdev->bar[bar] +
-						window_offset +
-						elem->offset,
-						elem->size, "debug",
-						SOF_DEBUGFS_ACCESS_D0_ONLY);
-			break;
-		case SOF_IPC_REGION_STREAM:
-			stream_offset = window_offset + elem->offset;
-			stream_size = elem->size;
-			snd_sof_debugfs_io_item(sdev,
-						sdev->bar[bar] +
-						stream_offset,
-						elem->size, "stream",
-						SOF_DEBUGFS_ACCESS_D0_ONLY);
-			break;
-		case SOF_IPC_REGION_REGS:
-			snd_sof_debugfs_io_item(sdev,
-						sdev->bar[bar] +
-						window_offset +
-						elem->offset,
-						elem->size, "regs",
-						SOF_DEBUGFS_ACCESS_D0_ONLY);
-			break;
-		case SOF_IPC_REGION_EXCEPTION:
-			sdev->dsp_oops_offset = window_offset + elem->offset;
-			snd_sof_debugfs_io_item(sdev,
-						sdev->bar[bar] +
-						window_offset +
-						elem->offset,
-						elem->size, "exception",
-						SOF_DEBUGFS_ACCESS_D0_ONLY);
-			break;
-		default:
-			dev_err(sdev->dev, "error: get illegal window info\n");
-			return;
-		}
-	}
-
-	if (outbox_size == 0 || inbox_size == 0) {
-		dev_err(sdev->dev, "error: get illegal mailbox window\n");
-		return;
-	}
-
-	snd_sof_dsp_mailbox_init(sdev, inbox_offset, inbox_size,
-				 outbox_offset, outbox_size);
-	sdev->stream_box.offset = stream_offset;
-	sdev->stream_box.size = stream_size;
-
-	dev_dbg(sdev->dev, " mailbox upstream 0x%x - size 0x%x\n",
-		inbox_offset, inbox_size);
-	dev_dbg(sdev->dev, " mailbox downstream 0x%x - size 0x%x\n",
-		outbox_offset, outbox_size);
-	dev_dbg(sdev->dev, " stream region 0x%x - size 0x%x\n",
-		stream_offset, stream_size);
-}
+/* supported IPC falvours */
+static const struct fw_ipc_flavour ipc_flavour[] = {
+#if IS_ENABLED(CONFIG_SND_SOC_SOF_IPC_LEGACY_SUPPORT_V1)
+	{"legacy-v1", ipc_legacy_v1_validate},
+#endif
+};
 
 /* check for ABI compatibility and create memory windows on first boot */
 int sof_fw_ready(struct snd_sof_dev *sdev, u32 msg_id)
 {
-	struct sof_ipc_fw_ready *fw_ready = &sdev->fw_ready;
 	int offset;
 	int bar;
 	int ret;
+	int i;
 
 	/* mailbox must be on 4k boundary */
 	offset = snd_sof_dsp_get_mailbox_offset(sdev);
@@ -237,21 +56,20 @@ int sof_fw_ready(struct snd_sof_dev *sdev, u32 msg_id)
 	if (!sdev->first_boot)
 		return 0;
 
-	/* copy data from the DSP FW ready offset */
-	sof_block_read(sdev, bar, offset, fw_ready, sizeof(*fw_ready));
+	/* detect IPC flavour used by firmware */
+	for (i = 0; i < ARRAY_SIZE(ipc_flavour); i++) {
+		dev_info(sdev->dev, "ipc: trying %s\n", ipc_flavour[i].name);
 
-	/* make sure ABI version is compatible */
-	ret = snd_sof_ipc_valid(sdev);
-	if (ret < 0)
-		return ret;
+		/* does IPC match this flavor */
+		ret = ipc_flavour[i].ipc_validate(sdev, msg_id, bar, offset);
+		if (ret < 0)
+			continue;	/* try next match */
 
-	/* now check for extended data */
-	snd_sof_fw_parse_ext_data(sdev, bar, offset +
-				  sizeof(struct sof_ipc_fw_ready));
+		return 0;	/* match found */
+	}
 
-	sof_get_windows(sdev);
-
-	return 0;
+	dev_err(sdev->dev, "error: no matching ipc flavour found\n");
+	return -EINVAL;	
 }
 EXPORT_SYMBOL(sof_fw_ready);
 

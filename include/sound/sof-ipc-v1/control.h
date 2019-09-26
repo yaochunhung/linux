@@ -10,7 +10,7 @@
 #define __INCLUDE_SOUND_SOF_CONTROL_H__
 
 #include <uapi/sound/sof/header.h>
-#include <sound/sof/header.h>
+#include <sound/sof-ipc-v1/header.h>
 
 /*
  * Component Mixers and Controls

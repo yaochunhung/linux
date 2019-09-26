@@ -9,8 +9,8 @@
 #ifndef __INCLUDE_SOUND_SOF_DAI_H__
 #define __INCLUDE_SOUND_SOF_DAI_H__
 
-#include <sound/sof/header.h>
-#include <sound/sof/dai-intel.h>
+#include <sound/sof-ipc-v1/header.h>
+#include <sound/sof-ipc-v1/dai-intel.h>
 
 /*
  * DAI Configuration.

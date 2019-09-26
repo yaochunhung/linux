@@ -10,11 +10,11 @@
 
 #include <linux/firmware.h>
 #include <linux/module.h>
-#include <asm/unaligned.h>
 #include <sound/soc.h>
 #include <sound/sof.h>
 #include "sof-priv.h"
 #include "ops.h"
+#include "ipc-ops.h"
 
 /* see SOF_DBG_ flags */
 int sof_core_debug;
@@ -52,6 +52,7 @@ struct snd_sof_pcm *snd_sof_find_spcm_name(struct snd_sof_dev *sdev,
 
 	return NULL;
 }
+EXPORT_SYMBOL(snd_sof_find_spcm_name);
 
 struct snd_sof_pcm *snd_sof_find_spcm_comp(struct snd_sof_dev *sdev,
 					   unsigned int comp_id,
@@ -72,6 +73,7 @@ struct snd_sof_pcm *snd_sof_find_spcm_comp(struct snd_sof_dev *sdev,
 
 	return NULL;
 }
+EXPORT_SYMBOL(snd_sof_find_spcm_comp);
 
 struct snd_sof_pcm *snd_sof_find_spcm_pcm_id(struct snd_sof_dev *sdev,
 					     unsigned int pcm_id)
@@ -85,6 +87,7 @@ struct snd_sof_pcm *snd_sof_find_spcm_pcm_id(struct snd_sof_dev *sdev,
 
 	return NULL;
 }
+EXPORT_SYMBOL(snd_sof_find_spcm_pcm_id);
 
 struct snd_sof_widget *snd_sof_find_swidget(struct snd_sof_dev *sdev,
 					    const char *name)
@@ -98,6 +101,7 @@ struct snd_sof_widget *snd_sof_find_swidget(struct snd_sof_dev *sdev,
 
 	return NULL;
 }
+EXPORT_SYMBOL(snd_sof_find_swidget);
 
 /* find widget by stream name and direction */
 struct snd_sof_widget *snd_sof_find_swidget_sname(struct snd_sof_dev *sdev,
@@ -118,6 +122,7 @@ struct snd_sof_widget *snd_sof_find_swidget_sname(struct snd_sof_dev *sdev,
 
 	return NULL;
 }
+EXPORT_SYMBOL(snd_sof_find_swidget_sname);
 
 struct snd_sof_dai *snd_sof_find_dai(struct snd_sof_dev *sdev,
 				     const char *name)
@@ -131,132 +136,7 @@ struct snd_sof_dai *snd_sof_find_dai(struct snd_sof_dev *sdev,
 
 	return NULL;
 }
-
-/*
- * FW Panic/fault handling.
- */
-
-struct sof_panic_msg {
-	u32 id;
-	const char *msg;
-};
-
-/* standard FW panic types */
-static const struct sof_panic_msg panic_msg[] = {
-	{SOF_IPC_PANIC_MEM, "out of memory"},
-	{SOF_IPC_PANIC_WORK, "work subsystem init failed"},
-	{SOF_IPC_PANIC_IPC, "IPC subsystem init failed"},
-	{SOF_IPC_PANIC_ARCH, "arch init failed"},
-	{SOF_IPC_PANIC_PLATFORM, "platform init failed"},
-	{SOF_IPC_PANIC_TASK, "scheduler init failed"},
-	{SOF_IPC_PANIC_EXCEPTION, "runtime exception"},
-	{SOF_IPC_PANIC_DEADLOCK, "deadlock"},
-	{SOF_IPC_PANIC_STACK, "stack overflow"},
-	{SOF_IPC_PANIC_IDLE, "can't enter idle"},
-	{SOF_IPC_PANIC_WFI, "invalid wait state"},
-	{SOF_IPC_PANIC_ASSERT, "assertion failed"},
-};
-
-/*
- * helper to be called from .dbg_dump callbacks. No error code is
- * provided, it's left as an exercise for the caller of .dbg_dump
- * (typically IPC or loader)
- */
-void snd_sof_get_status(struct snd_sof_dev *sdev, u32 panic_code,
-			u32 tracep_code, void *oops,
-			struct sof_ipc_panic_info *panic_info,
-			void *stack, size_t stack_words)
-{
-	u32 code;
-	int i;
-
-	/* is firmware dead ? */
-	if ((panic_code & SOF_IPC_PANIC_MAGIC_MASK) != SOF_IPC_PANIC_MAGIC) {
-		dev_err(sdev->dev, "error: unexpected fault 0x%8.8x trace 0x%8.8x\n",
-			panic_code, tracep_code);
-		return; /* no fault ? */
-	}
-
-	code = panic_code & (SOF_IPC_PANIC_MAGIC_MASK | SOF_IPC_PANIC_CODE_MASK);
-
-	for (i = 0; i < ARRAY_SIZE(panic_msg); i++) {
-		if (panic_msg[i].id == code) {
-			dev_err(sdev->dev, "error: %s\n", panic_msg[i].msg);
-			dev_err(sdev->dev, "error: trace point %8.8x\n",
-				tracep_code);
-			goto out;
-		}
-	}
-
-	/* unknown error */
-	dev_err(sdev->dev, "error: unknown reason %8.8x\n", panic_code);
-	dev_err(sdev->dev, "error: trace point %8.8x\n", tracep_code);
-
-out:
-	dev_err(sdev->dev, "error: panic at %s:%d\n",
-		panic_info->filename, panic_info->linenum);
-	sof_oops(sdev, oops);
-	sof_stack(sdev, oops, stack, stack_words);
-}
-EXPORT_SYMBOL(snd_sof_get_status);
-
-/*
- * Generic buffer page table creation.
- * Take the each physical page address and drop the least significant unused
- * bits from each (based on PAGE_SIZE). Then pack valid page address bits
- * into compressed page table.
- */
-
-int snd_sof_create_page_table(struct snd_sof_dev *sdev,
-			      struct snd_dma_buffer *dmab,
-			      unsigned char *page_table, size_t size)
-{
-	int i, pages;
-
-	pages = snd_sgbuf_aligned_pages(size);
-
-	dev_dbg(sdev->dev, "generating page table for %p size 0x%zx pages %d\n",
-		dmab->area, size, pages);
-
-	for (i = 0; i < pages; i++) {
-		/*
-		 * The number of valid address bits for each page is 20.
-		 * idx determines the byte position within page_table
-		 * where the current page's address is stored
-		 * in the compressed page_table.
-		 * This can be calculated by multiplying the page number by 2.5.
-		 */
-		u32 idx = (5 * i) >> 1;
-		u32 pfn = snd_sgbuf_get_addr(dmab, i * PAGE_SIZE) >> PAGE_SHIFT;
-		u8 *pg_table;
-
-		dev_vdbg(sdev->dev, "pfn i %i idx %d pfn %x\n", i, idx, pfn);
-
-		pg_table = (u8 *)(page_table + idx);
-
-		/*
-		 * pagetable compression:
-		 * byte 0     byte 1     byte 2     byte 3     byte 4     byte 5
-		 * ___________pfn 0__________ __________pfn 1___________  _pfn 2...
-		 * .... ....  .... ....  .... ....  .... ....  .... ....  ....
-		 * It is created by:
-		 * 1. set current location to 0, PFN index i to 0
-		 * 2. put pfn[i] at current location in Little Endian byte order
-		 * 3. calculate an intermediate value as
-		 *    x = (pfn[i+1] << 4) | (pfn[i] & 0xf)
-		 * 4. put x at offset (current location + 2) in LE byte order
-		 * 5. increment current location by 5 bytes, increment i by 2
-		 * 6. continue to (2)
-		 */
-		if (i & 1)
-			put_unaligned_le32((pg_table[0] & 0xf) | pfn << 4,
-					   pg_table);
-		else
-			put_unaligned_le32(pfn, pg_table);
-	}
-
-	return pages;
-}
+EXPORT_SYMBOL(snd_sof_find_dai);
 
 /*
  * SOF Driver enumeration.

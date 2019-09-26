@@ -17,6 +17,7 @@
 
 #include "../ops.h"
 #include "hda.h"
+#include "../ipc-ops.h"
 
 static void hda_dsp_ipc_host_done(struct snd_sof_dev *sdev)
 {
@@ -65,68 +66,6 @@ int hda_dsp_ipc_send_msg(struct snd_sof_dev *sdev, struct snd_sof_ipc_msg *msg)
 	return 0;
 }
 
-void hda_dsp_ipc_get_reply(struct snd_sof_dev *sdev)
-{
-	struct snd_sof_ipc_msg *msg = sdev->msg;
-	struct sof_ipc_reply reply;
-	struct sof_ipc_cmd_hdr *hdr;
-	int ret = 0;
-
-	/*
-	 * Sometimes, there is unexpected reply ipc arriving. The reply
-	 * ipc belongs to none of the ipcs sent from driver.
-	 * In this case, the driver must ignore the ipc.
-	 */
-	if (!msg) {
-		dev_warn(sdev->dev, "unexpected ipc interrupt raised!\n");
-		return;
-	}
-
-	hdr = msg->msg_data;
-	if (hdr->cmd == (SOF_IPC_GLB_PM_MSG | SOF_IPC_PM_CTX_SAVE)) {
-		/*
-		 * memory windows are powered off before sending IPC reply,
-		 * so we can't read the mailbox for CTX_SAVE reply.
-		 */
-		reply.error = 0;
-		reply.hdr.cmd = SOF_IPC_GLB_REPLY;
-		reply.hdr.size = sizeof(reply);
-		memcpy(msg->reply_data, &reply, sizeof(reply));
-		goto out;
-	}
-
-	/* get IPC reply from DSP in the mailbox */
-	sof_mailbox_read(sdev, sdev->host_box.offset, &reply,
-			 sizeof(reply));
-
-	if (reply.error < 0) {
-		memcpy(msg->reply_data, &reply, sizeof(reply));
-		ret = reply.error;
-	} else {
-		/* reply correct size ? */
-		if (reply.hdr.size != msg->reply_size) {
-			dev_err(sdev->dev, "error: reply expected %zu got %u bytes\n",
-				msg->reply_size, reply.hdr.size);
-			ret = -EINVAL;
-		}
-
-		/* read the message */
-		if (msg->reply_size > 0)
-			sof_mailbox_read(sdev, sdev->host_box.offset,
-					 msg->reply_data, msg->reply_size);
-	}
-
-out:
-	msg->reply_error = ret;
-
-}
-
-static bool hda_dsp_ipc_is_sof(uint32_t msg)
-{
-	return (msg & (HDA_DSP_IPC_PURGE_FW | 0xf << 9)) != msg ||
-		(msg & HDA_DSP_IPC_PURGE_FW) != HDA_DSP_IPC_PURGE_FW;
-}
-
 /* IPC handler thread */
 irqreturn_t hda_dsp_ipc_irq_thread(int irq, void *context)
 {
@@ -173,8 +112,8 @@ irqreturn_t hda_dsp_ipc_irq_thread(int irq, void *context)
 		spin_lock_irq(&sdev->ipc_lock);
 
 		/* handle immediate reply from DSP core - ignore ROM messages */
-		if (hda_dsp_ipc_is_sof(msg)) {
-			hda_dsp_ipc_get_reply(sdev);
+		if (snd_sof_ipc_is_valid(sdev, HDA_DSP_IPC_PURGE_FW, msg)) {
+			snd_sof_ipc_get_reply(sdev);
 			snd_sof_ipc_reply(sdev, msg);
 		}
 
@@ -207,7 +146,7 @@ irqreturn_t hda_dsp_ipc_irq_thread(int irq, void *context)
 					HDA_DSP_REG_HIPCCTL_BUSY, 0);
 
 		/* handle messages from DSP */
-		if ((hipct & SOF_IPC_PANIC_MAGIC_MASK) == SOF_IPC_PANIC_MAGIC) {
+		if (snd_sof_is_exception(sdev, hipct)) {
 			/* this is a PANIC message !! */
 			snd_sof_dsp_panic(sdev, HDA_DSP_PANIC_OFFSET(msg_ext));
 		} else {
@@ -299,19 +238,16 @@ void hda_ipc_msg_data(struct snd_sof_dev *sdev,
 
 int hda_ipc_pcm_params(struct snd_sof_dev *sdev,
 		       struct snd_pcm_substream *substream,
-		       const struct sof_ipc_pcm_params_reply *reply)
+		       size_t posn_offset)
 {
 	struct hdac_stream *hstream = substream->runtime->private_data;
 	struct sof_intel_hda_stream *hda_stream;
-	/* validate offset */
-	size_t posn_offset = reply->posn_offset;
 
 	hda_stream = container_of(hstream, struct sof_intel_hda_stream,
 				  hda_stream.hstream);
 
 	/* check for unaligned offset or overflow */
-	if (posn_offset > sdev->stream_box.size ||
-	    posn_offset % sizeof(struct sof_ipc_stream_posn) != 0)
+	if (posn_offset > sdev->stream_box.size)
 		return -EINVAL;
 
 	hda_stream->stream.posn_offset = sdev->stream_box.offset + posn_offset;

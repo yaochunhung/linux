@@ -14,9 +14,10 @@
 
 #include <linux/module.h>
 #include <sound/sof.h>
-#include <sound/sof/xtensa.h>
+#include <sound/sof-ipc-v1/xtensa.h>
 #include "../ops.h"
 #include "shim.h"
+#include "../ipc-ops.h"
 
 /* BARs */
 #define BDW_DSP_BAR 0
@@ -216,46 +217,28 @@ finish:
 	return 0;
 }
 
-static void bdw_get_registers(struct snd_sof_dev *sdev,
-			      struct sof_ipc_dsp_oops_xtensa *xoops,
-			      struct sof_ipc_panic_info *panic_info,
-			      u32 *stack, size_t stack_words)
-{
-	u32 offset = sdev->dsp_oops_offset;
-
-	/* first read registers */
-	sof_mailbox_read(sdev, offset, xoops, sizeof(*xoops));
-
-	/* note: variable AR register array is not read */
-
-	/* then get panic info */
-	if (xoops->arch_hdr.totalsize > EXCEPT_MAX_HDR_SIZE) {
-		dev_err(sdev->dev, "invalid header size 0x%x. FW oops is bogus\n",
-			xoops->arch_hdr.totalsize);
-		return;
-	}
-	offset += xoops->arch_hdr.totalsize;
-	sof_mailbox_read(sdev, offset, panic_info, sizeof(*panic_info));
-
-	/* then get the stack */
-	offset += sizeof(*panic_info);
-	sof_mailbox_read(sdev, offset, stack, stack_words * sizeof(u32));
-}
-
 static void bdw_dump(struct snd_sof_dev *sdev, u32 flags)
 {
-	struct sof_ipc_dsp_oops_xtensa xoops;
-	struct sof_ipc_panic_info panic_info;
+	struct snd_sof_oops oops;
 	u32 stack[BDW_STACK_DUMP_SIZE];
 	u32 status, panic, imrx, imrd;
+
+	/* fill in oops config */
+	oops.arch_oops = NULL;
+	oops.ipc_panic = NULL;
+	oops.stack = stack;
+	oops.stack_words = BDW_STACK_DUMP_SIZE;
+	oops.panic_mmio_bar = sdev->mailbox_bar;
+	oops.stack_mmio_bar = sdev->mailbox_bar;
 
 	/* now try generic SOF status messages */
 	status = snd_sof_dsp_read(sdev, BDW_DSP_BAR, SHIM_IPCD);
 	panic = snd_sof_dsp_read(sdev, BDW_DSP_BAR, SHIM_IPCX);
-	bdw_get_registers(sdev, &xoops, &panic_info, stack,
-			  BDW_STACK_DUMP_SIZE);
-	snd_sof_get_status(sdev, status, panic, &xoops, &panic_info, stack,
-			   BDW_STACK_DUMP_SIZE);
+	snd_sof_oops_get_registers(sdev, &oops);
+	snd_sof_panic_get_status(sdev, status, panic, &oops);
+
+	kfree(&oops.arch_oops);
+	kfree(&oops.ipc_panic);
 
 	/* provide some context for firmware debug */
 	imrx = snd_sof_dsp_read(sdev, BDW_DSP_BAR, SHIM_IMRX);
@@ -340,7 +323,7 @@ static irqreturn_t bdw_irq_thread(int irq, void *context)
 						 SHIM_IMRX_BUSY);
 
 		/* Handle messages from DSP Core */
-		if ((ipcd & SOF_IPC_PANIC_MAGIC_MASK) == SOF_IPC_PANIC_MAGIC) {
+		if (snd_sof_is_exception(sdev, ipcd)) {
 			snd_sof_dsp_panic(sdev, BDW_PANIC_OFFSET(ipcx) +
 					  MBOX_OFFSET);
 		} else {

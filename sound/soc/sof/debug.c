@@ -16,6 +16,7 @@
 #include <linux/pm_runtime.h>
 #include "sof-priv.h"
 #include "ops.h"
+#include "ipc-ops.h"
 
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_DEBUG_IPC_FLOOD_TEST)
 #define MAX_IPC_FLOOD_DURATION_MS 1000
@@ -28,8 +29,6 @@ static int sof_debug_ipc_flood_test(struct snd_sof_dev *sdev,
 				    unsigned long ipc_duration_ms,
 				    unsigned long ipc_count)
 {
-	struct sof_ipc_cmd_hdr hdr;
-	struct sof_ipc_reply reply;
 	u64 min_response_time = U64_MAX;
 	ktime_t start, end, test_end;
 	u64 avg_response_time = 0;
@@ -38,10 +37,6 @@ static int sof_debug_ipc_flood_test(struct snd_sof_dev *sdev,
 	int i = 0;
 	int ret;
 
-	/* configure test IPC */
-	hdr.cmd = SOF_IPC_GLB_TEST_MSG | SOF_IPC_TEST_IPC_FLOOD;
-	hdr.size = sizeof(hdr);
-
 	/* set test end time for duration flood test */
 	if (flood_duration_test)
 		test_end = ktime_get_ns() + ipc_duration_ms * NSEC_PER_MSEC;
@@ -49,8 +44,7 @@ static int sof_debug_ipc_flood_test(struct snd_sof_dev *sdev,
 	/* send test IPC's */
 	while (1) {
 		start = ktime_get();
-		ret = sof_ipc_tx_message(sdev->ipc, hdr.cmd, &hdr, hdr.size,
-					 &reply, sizeof(reply));
+		ret = snd_sof_ipc_ping(sdev);
 		end = ktime_get();
 
 		if (ret < 0)

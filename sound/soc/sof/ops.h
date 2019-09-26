@@ -331,7 +331,7 @@ static inline int
 snd_sof_pcm_platform_hw_params(struct snd_sof_dev *sdev,
 			       struct snd_pcm_substream *substream,
 			       struct snd_pcm_hw_params *params,
-			       struct sof_ipc_stream_params *ipc_params)
+			       void *ipc_params)
 {
 	if (sof_ops(sdev) && sof_ops(sdev)->pcm_hw_params)
 		return sof_ops(sdev)->pcm_hw_params(sdev, substream,
@@ -374,9 +374,9 @@ static inline void snd_sof_ipc_msg_data(struct snd_sof_dev *sdev,
 static inline int
 snd_sof_ipc_pcm_params(struct snd_sof_dev *sdev,
 		       struct snd_pcm_substream *substream,
-		       const struct sof_ipc_pcm_params_reply *reply)
+		       size_t posn_offset)
 {
-	return sof_ops(sdev)->ipc_pcm_params(sdev, substream, reply);
+	return sof_ops(sdev)->ipc_pcm_params(sdev, substream, posn_offset);
 }
 
 /* host stream pointer */

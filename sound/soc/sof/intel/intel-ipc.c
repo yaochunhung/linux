@@ -15,7 +15,7 @@
 #include <linux/types.h>
 
 #include <sound/pcm.h>
-#include <sound/sof/stream.h>
+#include <sound/sof-ipc-v1/stream.h>
 
 #include "../ops.h"
 #include "../sof-priv.h"
@@ -43,10 +43,9 @@ EXPORT_SYMBOL(intel_ipc_msg_data);
 
 int intel_ipc_pcm_params(struct snd_sof_dev *sdev,
 			 struct snd_pcm_substream *substream,
-			 const struct sof_ipc_pcm_params_reply *reply)
+			 size_t posn_offset)
 {
 	struct intel_stream *stream = substream->runtime->private_data;
-	size_t posn_offset = reply->posn_offset;
 
 	/* check if offset is overflow or it is not aligned */
 	if (posn_offset > sdev->stream_box.size ||
