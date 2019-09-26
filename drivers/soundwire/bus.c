@@ -636,6 +636,22 @@ static void sdw_modify_slave_status(struct sdw_slave *slave,
 				    enum sdw_slave_status status)
 {
 	mutex_lock(&slave->bus->bus_lock);
+	dev_dbg(&slave->dev,
+		"plb: %s changing status slave %d status %d new status %d\n",
+		__func__, slave->dev_num, slave->status, status);
+	if (status == SDW_SLAVE_UNATTACHED) {
+		dev_err(&slave->dev,
+			"plb: %s initializing completion for Slave %d\n",
+			__func__, slave->dev_num);
+
+		init_completion(&slave->enumeration_complete);
+	} else if (status == SDW_SLAVE_ATTACHED) {
+		dev_err(&slave->dev,
+			"plb: %s completing completion for Slave %d\n",
+			__func__, slave->dev_num);
+
+		complete(&slave->enumeration_complete);
+	}
 	slave->status = status;
 	mutex_unlock(&slave->bus->bus_lock);
 }
