@@ -1446,6 +1446,13 @@ static int intel_resume(struct device *dev)
 		return ret;
 	}
 
+	/*
+	 * make sure all Slaves are tagged as UNATTACHED and provide
+	 * reason for reinitialization
+	 */
+	sdw_clear_slave_status(&sdw->cdns.bus,
+			       SDW_UNATTACH_REQUEST_MASTER_RESET);
+
 	ret = sdw_cdns_enable_interrupt(cdns, true);
 	if (ret < 0) {
 		dev_err(dev, "cannot enable interrupts during resume\n");
@@ -1490,6 +1497,13 @@ static int intel_resume_runtime(struct device *dev)
 		dev_err(dev, "%s failed: %d", __func__, ret);
 		return ret;
 	}
+
+	/*
+	 * make sure all Slaves are tagged as UNATTACHED and provide
+	 * reason for reinitialization
+	 */
+	sdw_clear_slave_status(&sdw->cdns.bus,
+			       SDW_UNATTACH_REQUEST_MASTER_RESET);
 
 	ret = sdw_cdns_enable_interrupt(cdns, true);
 	if (ret < 0) {
