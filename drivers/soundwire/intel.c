@@ -1281,6 +1281,8 @@ static int intel_master_remove(struct platform_device *pdev)
 	struct sdw_cdns *cdns = platform_get_drvdata(pdev);
 	struct sdw_intel *sdw = cdns_to_intel(cdns);
 
+	pm_runtime_disable(&pdev->dev);
+
 	if (!sdw->cdns.bus.prop.hw_disabled) {
 		intel_debugfs_exit(sdw);
 		sdw_cdns_enable_interrupt(&sdw->cdns, false);
