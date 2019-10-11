@@ -26,6 +26,7 @@
  * @clock_stop_quirks: mask defining requested behavior on pm_suspend
  * @cdns: Cadence master descriptor
  * @list: used to walk-through all masters exposed by the same controller
+ * @pm_runtime_suspended: flag to avoid resuming before system suspend
  */
 struct sdw_intel_link_res {
 	void *parent_res;
@@ -42,6 +43,7 @@ struct sdw_intel_link_res {
 	u32 clock_stop_quirks;
 	struct sdw_cdns *cdns;
 	struct list_head list;
+	bool pm_runtime_suspended;
 };
 
 #define SDW_INTEL_QUIRK_MASK_BUS_DISABLE      BIT(1)
