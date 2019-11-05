@@ -217,13 +217,17 @@ static int tx_wait_done(struct snd_sof_ipc *ipc, struct snd_sof_ipc_msg *msg,
 		ret = msg->reply_error;
 		if (msg->reply_size)
 			memcpy(reply_data, msg->reply_data, msg->reply_size);
-		if (ret < 0)
+		if (ret == -EBUSY) {
+			 ipc_log_header(sdev->dev, "DSP is temporarily busy.",
+					ret);
+			 goto out;
+		} else if (ret < 0)
 			dev_err(sdev->dev, "error: ipc error for 0x%x size %zu\n",
 				hdr->cmd, msg->reply_size);
 		else
 			ipc_log_header(sdev->dev, "ipc tx succeeded", hdr->cmd);
 	}
-
+out:
 	return ret;
 }
 
@@ -235,6 +239,7 @@ static int sof_ipc_tx_message_unlocked(struct snd_sof_ipc *ipc, u32 header,
 	struct snd_sof_dev *sdev = ipc->sdev;
 	struct snd_sof_ipc_msg *msg;
 	int ret;
+	int resend_attempts = 0;
 
 	if (ipc->disable_ipc_tx)
 		return -ENODEV;
@@ -258,13 +263,14 @@ static int sof_ipc_tx_message_unlocked(struct snd_sof_ipc *ipc, u32 header,
 		memcpy(msg->msg_data, msg_data, msg_bytes);
 
 	sdev->msg = msg;
-
+resend:
 	ret = snd_sof_dsp_send_msg(sdev, msg);
 	/* Next reply that we receive will be related to this message */
 	if (!ret)
 		msg->ipc_complete = false;
 
-	spin_unlock_irq(&sdev->ipc_lock);
+	if (!resend_attempts)
+		spin_unlock_irq(&sdev->ipc_lock);
 
 	if (ret < 0) {
 		/* So far IPC TX never fails, consider making the above void */
@@ -277,9 +283,14 @@ static int sof_ipc_tx_message_unlocked(struct snd_sof_ipc *ipc, u32 header,
 	ipc_log_header(sdev->dev, "ipc tx", msg->header);
 
 	/* now wait for completion */
-	if (!ret)
+	if (!ret) {
 		ret = tx_wait_done(ipc, msg, reply_data);
-
+		if (ret == -EBUSY &&
+		    resend_attempts++ < SOF_IPC_MAX_TX_REPETITIONS) {
+			ipc_log_header(sdev->dev, "Resending IPC", msg->header);
+			goto resend;
+		}
+	}
 	return ret;
 }
 

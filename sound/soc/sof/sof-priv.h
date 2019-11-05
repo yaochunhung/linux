@@ -68,6 +68,9 @@ extern int sof_core_debug;
 
 #define DMA_CHAN_INVALID	0xFFFFFFFF
 
+/* Define max IPC resend attempts in case DSP was busy */
+#define SOF_IPC_MAX_TX_REPETITIONS 1
+
 /* DSP D0ix sub-state */
 enum sof_d0_substate {
 	SOF_DSP_D0I0 = 0,	/* DSP default D0 substate */
