@@ -1034,7 +1034,7 @@ static void intel_shutdown(struct snd_pcm_substream *substream,
 	dev_err(dai->dev, "%s: %s: done\n", __func__, dai->name);
 }
 
-int intel_dai_suspend(struct snd_soc_dai *dai)
+static int intel_dai_suspend(struct snd_soc_dai *dai)
 {
 	struct sdw_cdns_dma_data *dma;
 
