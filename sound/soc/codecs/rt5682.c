@@ -1271,6 +1271,9 @@ static int set_filter_clk(struct snd_soc_dapm_widget *w,
 	static const int div_f[] = {1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48};
 	static const int div_o[] = {1, 2, 4, 6, 8, 12, 16, 24, 32, 48};
 
+	if (rt5682->is_sdw)
+		return 0;
+
 	val = snd_soc_component_read32(component, RT5682_GPIO_CTRL_1) &
 		RT5682_GP4_PIN_MASK;
 	if (w->shift == RT5682_PWR_ADC_S1F_BIT &&
@@ -3019,7 +3022,6 @@ static void rt5682_calibrate(struct rt5682_priv *rt5682)
 	mutex_lock(&rt5682->calibrate_mutex);
 
 	rt5682_reset(rt5682);
-	regmap_write(rt5682->regmap, RT5682_I2C_CTRL, 0x000f);
 	regmap_write(rt5682->regmap, RT5682_PWR_ANLG_1, 0xa2af);
 	usleep_range(15000, 20000);
 	regmap_write(rt5682->regmap, RT5682_PWR_ANLG_1, 0xf2af);
