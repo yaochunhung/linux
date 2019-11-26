@@ -10,6 +10,9 @@
 #define __RT5682_H__
 
 #include <sound/rt5682.h>
+#include <linux/regulator/consumer.h>
+#include <linux/soundwire/sdw.h>
+#include <linux/soundwire/sdw_type.h>
 
 #define DEVICE_ID 0x6530
 
@@ -353,7 +356,6 @@
 #define RT5682_L_EQ_POST_VOL			0x03f2
 #define RT5682_R_EQ_POST_VOL			0x03f3
 #define RT5682_I2C_MODE				0xffff
-
 
 /* global definition */
 #define RT5682_L_MUTE				(0x1 << 15)
@@ -1355,6 +1357,7 @@ enum {
 enum {
 	RT5682_AIF1,
 	RT5682_AIF2,
+	RT5682_SDW,
 	RT5682_AIFS
 };
 
@@ -1370,7 +1373,42 @@ enum {
 	RT5682_CLK_SEL_I2S2_ASRC,
 };
 
+#define RT5682_NUM_SUPPLIES 3
+
+struct rt5682_priv {
+	struct snd_soc_component *component;
+	struct rt5682_platform_data pdata;
+	struct regmap *regmap;
+	struct regmap *sdw_regmap;
+	struct snd_soc_jack *hs_jack;
+	struct regulator_bulk_data supplies[RT5682_NUM_SUPPLIES];
+	struct delayed_work jack_detect_work;
+	struct delayed_work jd_check_work;
+	struct mutex calibrate_mutex;
+	struct sdw_slave *slave;
+	enum sdw_slave_status status;
+	struct sdw_bus_params params;
+	bool hw_init;
+	bool first_init;
+	bool is_sdw;
+
+	int sysclk;
+	int sysclk_src;
+	int lrck[RT5682_AIFS];
+	int bclk[RT5682_AIFS];
+	int master[RT5682_AIFS];
+
+	int pll_src;
+	int pll_in;
+	int pll_out;
+
+	int jack_type;
+};
+
 int rt5682_sel_asrc_clk_src(struct snd_soc_component *component,
 		unsigned int filter_mask, unsigned int clk_src);
+int rt5682_sdw_init(struct device *dev, struct regmap *regmap,
+	       struct sdw_slave *slave);
+int rt5682_io_init(struct device *dev, struct sdw_slave *slave);
 
 #endif /* __RT5682_H__ */
