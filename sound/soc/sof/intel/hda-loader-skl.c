@@ -374,6 +374,44 @@ err:
 	hda_dsp_core_reset_power_down(sdev, HDA_DSP_CORE_MASK(0));
 	return ret;
 }
+#if 0
+static int cl_skl_wait_interruptible(struct snd_sof_dev *sdev)
+{
+
+printk(KERN_ERR "%s %d\n", __func__, __LINE__);
+	if (!wait_event_timeout(sdev->cl_dev.wait_queue,
+				sdev->cl_dev.wait_condition,
+				msecs_to_jiffies(SKL_WAIT_TIMEOUT))) {
+		dev_err(sdev->dev, "%s: Wait timeout\n", __func__);
+		ret = -EIO;
+		goto cleanup;
+	}
+
+	dev_dbg(ctx->dev, "%s: Event wake\n", __func__);
+	if (ctx->cl_dev.wake_status != SKL_CL_DMA_BUF_COMPLETE) {
+		dev_err(ctx->dev, "%s: DMA Error\n", __func__);
+		ret = -EIO;
+	}
+
+	return 0;
+}
+
+static void cl_skl_process_intr(struct sst_dsp *ctx)
+{
+	u32 status;
+printk(KERN_ERR "%s %d\n", __func__, __LINE__);
+	status = snd_sof_dsp_write(sdev, HDA_DSP_BAR,
+				   SKL_ADSP_REG_CL_SD_STS);
+
+	if (!(status & SKL_CL_DMA_SD_INT_COMPLETE))
+		ctx->cl_dev.wake_status = SKL_CL_DMA_ERR;
+	else
+		ctx->cl_dev.wake_status = SKL_CL_DMA_BUF_COMPLETE;
+
+	ctx->cl_dev.wait_condition = true;
+	wake_up(&ctx->cl_dev.wait_queue);
+}
+#endif
 
 static void cl_skl_cldma_fill_buffer(struct snd_sof_dev *sdev,
 				     unsigned int size,
@@ -397,10 +435,12 @@ static void cl_skl_cldma_fill_buffer(struct snd_sof_dev *sdev,
 
 static int
 cl_skl_cldma_copy_to_buf(struct snd_sof_dev *sdev, const void *bin,
-			 u32 total_size, u32 bufsize)
+			 u32 total_size, u32 bufsize, bool wait)
 {
 	unsigned int bytes_left = total_size;
 	const u8 *curr_pos = (u8 *)bin;
+	bool trigger = true;
+//	int ret;
 
 	if (total_size <= 0)
 		return -EINVAL;
@@ -413,8 +453,17 @@ cl_skl_cldma_copy_to_buf(struct snd_sof_dev *sdev, const void *bin,
 				bufsize);
 
 			cl_skl_cldma_fill_buffer(sdev, bufsize,
-						 curr_pos, true, true);
-
+						 curr_pos, true, trigger);
+#if 0
+			if (wait) {
+				trigger = false;
+				ret = cl_skl_wait_interruptible(sof);
+				if (ret < 0) {
+					skl_cldma_stop(ctx);
+					return ret;
+				}
+			}
+#endif
 			bytes_left -= bufsize;
 			curr_pos += bufsize;
 		} else {
@@ -443,7 +492,7 @@ static int cl_copy_fw_skl(struct snd_sof_dev *sdev)
 	dev_dbg(sdev->dev, "firmware size: 0x%zx buffer size 0x%x\n", fw->size,
 		bufsize);
 
-	ret = cl_skl_cldma_copy_to_buf(sdev, fw->data, fw->size, bufsize);
+	ret = cl_skl_cldma_copy_to_buf(sdev, fw->data, fw->size, bufsize, true);
 	if (ret < 0) {
 		dev_err(sdev->dev, "error: fw copy failed %d\n", ret);
 		return ret;
@@ -488,7 +537,7 @@ int hda_dsp_cl_boot_firmware_skl(struct snd_sof_dev *sdev)
 
 	/* init for booting wait */
 	init_waitqueue_head(&sdev->boot_wait);
-	sdev->boot_complete = false;
+	//sdev->boot_complete = false;
 
 	/*
 	 * at this point DSP ROM has been initialized and should

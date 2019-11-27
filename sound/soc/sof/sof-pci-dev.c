@@ -65,9 +65,10 @@ static const struct sof_dev_desc skl_desc = {
 	.chip_info = &skl_chip_info,
 	.default_fw_path = "intel/sof",
 	.default_tplg_path = "intel/sof-tplg",
-	.nocodec_fw_filename = "sof-skl.ri",
+	.default_fw_filename = "sof-skl.ri",
 	.nocodec_tplg_filename = "sof-skl-nocodec.tplg",
 	.ops = &sof_skl_ops,
+};
 #endif
 
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_KABYLAKE)
@@ -81,7 +82,7 @@ static const struct sof_dev_desc kbl_desc = {
 	.chip_info = &skl_chip_info,
 	.default_fw_path = "intel/sof",
 	.default_tplg_path = "intel/sof-tplg",
-	.nocodec_fw_filename = "sof-kbl.ri",
+	.default_fw_filename = "sof-kbl.ri",
 	.nocodec_tplg_filename = "sof-kbl-nocodec.tplg",
 	.ops = &sof_skl_ops,
 };

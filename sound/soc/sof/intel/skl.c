@@ -15,8 +15,10 @@
  * Hardware interface for audio DSP on Skylake and Kabylake.
  */
 
-#include "../sof-priv.h"
+#include "../ops.h"
 #include "hda.h"
+#include "hda-ipc.h"
+#include "../sof-audio.h"
 
 static const struct snd_sof_debugfs_map skl_dsp_debugfs[] = {
 	{"hda", HDA_DSP_HDA_BAR, 0, 0x4000, SOF_DEBUGFS_ACCESS_ALWAYS},
@@ -41,7 +43,6 @@ const struct snd_sof_dsp_ops sof_skl_ops = {
 	.block_write	= sof_block_write,
 
 	/* doorbell */
-	.irq_handler	= hda_dsp_ipc_irq_handler,
 	.irq_thread	= hda_dsp_ipc_irq_thread,
 
 	/* ipc */
