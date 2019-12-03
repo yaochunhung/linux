@@ -1639,6 +1639,7 @@ static int intel_suspend_runtime(struct device *dev)
 	clock_stop_quirks = sdw->link_res->clock_stop_quirks;
 
 	if (clock_stop_quirks & SDW_INTEL_CLK_STOP_TEARDOWN) {
+
 		ret = sdw_cdns_enable_interrupt(cdns, false);
 		if (ret < 0) {
 			dev_err(dev, "cannot disable interrupts on suspend\n");
@@ -1652,6 +1653,7 @@ static int intel_suspend_runtime(struct device *dev)
 		}
 
 		intel_shim_wake(sdw, false);
+
 	} else {
 		dev_err(dev, "%s clock_stop_quirks %x unsupported\n",
 			__func__, clock_stop_quirks);
