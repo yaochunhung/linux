@@ -49,5 +49,6 @@ struct sdw_intel_link_res {
 #define SDW_INTEL_MASTER_PROBE_TIMEOUT 2000
 
 int intel_master_startup(struct platform_device *pdev);
+int intel_master_process_wakeen_event(struct platform_device *pdev);
 
 #endif /* __SDW_INTEL_LOCAL_H */
