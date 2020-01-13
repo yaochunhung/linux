@@ -814,6 +814,7 @@ EXPORT_SYMBOL(sdw_cdns_exit_reset);
 /**
  * sdw_cdns_enable_interrupt() - Enable SDW interrupts and update config
  * @cdns: Cadence instance
+ * @state: True if we are trying to enable interrupt.
  */
 int sdw_cdns_enable_interrupt(struct sdw_cdns *cdns, bool state)
 {
@@ -1224,8 +1225,10 @@ EXPORT_SYMBOL(cdns_set_sdw_stream);
  * cdns_find_pdi() - Find a free PDI
  *
  * @cdns: Cadence instance
+ * @offset: Starting offset
  * @num: Number of PDIs
  * @pdi: PDI instances
+ * @dai_id: DAI id
  *
  * Find a PDI for a given PDI array. The PDI num and dai_id are
  * expected to match, return NULL otherwise.
@@ -1277,6 +1280,7 @@ EXPORT_SYMBOL(sdw_cdns_config_stream);
  * @stream: Stream to be allocated
  * @ch: Channel count
  * @dir: Data direction
+ * @dai_id: DAI id
  */
 struct sdw_cdns_pdi *sdw_cdns_alloc_pdi(struct sdw_cdns *cdns,
 					struct sdw_cdns_streams *stream,
