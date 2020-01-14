@@ -468,6 +468,8 @@ int hda_dsp_set_power_state(struct snd_sof_dev *sdev,
 	}
 
 	sdev->dsp_power_state = *target_state;
+	dev_dbg(sdev->dev, "New DSP state %d substate %d\n",
+		target_state->state, target_state->substate);
 	return ret;
 }
 
