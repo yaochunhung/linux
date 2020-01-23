@@ -1423,6 +1423,12 @@ static int intel_master_probe(struct sdw_master_device *md, void *link_ctx)
 
 	complete(&md->probe_complete);
 
+	/*
+	 * Ignore BIOS err_threshold, it's a really bad idea when dealing
+	 * with multiple hardware synchronized links
+	 */
+	sdw->cdns.bus.prop.err_threshold = 0;
+
 	return 0;
 }
 
