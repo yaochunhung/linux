@@ -28,6 +28,60 @@
 
 #define DPCM_MAX_BE_USERS	8
 
+static int soc_rtd_startup(struct snd_soc_pcm_runtime *rtd,
+			   struct snd_pcm_substream *substream)
+{
+	if (rtd->dai_link->ops &&
+	    rtd->dai_link->ops->startup)
+		return rtd->dai_link->ops->startup(substream);
+	return 0;
+}
+
+static void soc_rtd_shutdown(struct snd_soc_pcm_runtime *rtd,
+			     struct snd_pcm_substream *substream)
+{
+	if (rtd->dai_link->ops &&
+	    rtd->dai_link->ops->shutdown)
+		rtd->dai_link->ops->shutdown(substream);
+}
+
+static int soc_rtd_prepare(struct snd_soc_pcm_runtime *rtd,
+			   struct snd_pcm_substream *substream)
+{
+	if (rtd->dai_link->ops &&
+	    rtd->dai_link->ops->prepare)
+		return rtd->dai_link->ops->prepare(substream);
+	return 0;
+}
+
+static int soc_rtd_hw_params(struct snd_soc_pcm_runtime *rtd,
+			     struct snd_pcm_substream *substream,
+			     struct snd_pcm_hw_params *params)
+{
+	if (rtd->dai_link->ops &&
+	    rtd->dai_link->ops->hw_params)
+		return rtd->dai_link->ops->hw_params(substream, params);
+	return 0;
+}
+
+static void soc_rtd_hw_free(struct snd_soc_pcm_runtime *rtd,
+			    struct snd_pcm_substream *substream)
+{
+	if (rtd->dai_link->ops &&
+	    rtd->dai_link->ops->hw_free)
+		rtd->dai_link->ops->hw_free(substream);
+}
+
+static int soc_rtd_trigger(struct snd_soc_pcm_runtime *rtd,
+			   struct snd_pcm_substream *substream,
+			   int cmd)
+{
+	if (rtd->dai_link->ops &&
+	    rtd->dai_link->ops->trigger)
+		return rtd->dai_link->ops->trigger(substream, cmd);
+	return 0;
+}
+
 /**
  * snd_soc_runtime_activate() - Increment active count for PCM runtime components
  * @rtd: ASoC PCM runtime that is activated
@@ -522,13 +576,11 @@ static int soc_pcm_open(struct snd_pcm_substream *substream)
 			codec_dai->rx_mask = 0;
 	}
 
-	if (rtd->dai_link->ops->startup) {
-		ret = rtd->dai_link->ops->startup(substream);
-		if (ret < 0) {
-			pr_err("ASoC: %s startup failed: %d\n",
-			       rtd->dai_link->name, ret);
-			goto machine_err;
-		}
+	ret = soc_rtd_startup(rtd, substream);
+	if (ret < 0) {
+		pr_err("ASoC: %s startup failed: %d\n",
+		       rtd->dai_link->name, ret);
+		goto machine_err;
 	}
 
 	/* Dynamic PCM DAI links compat checks use dynamic capabilities */
@@ -595,8 +647,7 @@ dynamic:
 	return 0;
 
 config_err:
-	if (rtd->dai_link->ops->shutdown)
-		rtd->dai_link->ops->shutdown(substream);
+	soc_rtd_shutdown(rtd, substream);
 
 machine_err:
 	i = rtd->num_codecs;
@@ -667,8 +718,7 @@ static int soc_pcm_close(struct snd_pcm_substream *substream)
 	for_each_rtd_codec_dai(rtd, i, codec_dai)
 		snd_soc_dai_shutdown(codec_dai, substream);
 
-	if (rtd->dai_link->ops->shutdown)
-		rtd->dai_link->ops->shutdown(substream);
+	soc_rtd_shutdown(rtd, substream);
 
 	soc_pcm_components_close(substream, NULL);
 
@@ -703,13 +753,11 @@ static int soc_pcm_prepare(struct snd_pcm_substream *substream)
 
 	mutex_lock_nested(&rtd->card->pcm_mutex, rtd->card->pcm_subclass);
 
-	if (rtd->dai_link->ops->prepare) {
-		ret = rtd->dai_link->ops->prepare(substream);
-		if (ret < 0) {
-			dev_err(rtd->card->dev, "ASoC: machine prepare error:"
-				" %d\n", ret);
-			goto out;
-		}
+	ret = soc_rtd_prepare(rtd, substream);
+	if (ret < 0) {
+		dev_err(rtd->card->dev,
+			"ASoC: machine prepare error: %d\n", ret);
+		goto out;
 	}
 
 	for_each_rtd_components(rtd, i, component) {
@@ -806,13 +854,11 @@ static int soc_pcm_hw_params(struct snd_pcm_substream *substream,
 	if (ret)
 		goto out;
 
-	if (rtd->dai_link->ops->hw_params) {
-		ret = rtd->dai_link->ops->hw_params(substream, params);
-		if (ret < 0) {
-			dev_err(rtd->card->dev, "ASoC: machine hw_params"
-				" failed: %d\n", ret);
-			goto out;
-		}
+	ret = soc_rtd_hw_params(rtd, substream, params);
+	if (ret < 0) {
+		dev_err(rtd->card->dev,
+			"ASoC: machine hw_params failed: %d\n", ret);
+		goto out;
 	}
 
 	for_each_rtd_codec_dai(rtd, i, codec_dai) {
@@ -907,8 +953,7 @@ codec_err:
 		codec_dai->rate = 0;
 	}
 
-	if (rtd->dai_link->ops->hw_free)
-		rtd->dai_link->ops->hw_free(substream);
+	soc_rtd_hw_free(rtd, substream);
 
 	mutex_unlock(&rtd->card->pcm_mutex);
 	return ret;
@@ -951,8 +996,7 @@ static int soc_pcm_hw_free(struct snd_pcm_substream *substream)
 	}
 
 	/* free any machine hw params */
-	if (rtd->dai_link->ops->hw_free)
-		rtd->dai_link->ops->hw_free(substream);
+	soc_rtd_hw_free(rtd, substream);
 
 	/* free any component resources */
 	soc_pcm_components_hw_free(substream, NULL);
@@ -979,11 +1023,9 @@ static int soc_pcm_trigger_start(struct snd_pcm_substream *substream, int cmd)
 	struct snd_soc_dai *codec_dai;
 	int i, ret;
 
-	if (rtd->dai_link->ops->trigger) {
-		ret = rtd->dai_link->ops->trigger(substream, cmd);
-		if (ret < 0)
-			return ret;
-	}
+	ret = soc_rtd_trigger(rtd, substream, cmd);
+	if (ret < 0)
+		return ret;
 
 	for_each_rtd_components(rtd, i, component) {
 		ret = snd_soc_component_trigger(component, substream, cmd);
@@ -1028,11 +1070,9 @@ static int soc_pcm_trigger_stop(struct snd_pcm_substream *substream, int cmd)
 			return ret;
 	}
 
-	if (rtd->dai_link->ops->trigger) {
-		ret = rtd->dai_link->ops->trigger(substream, cmd);
-		if (ret < 0)
-			return ret;
-	}
+	ret = soc_rtd_trigger(rtd, substream, cmd);
+	if (ret < 0)
+		return ret;
 
 	return 0;
 }
@@ -2855,10 +2895,10 @@ int soc_new_pcm(struct snd_soc_pcm_runtime *rtd, int num)
 
 		for_each_rtd_codec_dai(rtd, i, codec_dai) {
 			if (snd_soc_dai_stream_valid(codec_dai, SNDRV_PCM_STREAM_PLAYBACK) &&
-			    snd_soc_dai_stream_valid(cpu_dai,   SNDRV_PCM_STREAM_PLAYBACK))
+			    snd_soc_dai_stream_valid(cpu_dai,   SNDRV_PCM_STREAM_CAPTURE))
 				playback = 1;
 			if (snd_soc_dai_stream_valid(codec_dai, SNDRV_PCM_STREAM_CAPTURE) &&
-			    snd_soc_dai_stream_valid(cpu_dai,   SNDRV_PCM_STREAM_CAPTURE))
+			    snd_soc_dai_stream_valid(cpu_dai,   SNDRV_PCM_STREAM_PLAYBACK))
 				capture = 1;
 		}
 
