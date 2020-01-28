@@ -125,6 +125,7 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_ML26124 if I2C
 	select SND_SOC_MT6351 if MTK_PMIC_WRAP
 	select SND_SOC_MT6358 if MTK_PMIC_WRAP
+	select SND_SOC_MT6660 if I2C
 	select SND_SOC_NAU8540 if I2C
 	select SND_SOC_NAU8810 if I2C
 	select SND_SOC_NAU8822 if I2C
@@ -150,6 +151,7 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_RT286 if I2C
 	select SND_SOC_RT298 if I2C
 	select SND_SOC_RT1011 if I2C
+	select SND_SOC_RT1015 if I2C
 	select SND_SOC_RT1305 if I2C
 	select SND_SOC_RT1308 if I2C
 	select SND_SOC_RT5514 if I2C
@@ -970,6 +972,7 @@ config SND_SOC_RL6231
 	default y if SND_SOC_RT5677=y
 	default y if SND_SOC_RT5682=y
 	default y if SND_SOC_RT1011=y
+	default y if SND_SOC_RT1015=y
 	default y if SND_SOC_RT1305=y
 	default y if SND_SOC_RT1308=y
 	default m if SND_SOC_RT5514=m
@@ -986,6 +989,7 @@ config SND_SOC_RL6231
 	default m if SND_SOC_RT5677=m
 	default m if SND_SOC_RT5682=m
 	default m if SND_SOC_RT1011=m
+	default m if SND_SOC_RT1015=m
 	default m if SND_SOC_RT1305=m
 	default m if SND_SOC_RT1308=m
 
@@ -1011,6 +1015,9 @@ config SND_SOC_RT298
 	depends on I2C
 
 config SND_SOC_RT1011
+	tristate
+
+config SND_SOC_RT1015
 	tristate
 
 config SND_SOC_RT1305
@@ -1579,6 +1586,15 @@ config SND_SOC_MT6358
 	help
 	  Enable support for the platform which uses MT6358 as
 	  external codec device.
+
+config SND_SOC_MT6660
+	tristate "Mediatek MT6660 Speaker Amplifier"
+	depends on I2C
+	help
+	  MediaTek MT6660 is a smart power amplifier which contain
+	  speaker protection, multi-band DRC, equalizer functions.
+	  Select N if you don't have MT6660 on board.
+	  Select M to build this as module.
 
 config SND_SOC_NAU8540
        tristate "Nuvoton Technology Corporation NAU85L40 CODEC"

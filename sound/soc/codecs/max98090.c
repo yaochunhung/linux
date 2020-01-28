@@ -52,14 +52,15 @@ static void max98090_shdn_restore_locked(struct max98090_priv *max98090)
 
 static void max98090_shdn_save(struct max98090_priv *max98090)
 {
-	mutex_lock(&max98090->shdn_lock);
+	mutex_lock_nested(&max98090->component->card->dapm_mutex,
+			  SND_SOC_DAPM_CLASS_RUNTIME);
 	max98090_shdn_save_locked(max98090);
 }
 
 static void max98090_shdn_restore(struct max98090_priv *max98090)
 {
 	max98090_shdn_restore_locked(max98090);
-	mutex_unlock(&max98090->shdn_lock);
+	mutex_unlock(&max98090->component->card->dapm_mutex);
 }
 
 static int max98090_put_volsw(struct snd_kcontrol *kcontrol,
@@ -88,7 +89,7 @@ static int max98090_dapm_put_enum_double(struct snd_kcontrol *kcontrol,
 	int ret;
 
 	max98090_shdn_save(max98090);
-	ret = snd_soc_dapm_put_enum_double(kcontrol, ucontrol);
+	ret = snd_soc_dapm_put_enum_double_locked(kcontrol, ucontrol);
 	max98090_shdn_restore(max98090);
 
 	return ret;
@@ -2313,12 +2314,12 @@ static void max98090_pll_work(struct max98090_priv *max98090)
 	 */
 
 	/* Toggle shutdown OFF then ON */
-	mutex_lock(&max98090->shdn_lock);
+	mutex_lock(&component->card->dapm_mutex);
 	snd_soc_component_update_bits(component, M98090_REG_DEVICE_SHUTDOWN,
 			    M98090_SHDNN_MASK, 0);
 	snd_soc_component_update_bits(component, M98090_REG_DEVICE_SHUTDOWN,
 			    M98090_SHDNN_MASK, M98090_SHDNN_MASK);
-	mutex_unlock(&max98090->shdn_lock);
+	mutex_unlock(&component->card->dapm_mutex);
 
 	for (i = 0; i < 10; ++i) {
 		/* Give PLL time to lock */
@@ -2730,8 +2731,6 @@ static int max98090_i2c_probe(struct i2c_client *i2c,
 		GFP_KERNEL);
 	if (max98090 == NULL)
 		return -ENOMEM;
-
-	mutex_init(&max98090->shdn_lock);
 
 	if (ACPI_HANDLE(&i2c->dev)) {
 		acpi_id = acpi_match_device(i2c->dev.driver->acpi_match_table,
