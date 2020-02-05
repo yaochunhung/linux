@@ -1118,27 +1118,13 @@ static int intel_master_probe(struct platform_device *pdev)
 	if (sdw->cdns.bus.prop.hw_disabled) {
 		dev_info(&pdev->dev, "SoundWire master %d is disabled, ignoring\n",
 			 sdw->cdns.bus.link_id);
-		return 0;
-	}
-
-	/* Acquire IRQ */
-	ret = request_threaded_irq(sdw->link_res->irq,
-				   sdw_cdns_irq, sdw_cdns_thread,
-				   IRQF_SHARED, KBUILD_MODNAME, &sdw->cdns);
-	if (ret < 0) {
-		dev_err(sdw->cdns.dev, "unable to grab IRQ %d, disabling device\n",
-			sdw->link_res->irq);
-		goto err_init;
 	}
 
 	parent_res = sdw->link_res->parent_res;
 	complete(&parent_res->probe_complete);
+	parent_res->cdns = &sdw->cdns;
 
 	return 0;
-
-err_init:
-	sdw_delete_bus_master(&sdw->cdns.bus);
-	return ret;
 }
 
 int intel_master_startup(struct platform_device *pdev)
@@ -1194,7 +1180,6 @@ int intel_master_startup(struct platform_device *pdev)
 err_interrupt:
 	sdw_cdns_enable_interrupt(&sdw->cdns, false);
 err_init:
-	free_irq(sdw->link_res->irq, sdw);
 	sdw_delete_bus_master(&sdw->cdns.bus);
 	return ret;
 }
@@ -1208,7 +1193,6 @@ static int intel_master_remove(struct platform_device *pdev)
 	if (!sdw->cdns.bus.prop.hw_disabled) {
 		intel_debugfs_exit(sdw);
 		sdw_cdns_enable_interrupt(&sdw->cdns, false);
-		free_irq(sdw->link_res->irq, sdw);
 		snd_soc_unregister_component(sdw->cdns.dev);
 	}
 	sdw_delete_bus_master(&sdw->cdns.bus);

@@ -24,6 +24,8 @@
  * @dev: device implementing hw_params and free callbacks
  * @shim_lock: mutex to handle access to shared SHIM registers
  * @clock_stop_quirks: mask defining requested behavior on pm_suspend
+ * @cdns: Cadence master descriptor
+ * @list: used to walk-through all masters exposed by the same controller
  */
 struct sdw_intel_link_res {
 	void *parent_res;
@@ -38,6 +40,8 @@ struct sdw_intel_link_res {
 	struct device *dev;
 	struct mutex *shim_lock; /* protect shared registers */
 	u32 clock_stop_quirks;
+	struct sdw_cdns *cdns;
+	struct list_head list;
 };
 
 #define SDW_INTEL_QUIRK_MASK_BUS_DISABLE      BIT(1)
