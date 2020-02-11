@@ -799,9 +799,8 @@ static const struct snd_kcontrol_new rt5682_dac_r_mux =
 static void rt5682_reset(struct rt5682_priv *rt5682)
 {
 	regmap_write(rt5682->regmap, RT5682_RESET, 0);
-	if (!rt5682->is_sdw) {
+	if (!rt5682->is_sdw)
 		regmap_write(rt5682->regmap, RT5682_I2C_MODE, 1);
-	}
 }
 /**
  * rt5682_sel_asrc_clk_src - select ASRC clock source for a set of filters
