@@ -15,4 +15,6 @@
 #define RT5682_SDW_DATA_H			0x3005
 #define RT5682_SDW_CMD				0x3008
 
+#define RT5682_PROBE_TIMEOUT			2000
+
 #endif /* __RT5682_SDW_H__ */
