@@ -27,9 +27,6 @@
 #include <sound/soc-dapm.h>
 #include <sound/initval.h>
 #include <sound/tlv.h>
-#include <linux/clk.h>
-#include <linux/clkdev.h>
-#include <linux/clk-provider.h>
 #include <sound/rt5682.h>
 
 #include "rl6231.h"
@@ -790,6 +787,7 @@ static const struct snd_kcontrol_new rt5682_if1_67_adc_swap_mux =
 static const char * const rt5682_dac_select[] = {
 	"IF1", "SOUND"
 };
+
 static SOC_ENUM_SINGLE_DECL(rt5682_dacl_enum,
 	RT5682_AD_DA_MIXER, RT5682_DAC1_L_SEL_SFT, rt5682_dac_select);
 
@@ -2839,6 +2837,8 @@ err:
 static int rt5682_probe(struct snd_soc_component *component)
 {
 	struct rt5682_priv *rt5682 = snd_soc_component_get_drvdata(component);
+	struct sdw_slave *slave;
+	unsigned long time;
 
 #ifdef CONFIG_COMMON_CLK
 	int ret;
@@ -2864,6 +2864,17 @@ static int rt5682_probe(struct snd_soc_component *component)
 	/* Initial setup for CCF */
 	rt5682->lrck[RT5682_AIF1] = CLK_48;
 #endif
+
+	if (rt5682->is_sdw) {
+		slave = rt5682->slave;
+		time = wait_for_completion_timeout(
+			&slave->initialization_complete,
+			msecs_to_jiffies(RT5682_PROBE_TIMEOUT));
+		if (!time) {
+			dev_err(&slave->dev, "Initialization not complete, timed out\n");
+			return -ETIMEDOUT;
+		}
+	}
 
 	return 0;
 }
@@ -3365,7 +3376,7 @@ int rt5682_sdw_init(struct device *dev, struct regmap *regmap,
 	 * HW init will be performed when device reports present
 	 */
 	rt5682->hw_init = false;
-	rt5682->first_init = false;
+	rt5682->first_hw_init = false;
 
 	mutex_init(&rt5682->calibrate_mutex);
 	INIT_DELAYED_WORK(&rt5682->jack_detect_work,
@@ -3398,7 +3409,7 @@ int rt5682_io_init(struct device *dev, struct sdw_slave *slave)
 	/*
 	 * PM runtime is only enabled when a Slave reports as Attached
 	 */
-	if (!rt5682->first_init) {
+	if (!rt5682->first_hw_init) {
 		/* set autosuspend parameters */
 		pm_runtime_set_autosuspend_delay(&slave->dev, 3000);
 		pm_runtime_use_autosuspend(&slave->dev);
@@ -3416,12 +3427,14 @@ int rt5682_io_init(struct device *dev, struct sdw_slave *slave)
 
 	rt5682_reset(rt5682);
 
-	if (rt5682->first_init)
+	if (rt5682->first_hw_init) {
+		regcache_cache_only(rt5682->regmap, false);
 		regcache_cache_bypass(rt5682->regmap, true);
+	}
 
 	rt5682_calibrate(rt5682);
 
-	if (rt5682->first_init) {
+	if (rt5682->first_hw_init) {
 		regcache_cache_bypass(rt5682->regmap, false);
 		regcache_mark_dirty(rt5682->regmap);
 		regcache_sync(rt5682->regmap);
@@ -3485,7 +3498,7 @@ reinit:
 
 	/* Mark Slave initialization complete */
 	rt5682->hw_init = true;
-	rt5682->first_init = true;
+	rt5682->first_hw_init = true;
 
 	pm_runtime_mark_last_busy(&slave->dev);
 	pm_runtime_put_autosuspend(&slave->dev);

@@ -11,6 +11,9 @@
 
 #include <sound/rt5682.h>
 #include <linux/regulator/consumer.h>
+#include <linux/clk.h>
+#include <linux/clkdev.h>
+#include <linux/clk-provider.h>
 #include <linux/soundwire/sdw.h>
 #include <linux/soundwire/sdw_type.h>
 
@@ -356,6 +359,7 @@
 #define RT5682_L_EQ_POST_VOL			0x03f2
 #define RT5682_R_EQ_POST_VOL			0x03f3
 #define RT5682_I2C_MODE				0xffff
+
 
 /* global definition */
 #define RT5682_L_MUTE				(0x1 << 15)
@@ -1389,8 +1393,15 @@ struct rt5682_priv {
 	enum sdw_slave_status status;
 	struct sdw_bus_params params;
 	bool hw_init;
-	bool first_init;
+	bool first_hw_init;
 	bool is_sdw;
+
+#ifdef CONFIG_COMMON_CLK
+	struct clk_hw dai_clks_hw[RT5682_DAI_NUM_CLKS];
+	struct clk_lookup *dai_clks_lookup[RT5682_DAI_NUM_CLKS];
+	struct clk *dai_clks[RT5682_DAI_NUM_CLKS];
+	struct clk *mclk;
+#endif
 
 	int sysclk;
 	int sysclk_src;
@@ -1398,9 +1409,9 @@ struct rt5682_priv {
 	int bclk[RT5682_AIFS];
 	int master[RT5682_AIFS];
 
-	int pll_src;
-	int pll_in;
-	int pll_out;
+	int pll_src[RT5682_PLLS];
+	int pll_in[RT5682_PLLS];
+	int pll_out[RT5682_PLLS];
 
 	int jack_type;
 };
