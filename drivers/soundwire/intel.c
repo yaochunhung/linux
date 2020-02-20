@@ -1419,7 +1419,7 @@ static int intel_master_probe(struct platform_device *pdev)
 	sdw->link_res = dev_get_platdata(&pdev->dev);
 	sdw->cdns.dev = &pdev->dev;
 	sdw->cdns.registers = sdw->link_res->registers;
-	sdw->cdns.instance = pdev->id;
+	sdw->cdns.instance = sdw->instance;
 	sdw->cdns.msg_count = 0;
 	sdw->cdns.bus.dev = &pdev->dev;
 	sdw->cdns.bus.link_id = pdev->id;

@@ -283,8 +283,6 @@ static int rt5682_dev_suspend(struct device *dev)
 	return 0;
 }
 
-#define rt5682_PROBE_TIMEOUT 2000
-
 static int rt5682_dev_resume(struct device *dev)
 {
 	struct sdw_slave *slave = dev_to_sdw_dev(dev);
@@ -298,7 +296,7 @@ static int rt5682_dev_resume(struct device *dev)
 		goto regmap_sync;
 
 	time = wait_for_completion_timeout(&slave->initialization_complete,
-				msecs_to_jiffies(rt5682_PROBE_TIMEOUT));
+				msecs_to_jiffies(RT5682_PROBE_TIMEOUT));
 	if (!time) {
 		dev_err(&slave->dev, "Initialization not complete, timed out\n");
 		return -ETIMEDOUT;
