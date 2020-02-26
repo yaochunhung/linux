@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/*
- * rt5682-sdw.c  --  RT5682 ALSA SoC audio component driver
- *
- * Copyright 2019 Realtek Semiconductor Corp.
- * Author: Oder Chiou <oder_chiou@realtek.com>
- */
+//
+// rt5682-sdw.c  --  RT5682 ALSA SoC audio component driver
+//
+// Copyright 2019 Realtek Semiconductor Corp.
+// Author: Oder Chiou <oder_chiou@realtek.com>
+//
 
 #include <linux/module.h>
 #include <linux/moduleparam.h>
@@ -246,7 +246,7 @@ static int rt5682_sdw_probe(struct sdw_slave *slave,
 
 	/* Regmap Initialization */
 	regmap = devm_regmap_init_sdw(slave, &rt5682_sdw_regmap);
-	if (!regmap)
+	if (IS_ERR(regmap))
 		return -EINVAL;
 
 	rt5682_sdw_init(&slave->dev, regmap, slave);

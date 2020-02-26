@@ -1,5 +1,5 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
-/*
+/* SPDX-License-Identifier: GPL-2.0-only
+ *
  * rt5682-sdw.h  --  RT5682 SDW ALSA SoC audio driver
  *
  * Copyright 2019 Realtek Semiconductor Corp.
