@@ -4438,7 +4438,7 @@ static void soc_dapm_stream_event(struct snd_soc_pcm_runtime *rtd, int stream,
 	int i;
 
 	for_each_rtd_cpu_dai(rtd, i, cpu_dai)
-		soc_dapm_dai_stream_event(rtd->cpu_dai, stream, event);
+		soc_dapm_dai_stream_event(cpu_dai, stream, event);
 	for_each_rtd_codec_dai(rtd, i, codec_dai)
 		soc_dapm_dai_stream_event(codec_dai, stream, event);
 
@@ -4794,7 +4794,7 @@ static void soc_dapm_shutdown_dapm(struct snd_soc_dapm_context *dapm)
 			continue;
 		if (w->power) {
 			dapm_seq_insert(w, &down_list, false);
-			w->power = 0;
+			w->new_power = 0;
 			powerdown = 1;
 		}
 	}
