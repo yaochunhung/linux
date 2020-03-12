@@ -273,7 +273,7 @@ static int sof_rt1015_hw_params(struct snd_pcm_substream *substream,
 	if (!snd_soc_card_get_codec_dai(card, "rt1015-aif"))
 		return 0;
 
-	for_each_rtd_codec_dai(rtd, i, codec_dai) {
+	for_each_rtd_codec_dais(rtd, i, codec_dai) {
 		ret = snd_soc_dai_set_pll(codec_dai, 0, RT1015_PLL_S_BCLK,
 					  params_rate(params) * 50,
 					  params_rate(params) * 256);
