@@ -502,6 +502,15 @@ static int __snd_usb_add_audio_stream(struct snd_usb_audio *chip,
 		subs = &as->substream[stream];
 		if (subs->ep_num)
 			continue;
+		if (snd_device_get_state(chip->card, as->pcm) !=
+		    SNDRV_DEV_BUILD) {
+			if (!chip->pcm_devs_warned) {
+				usb_audio_warn(chip, "PCM stream already registered\n");
+				usb_audio_warn(chip, "Please report to upstream for assigning the delayed card registration\n");
+				chip->pcm_devs_warned = true;
+			}
+			continue;
+		}
 		err = snd_pcm_new_stream(as->pcm, stream, 1);
 		if (err < 0)
 			return err;
