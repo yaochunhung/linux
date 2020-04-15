@@ -70,6 +70,8 @@ required:
   - mbox-names
   - memory-region
 
+additionalProperties: false
+
 examples:
   - |
     #include <dt-bindings/firmware/imx/rsrc.h>
