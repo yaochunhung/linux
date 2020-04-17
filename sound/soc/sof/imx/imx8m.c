@@ -92,7 +92,7 @@ static void imx8m_dsp_handle_request(struct imx_dsp_ipc *ipc)
 	snd_sof_ipc_msgs_rx(priv->sdev);
 }
 
-static struct imx_dsp_ops dsp_ops = {
+static struct imx_dsp_ops imx8m_dsp_ops = {
 	.handle_reply		= imx8m_dsp_handle_reply,
 	.handle_request		= imx8m_dsp_handle_request,
 };
@@ -152,7 +152,7 @@ static int imx8m_probe(struct snd_sof_dev *sdev)
 	}
 
 	imx_dsp_set_data(priv->dsp_ipc, priv);
-	priv->dsp_ipc->ops = &dsp_ops;
+	priv->dsp_ipc->ops = &imx8m_dsp_ops;
 
 	/* DSP base */
 	mmio = platform_get_resource(pdev, IORESOURCE_MEM, 0);
