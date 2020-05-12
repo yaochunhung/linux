@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (c) 2018-2020, Intel Corporation
-/*
- * sof-wm8804.c - ASoC machine driver for Up and Up2 board
- * based on WM8804/Hifiberry Digi+
- */
+//
+// sof-wm8804.c - ASoC machine driver for Up and Up2 board
+// based on WM8804/Hifiberry Digi+
+
 
 #include <linux/acpi.h>
 #include <linux/dmi.h>
