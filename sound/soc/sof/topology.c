@@ -2364,6 +2364,7 @@ static int sof_widget_ready(struct snd_soc_component *scomp, int index,
 	if (ret != 0) {
 		dev_err(scomp->dev, "error: parsing core tokens failed %d\n",
 			ret);
+		kfree(swidget);
 		return ret;
 	}
 
@@ -2373,6 +2374,7 @@ static int sof_widget_ready(struct snd_soc_component *scomp, int index,
 	ret = sof_core_enable(sdev, comp.core);
 	if (ret < 0) {
 		dev_err(scomp->dev, "error: enable core: %d\n", ret);
+		kfree(swidget);
 		return ret;
 	}
 
