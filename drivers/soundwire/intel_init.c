@@ -12,7 +12,7 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/module.h>
-#include <linux/soundwire/sdw.h>
+#include <linux/platform_device.h>
 #include <linux/soundwire/sdw_intel.h>
 #include <linux/pm_runtime.h>
 #include "cadence_master.h"
@@ -58,7 +58,7 @@ static int sdw_intel_cleanup(struct sdw_intel_ctx *ctx)
 {
 	struct sdw_intel_link_res *link = ctx->links;
 	u32 link_mask;
-	int i, ret;
+	int i;
 
 	if (!link)
 		return 0;
@@ -66,25 +66,17 @@ static int sdw_intel_cleanup(struct sdw_intel_ctx *ctx)
 	link_mask = ctx->link_mask;
 
 	for (i = 0; i < ctx->count; i++, link++) {
-		if (link_mask && !(link_mask & BIT(i)))
+		if (!(link_mask & BIT(i)))
 			continue;
 
-		if (!IS_ERR_OR_NULL(link->md)) {
-			ret = sdw_master_device_del(link->md);
-			if (ret < 0)
-				dev_err(&link->md->dev,
-					"master device del failed %d\n",
-					ret);
+		if (link->pdev) {
+			pm_runtime_disable(&link->pdev->dev);
+			platform_device_unregister(link->pdev);
 		}
 
 		if (!link->clock_stop_quirks)
 			pm_runtime_put_noidle(link->dev);
 	}
-
-	kfree(ctx->links);
-	ctx->links = NULL;
-	kfree(ctx->ids);
-	ctx->ids = NULL;
 
 	return 0;
 }
@@ -127,7 +119,9 @@ sdw_intel_scan_controller(struct sdw_intel_acpi_info *info)
 		dev_err(&adev->dev, "Link count %d exceeds max %d\n",
 			count, SDW_MAX_LINKS);
 		return -EINVAL;
-	} else if (!count) {
+	}
+
+	if (!count) {
 		dev_warn(&adev->dev, "No SoundWire links detected\n");
 		return -EINVAL;
 	}
@@ -195,17 +189,17 @@ EXPORT_SYMBOL(sdw_intel_thread);
 static struct sdw_intel_ctx
 *sdw_intel_probe_controller(struct sdw_intel_res *res)
 {
+	struct platform_device_info pdevinfo;
+	struct platform_device *pdev;
 	struct sdw_intel_link_res *link;
 	struct sdw_intel_ctx *ctx;
 	struct acpi_device *adev;
-	struct sdw_master_device *md;
 	struct sdw_slave *slave;
 	struct list_head *node;
 	struct sdw_bus *bus;
 	u32 link_mask;
 	int num_slaves = 0;
 	int count;
-	int ret;
 	int i;
 
 	if (!res)
@@ -220,13 +214,15 @@ static struct sdw_intel_ctx
 	count = res->count;
 	dev_dbg(&adev->dev, "Creating %d SDW Link devices\n", count);
 
-	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
+	ctx = devm_kzalloc(&adev->dev, sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return NULL;
 
-	ctx->links = kcalloc(count, sizeof(*ctx->links), GFP_KERNEL);
+	ctx->count = count;
+	ctx->links = devm_kcalloc(&adev->dev, ctx->count,
+				  sizeof(*ctx->links), GFP_KERNEL);
 	if (!ctx->links)
-		goto link_err;
+		return NULL;
 
 	ctx->count = count;
 	ctx->mmio_base = res->mmio_base;
@@ -239,41 +235,46 @@ static struct sdw_intel_ctx
 
 	INIT_LIST_HEAD(&ctx->link_list);
 
-	ret = driver_register(sdw_intel_link_ops.driver);
-	if (ret) {
-		dev_err(&adev->dev, "failed to register sdw master driver: %d\n", ret);
-		goto register_err;
-	}
-
 	/* Create SDW Master devices */
 	for (i = 0; i < count; i++, link++) {
-		if (link_mask && !(link_mask & BIT(i)))
+		if (!(link_mask & BIT(i))) {
+			dev_dbg(&adev->dev,
+				"Link %d masked, will not be enabled\n", i);
 			continue;
+		}
 
 		link->mmio_base = res->mmio_base;
 		link->registers = res->mmio_base + SDW_LINK_BASE
 			+ (SDW_LINK_SIZE * i);
 		link->shim = res->mmio_base + SDW_SHIM_BASE;
 		link->alh = res->mmio_base + SDW_ALH_BASE;
+
 		link->ops = res->ops;
 		link->dev = res->dev;
+
 		link->clock_stop_quirks = res->clock_stop_quirks;
 		link->shim_lock = &ctx->shim_lock;
 		link->shim_mask = &ctx->shim_mask;
 		link->link_mask = link_mask;
 
-		md = sdw_master_device_add(res->parent,
-					   acpi_fwnode_handle(adev),
-					   &sdw_intel_link_ops,
-					   i,
-					   link);
+		memset(&pdevinfo, 0, sizeof(pdevinfo));
 
-		if (IS_ERR(md)) {
-			dev_err(&adev->dev, "Could not create link %d\n", i);
+		pdevinfo.parent = res->parent;
+		pdevinfo.name = "intel-sdw";
+		pdevinfo.id = i;
+		pdevinfo.fwnode = acpi_fwnode_handle(adev);
+		pdevinfo.data = link;
+		pdevinfo.size_data = sizeof(*link);
+
+		pdev = platform_device_register_full(&pdevinfo);
+		if (IS_ERR(pdev)) {
+			dev_err(&adev->dev,
+				"platform device creation failed: %ld\n",
+				PTR_ERR(pdev));
 			goto err;
 		}
-
-		link->md = md;
+		link->pdev = pdev;
+		link->cdns = platform_get_drvdata(pdev);
 
 		list_add_tail(&link->list, &ctx->link_list);
 		bus = &link->cdns->bus;
@@ -282,7 +283,8 @@ static struct sdw_intel_ctx
 			num_slaves++;
 	}
 
-	ctx->ids = kcalloc(num_slaves, sizeof(*ctx->ids), GFP_KERNEL);
+	ctx->ids = devm_kcalloc(&adev->dev, num_slaves,
+				sizeof(*ctx->ids), GFP_KERNEL);
 	if (!ctx->ids)
 		goto err;
 
@@ -301,11 +303,7 @@ static struct sdw_intel_ctx
 
 err:
 	ctx->count = i;
-	driver_unregister(sdw_intel_link_ops.driver);
-register_err:
 	sdw_intel_cleanup(ctx);
-link_err:
-	kfree(ctx);
 	return NULL;
 }
 
@@ -314,7 +312,6 @@ sdw_intel_startup_controller(struct sdw_intel_ctx *ctx)
 {
 	struct acpi_device *adev;
 	struct sdw_intel_link_res *link;
-	struct sdw_master_device *md;
 	u32 caps;
 	u32 link_mask;
 	int i;
@@ -341,12 +338,10 @@ sdw_intel_startup_controller(struct sdw_intel_ctx *ctx)
 
 	/* Startup SDW Master devices */
 	for (i = 0; i < ctx->count; i++, link++) {
-		if (link_mask && !(link_mask & BIT(i)))
+		if (!(link_mask & BIT(i)))
 			continue;
 
-		md = link->md;
-
-		sdw_master_device_startup(md);
+		intel_master_startup(link->pdev);
 
 		if (!link->clock_stop_quirks) {
 			/*
@@ -455,20 +450,28 @@ EXPORT_SYMBOL_NS(sdw_intel_startup, SOUNDWIRE_INTEL_INIT);
 void sdw_intel_exit(struct sdw_intel_ctx *ctx)
 {
 	sdw_intel_cleanup(ctx);
-	driver_unregister(sdw_intel_link_ops.driver);
-	kfree(ctx);
 }
 EXPORT_SYMBOL_NS(sdw_intel_exit, SOUNDWIRE_INTEL_INIT);
 
 void sdw_intel_process_wakeen_event(struct sdw_intel_ctx *ctx)
 {
 	struct sdw_intel_link_res *link;
+	u32 link_mask;
+	int i;
 
 	if (!ctx->links)
 		return;
 
-	list_for_each_entry(link, &ctx->link_list, list)
-		sdw_master_device_process_wake_event(link->md);
+	link = ctx->links;
+	link_mask = ctx->link_mask;
+
+	/* Startup SDW Master devices */
+	for (i = 0; i < ctx->count; i++, link++) {
+		if (!(link_mask & BIT(i)))
+			continue;
+
+		intel_master_process_wakeen_event(link->pdev);
+	}
 }
 EXPORT_SYMBOL_NS(sdw_intel_process_wakeen_event, SOUNDWIRE_INTEL_INIT);
 
