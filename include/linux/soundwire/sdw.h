@@ -632,50 +632,14 @@ struct sdw_slave {
 
 #define dev_to_sdw_dev(_dev) container_of(_dev, struct sdw_slave, dev)
 
-struct sdw_link_ops;
-
 /**
  * struct sdw_master_device - SoundWire 'Master Device' representation
  * @dev: Linux device for this Master
- * @bus: Bus handle
- * @link_ops: link-specific ops, initialized with sdw_master_device_add()
- * @link_id: link index as defined by MIPI DisCo specification
- * @pm_runtime_suspended: flag set with the value of pm_runtime_suspended()
- * during system suspend and checked during system resume.
- * @pdata: private data typically provided with sdw_master_device_add()
- *
- * link_ops can be NULL when link-level initializations and power-management
- * are not desired.
+ * @bus: Bus handle shortcut
  */
 struct sdw_master_device {
 	struct device dev;
 	struct sdw_bus *bus;
-	struct sdw_link_ops *link_ops;
-	int link_id;
-	bool pm_runtime_suspended;
-	void *pdata;
-};
-
-/**
- * struct sdw_link_ops - SoundWire link-specific ops
- * @add: initializations and allocation (hardware may not be enabled yet)
- * @startup: initialization handled after the hardware is enabled, all
- * clock/power dependencies are available
- * @del: free all remaining resources
- * @process_wake_event: handle external wake
- * @driver: raw structure used for name/PM hooks.
- *
- * This optional structure is provided for link specific
- * operations. All members are optional, but if .add() is supported the
- * dual .del() function shall be used to release all resources allocated
- * in .add().
- */
-struct sdw_link_ops {
-	int (*add)(struct sdw_master_device *md, void *link_ctx);
-	int (*startup)(struct sdw_master_device *md);
-	int (*del)(struct sdw_master_device *md);
-	int (*process_wake_event)(struct sdw_master_device *md);
-	struct device_driver *driver;
 };
 
 #define dev_to_sdw_master_device(d)	\
@@ -836,8 +800,10 @@ struct sdw_master_ops {
 
 /**
  * struct sdw_bus - SoundWire bus
- * @dev: Master linux device
+ * @dev: Shortcut to &bus->md->dev to avoid changing the entire code.
+ * @md: Master device
  * @link_id: Link id number, can be 0 to N, unique for each Master
+ * @id: bus system-wide unique id
  * @slaves: list of Slaves on this bus
  * @assigned: Bitmap for Slave device numbers.
  * Bit set implies used number, bit clear implies unused number.
@@ -866,7 +832,9 @@ struct sdw_master_ops {
  */
 struct sdw_bus {
 	struct device *dev;
+	struct sdw_master_device *md;
 	unsigned int link_id;
+	int id;
 	struct list_head slaves;
 	DECLARE_BITMAP(assigned, SDW_MAX_DEVICES);
 	struct mutex bus_lock;
@@ -887,21 +855,9 @@ struct sdw_bus {
 	int hw_sync_min_links;
 };
 
-int sdw_add_bus_master(struct sdw_bus *bus);
-void sdw_delete_bus_master(struct sdw_bus *bus);
-
-struct sdw_master_device
-*sdw_master_device_add(struct device *parent,
-		       struct fwnode_handle *fwnode,
-		       struct sdw_link_ops *master_ops,
-		       int link_id,
-		       void *pdata);
-
-int sdw_master_device_del(struct sdw_master_device *md);
-
-int sdw_master_device_startup(struct sdw_master_device *md);
-
-int sdw_master_device_process_wake_event(struct sdw_master_device *md);
+int sdw_bus_master_add(struct sdw_bus *bus, struct device *parent,
+		       struct fwnode_handle *fwnode);
+void sdw_bus_master_delete(struct sdw_bus *bus);
 
 /**
  * sdw_port_config: Master or Slave Port configuration

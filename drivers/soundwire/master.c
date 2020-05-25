@@ -3,6 +3,7 @@
 
 #include <linux/device.h>
 #include <linux/acpi.h>
+#include <linux/pm_runtime.h>
 #include <linux/soundwire/sdw.h>
 #include <linux/soundwire/sdw_type.h>
 #include "bus.h"
@@ -97,59 +98,45 @@ static void sdw_master_device_release(struct device *dev)
 	kfree(md);
 }
 
+static const struct dev_pm_ops master_dev_pm = {
+	SET_RUNTIME_PM_OPS(pm_generic_runtime_suspend,
+			   pm_generic_runtime_resume, NULL)
+};
+
 struct device_type sdw_master_type = {
 	.name =		"soundwire_master",
 	.release =	sdw_master_device_release,
+	.pm = &master_dev_pm,
 };
 
 /**
  * sdw_master_device_add() - create a Linux Master Device representation.
- * @parent: the parent Linux device (e.g. a PCI device)
- * @fwnode: the parent fwnode (e.g. an ACPI companion device to the parent)
- * @link_ops: link-specific ops (optional)
- * @link_id: link index as defined by MIPI DisCo specification
- * @pdata: private data (e.g. register base, offsets, platform quirks, etc).
- *
- * The link_ops argument can be NULL, it is only used when link-specific
- * initializations and power-management are required.
+ * @bus: SDW bus instance
+ * @parent: parent device
+ * @fwnode: firmware node handle
  */
-struct sdw_master_device
-*sdw_master_device_add(struct device *parent,
-		       struct fwnode_handle *fwnode,
-		       struct sdw_link_ops *link_ops,
-		       int link_id,
-		       void *pdata)
+int sdw_master_device_add(struct sdw_bus *bus, struct device *parent,
+			  struct fwnode_handle *fwnode)
 {
 	struct sdw_master_device *md;
 	int ret;
 
+	if (!parent)
+		return -EINVAL;
+
 	md = kzalloc(sizeof(*md), GFP_KERNEL);
 	if (!md)
-		return ERR_PTR(-ENOMEM);
+		return -ENOMEM;
 
-	md->link_id = link_id;
-	md->pdata = pdata;
-	md->link_ops = link_ops;
-
+	md->dev.bus = &sdw_bus_type;
+	md->dev.type = &sdw_master_type;
 	md->dev.parent = parent;
 	md->dev.groups = master_node_groups;
 	md->dev.of_node = parent->of_node;
 	md->dev.fwnode = fwnode;
-	md->dev.bus = &sdw_bus_type;
-	md->dev.type = &sdw_master_type;
-	md->dev.dma_mask = md->dev.parent->dma_mask;
-	dev_set_name(&md->dev, "sdw-master-%d", md->link_id);
+	md->dev.dma_mask = parent->dma_mask;
 
-	if (link_ops && link_ops->driver) {
-		/*
-		 * A driver is only needed for ASoC integration (need
-		 * driver->name) and for link-specific power management
-		 * w/ a pm_dev_ops structure.
-		 *
-		 * The driver needs to be registered by the parent
-		 */
-		md->dev.driver = link_ops->driver;
-	}
+	dev_set_name(&md->dev, "sdw-master-%d", bus->id);
 
 	ret = device_register(&md->dev);
 	if (ret) {
@@ -162,90 +149,26 @@ struct sdw_master_device
 		goto device_register_err;
 	}
 
-	if (link_ops && link_ops->add) {
-		ret = link_ops->add(md, pdata);
-		if (ret < 0) {
-			dev_err(&md->dev, "link_ops add callback failed: %d\n", ret);
-			goto link_add_err;
-		}
-	}
+	/* add shortcuts to improve code readability/compactness */
+	md->bus = bus;
+	bus->dev = &md->dev;
+	bus->md = md;
 
-	return md;
-
-link_add_err:
-	device_unregister(&md->dev);
+	pm_runtime_enable(&bus->md->dev);
 device_register_err:
-	return ERR_PTR(ret);
+	return ret;
 }
-EXPORT_SYMBOL_GPL(sdw_master_device_add);
 
 /**
  * sdw_master_device_del() - delete a Linux Master Device representation.
- * @md: the master device
+ * @bus: bus handle
  *
- * This function is the dual of sdw_master_device_add(), itreleases
- * all link-specific resources and unregisters the device.
+ * This function is the dual of sdw_master_device_add()
  */
-int sdw_master_device_del(struct sdw_master_device *md)
+int sdw_master_device_del(struct sdw_bus *bus)
 {
-	int ret = 0;
+	pm_runtime_disable(&bus->md->dev);
+	device_unregister(bus->dev);
 
-	if (md && md->link_ops && md->link_ops->del) {
-		ret = md->link_ops->del(md);
-		if (ret < 0) {
-			dev_err(&md->dev, "link_ops del callback failed: %d\n",
-				ret);
-			return ret;
-		}
-	}
-
-	device_unregister(&md->dev);
-
-	return ret;
+	return 0;
 }
-EXPORT_SYMBOL_GPL(sdw_master_device_del);
-
-/**
- * sdw_master_device_startup() - startup hardware
- *
- * @md: Linux Soundwire master device
- */
-int sdw_master_device_startup(struct sdw_master_device *md)
-{
-	struct sdw_link_ops *link_ops;
-	int ret = 0;
-
-	if (IS_ERR_OR_NULL(md))
-		return -EINVAL;
-
-	link_ops = md->link_ops;
-
-	if (link_ops && link_ops->startup)
-		ret = link_ops->startup(md);
-
-	return ret;
-}
-EXPORT_SYMBOL_GPL(sdw_master_device_startup);
-
-/**
- * sdw_master_device_process_wake_event() - handle external wake
- * event, e.g. handled at the PCI level
- *
- * @md: Linux Soundwire master device
- */
-int sdw_master_device_process_wake_event(struct sdw_master_device *md)
-{
-	struct sdw_link_ops *link_ops;
-	int ret = 0;
-
-	if (IS_ERR_OR_NULL(md))
-		return -EINVAL;
-
-	link_ops = md->link_ops;
-
-	if (link_ops && link_ops->process_wake_event)
-		ret = link_ops->process_wake_event(md);
-
-	return ret;
-}
-EXPORT_SYMBOL_GPL(sdw_master_device_process_wake_event);
