@@ -117,6 +117,7 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_MAX98927
 	imply SND_SOC_MAX98373
 	imply SND_SOC_MAX98373_SDW
+	imply SND_SOC_MAX98390
 	imply SND_SOC_MAX9850
 	imply SND_SOC_MAX9860
 	imply SND_SOC_MAX9759
@@ -168,7 +169,7 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_RT5668
 	imply SND_SOC_RT5670
 	imply SND_SOC_RT5677
-	imply SND_SOC_RT5682
+	imply SND_SOC_RT5682_I2C
 	imply SND_SOC_RT5682_SDW
 	imply SND_SOC_RT700_SDW
 	imply SND_SOC_RT711_SDW
@@ -682,6 +683,7 @@ config SND_SOC_CX2072X
 
 config SND_SOC_JZ4740_CODEC
 	depends on MIPS || COMPILE_TEST
+	depends on OF
 	select REGMAP_MMIO
 	tristate "Ingenic JZ4740 internal CODEC"
 	help
@@ -693,6 +695,7 @@ config SND_SOC_JZ4740_CODEC
 
 config SND_SOC_JZ4725B_CODEC
 	depends on MIPS || COMPILE_TEST
+	depends on OF
 	select REGMAP
 	tristate "Ingenic JZ4725B internal CODEC"
 	help
@@ -704,6 +707,7 @@ config SND_SOC_JZ4725B_CODEC
 
 config SND_SOC_JZ4770_CODEC
 	depends on MIPS || COMPILE_TEST
+	depends on OF
 	select REGMAP
 	tristate "Ingenic JZ4770 internal CODEC"
 	help
@@ -880,6 +884,10 @@ config SND_SOC_MAX98373_SDW
 	  the PCM interface for audio data and a standard I2C
 	  interface for control data. Select this if MAX98373 is
 	  connected via soundwire.
+
+config SND_SOC_MAX98390
+	tristate "Maxim Integrated MAX98390 Speaker Amplifier"
+	depends on I2C
 
 config SND_SOC_MAX9850
 	tristate
@@ -1149,14 +1157,15 @@ config SND_SOC_RT5677_SPI
 
 config SND_SOC_RT5682
 	tristate
-	depends on I2C || SOUNDWIRE
-	depends on SOUNDWIRE || !SOUNDWIRE
-	depends on I2C || !I2C
+
+config SND_SOC_RT5682_I2C
+	tristate
+	depends on I2C
+	select SND_SOC_RT5682
 
 config SND_SOC_RT5682_SDW
 	tristate "Realtek RT5682 Codec - SDW"
 	depends on SOUNDWIRE
-	depends on I2C || !I2C
 	select SND_SOC_RT5682
 	select REGMAP_SOUNDWIRE
 
