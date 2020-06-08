@@ -561,8 +561,7 @@ int snd_soc_suspend(struct device *dev)
 		snd_pcm_suspend_all(rtd->pcm);
 	}
 
-	if (card->suspend_pre)
-		card->suspend_pre(card);
+	snd_soc_card_suspend_pre(card);
 
 	/* close any waiting streams */
 	snd_soc_flush_all_delayed_work(card);
@@ -632,8 +631,7 @@ int snd_soc_suspend(struct device *dev)
 		}
 	}
 
-	if (card->suspend_post)
-		card->suspend_post(card);
+	snd_soc_card_suspend_post(card);
 
 	return 0;
 }
@@ -662,8 +660,7 @@ static void soc_resume_deferred(struct work_struct *work)
 	/* Bring us up into D2 so that DAPM starts enabling things */
 	snd_power_change_state(card->snd_card, SNDRV_CTL_POWER_D2);
 
-	if (card->resume_pre)
-		card->resume_pre(card);
+	snd_soc_card_resume_pre(card);
 
 	for_each_card_components(card, component) {
 		if (snd_soc_component_is_suspended(component))
@@ -695,8 +692,7 @@ static void soc_resume_deferred(struct work_struct *work)
 		}
 	}
 
-	if (card->resume_post)
-		card->resume_post(card);
+	snd_soc_card_resume_post(card);
 
 	dev_dbg(card->dev, "ASoC: resume work completed\n");
 
@@ -951,8 +947,7 @@ void snd_soc_remove_pcm_runtime(struct snd_soc_card *card,
 	/*
 	 * Notify the machine driver for extra destruction
 	 */
-	if (card->remove_dai_link)
-		card->remove_dai_link(card, rtd->dai_link);
+	snd_soc_card_remove_dai_link(card, rtd->dai_link);
 
 	soc_free_pcm_runtime(rtd);
 }
@@ -982,8 +977,9 @@ int snd_soc_add_pcm_runtime(struct snd_soc_card *card,
 	/*
 	 * Notify the machine driver for extra initialization
 	 */
-	if (card->add_dai_link)
-		card->add_dai_link(card, dai_link);
+	ret = snd_soc_card_add_dai_link(card, dai_link);
+	if (ret < 0)
+		return ret;
 
 	if (dai_link->ignore)
 		return 0;
@@ -1743,8 +1739,7 @@ static void __soc_setup_card_name(char *name, int len,
 	}
 }
 
-static void soc_cleanup_card_resources(struct snd_soc_card *card,
-				       int card_probed)
+static void soc_cleanup_card_resources(struct snd_soc_card *card)
 {
 	struct snd_soc_pcm_runtime *rtd, *n;
 
@@ -1768,8 +1763,7 @@ static void soc_cleanup_card_resources(struct snd_soc_card *card,
 	soc_cleanup_card_debugfs(card);
 
 	/* remove the card */
-	if (card_probed && card->remove)
-		card->remove(card);
+	snd_soc_card_remove(card);
 
 	if (card->snd_card) {
 		snd_card_free(card->snd_card);
@@ -1780,12 +1774,10 @@ static void soc_cleanup_card_resources(struct snd_soc_card *card,
 static void snd_soc_unbind_card(struct snd_soc_card *card, bool unregister)
 {
 	if (card->instantiated) {
-		int card_probed = 1;
-
 		card->instantiated = false;
 		snd_soc_flush_all_delayed_work(card);
 
-		soc_cleanup_card_resources(card, card_probed);
+		soc_cleanup_card_resources(card);
 		if (!unregister)
 			list_add(&card->list, &unbind_card_list);
 	} else {
@@ -1799,7 +1791,7 @@ static int snd_soc_bind_card(struct snd_soc_card *card)
 	struct snd_soc_pcm_runtime *rtd;
 	struct snd_soc_component *component;
 	struct snd_soc_dai_link *dai_link;
-	int ret, i, card_probed = 0;
+	int ret, i;
 
 	mutex_lock(&client_mutex);
 	mutex_lock_nested(&card->mutex, SND_SOC_CARD_CLASS_INIT);
@@ -1847,12 +1839,9 @@ static int snd_soc_bind_card(struct snd_soc_card *card)
 		goto probe_end;
 
 	/* initialise the sound card only once */
-	if (card->probe) {
-		ret = card->probe(card);
-		if (ret < 0)
-			goto probe_end;
-		card_probed = 1;
-	}
+	ret = snd_soc_card_probe(card);
+	if (ret < 0)
+		goto probe_end;
 
 	/* probe all components used by DAI links on this card */
 	ret = soc_probe_link_components(card);
@@ -1935,15 +1924,9 @@ static int snd_soc_bind_card(struct snd_soc_card *card)
 		}
 	}
 
-	if (card->late_probe) {
-		ret = card->late_probe(card);
-		if (ret < 0) {
-			dev_err(card->dev, "ASoC: %s late_probe() failed: %d\n",
-				card->name, ret);
-			goto probe_end;
-		}
-	}
-	card_probed = 1;
+	ret = snd_soc_card_late_probe(card);
+	if (ret < 0)
+		goto probe_end;
 
 	snd_soc_dapm_new_widgets(card);
 
@@ -1965,7 +1948,7 @@ static int snd_soc_bind_card(struct snd_soc_card *card)
 
 probe_end:
 	if (ret < 0)
-		soc_cleanup_card_resources(card, card_probed);
+		soc_cleanup_card_resources(card);
 
 	mutex_unlock(&card->mutex);
 	mutex_unlock(&client_mutex);
@@ -2111,22 +2094,6 @@ static int snd_soc_add_controls(struct snd_card *card, struct device *dev,
 
 	return 0;
 }
-
-struct snd_kcontrol *snd_soc_card_get_kcontrol(struct snd_soc_card *soc_card,
-					       const char *name)
-{
-	struct snd_card *card = soc_card->snd_card;
-	struct snd_kcontrol *kctl;
-
-	if (unlikely(!name))
-		return NULL;
-
-	list_for_each_entry(kctl, &card->controls, list)
-		if (!strncmp(kctl->id.name, name, sizeof(kctl->id.name)))
-			return kctl;
-	return NULL;
-}
-EXPORT_SYMBOL_GPL(snd_soc_card_get_kcontrol);
 
 /**
  * snd_soc_add_component_controls - Add an array of controls to a component.
