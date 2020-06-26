@@ -23,7 +23,7 @@
 #include "hda.h"
 #include "hda-ipc.h"
 
-static bool hda_enable_trace_D0I3_S0;
+static bool hda_enable_trace_D0I3_S0 = true;
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_DEBUG)
 module_param_named(enable_trace_D0I3_S0, hda_enable_trace_D0I3_S0, bool, 0444);
 MODULE_PARM_DESC(enable_trace_D0I3_S0,
@@ -408,11 +408,13 @@ static int hda_dsp_set_D0_state(struct snd_sof_dev *sdev,
 		value = SOF_HDA_VS_D0I3C_I3;
 
 		/*
-		 * Trace DMA is disabled by default when the DSP enters D0I3.
-		 * But it can be kept enabled when the DSP enters D0I3 while the
-		 * system is in S0 for debug.
+		 * Trace DMA need to be disabled when the DSP enters
+		 * D0I3 for S0Ix suspend, but it can be kept enabled
+		 * when the DSP enters D0I3 while the system is in S0
+		 * for debug purpose.
 		 */
-		if (hda_enable_trace_D0I3_S0 &&
+		if (!sdev->dtrace_is_supported ||
+		    !hda_enable_trace_D0I3_S0 ||
 		    sdev->system_suspend_target != SOF_SUSPEND_NONE)
 			flags = HDA_PM_NO_DMA_TRACE;
 	} else {
