@@ -859,7 +859,7 @@ static int rt5682_button_detect(struct snd_soc_component *component)
 {
 	int btn_type, val;
 
-	val = snd_soc_component_read32(component, RT5682_4BTN_IL_CMD_1);
+	val = snd_soc_component_read(component, RT5682_4BTN_IL_CMD_1);
 	btn_type = val & 0xfff0;
 	snd_soc_component_write(component, RT5682_4BTN_IL_CMD_1, val);
 	dev_dbg(component->dev, "%s btn_type=%x\n", __func__, btn_type);
@@ -932,16 +932,18 @@ int rt5682_headset_detect(struct snd_soc_component *component, int jack_insert)
 			RT5682_PWR_ANLG_1, RT5682_PWR_FV2, RT5682_PWR_FV2);
 		snd_soc_component_update_bits(component, RT5682_PWR_ANLG_3,
 			RT5682_PWR_CBJ, RT5682_PWR_CBJ);
-
+		snd_soc_component_update_bits(component,
+			RT5682_HP_CHARGE_PUMP_1,
+			RT5682_OSW_L_MASK | RT5682_OSW_R_MASK, 0);
 		snd_soc_component_update_bits(component, RT5682_CBJ_CTRL_1,
 			RT5682_TRIG_JD_MASK, RT5682_TRIG_JD_HIGH);
 
 		count = 0;
-		val = snd_soc_component_read32(component, RT5682_CBJ_CTRL_2)
+		val = snd_soc_component_read(component, RT5682_CBJ_CTRL_2)
 			& RT5682_JACK_TYPE_MASK;
 		while (val == 0 && count < 50) {
 			usleep_range(10000, 15000);
-			val = snd_soc_component_read32(component,
+			val = snd_soc_component_read(component,
 				RT5682_CBJ_CTRL_2) & RT5682_JACK_TYPE_MASK;
 			count++;
 		}
@@ -956,6 +958,11 @@ int rt5682_headset_detect(struct snd_soc_component *component, int jack_insert)
 			rt5682->jack_type = SND_JACK_HEADPHONE;
 			break;
 		}
+
+		snd_soc_component_update_bits(component,
+			RT5682_HP_CHARGE_PUMP_1,
+			RT5682_OSW_L_MASK | RT5682_OSW_R_MASK,
+			RT5682_OSW_L_EN | RT5682_OSW_R_EN);
 	} else {
 		rt5682_enable_push_button_irq(component, false);
 		snd_soc_component_update_bits(component, RT5682_CBJ_CTRL_1,
@@ -1067,7 +1074,7 @@ void rt5682_jack_detect_handler(struct work_struct *work)
 
 	mutex_lock(&rt5682->calibrate_mutex);
 
-	val = snd_soc_component_read32(rt5682->component, RT5682_AJD1_CTRL)
+	val = snd_soc_component_read(rt5682->component, RT5682_AJD1_CTRL)
 		& RT5682_JDH_RS_MASK;
 	if (!val) {
 		/* jack in */
@@ -1232,7 +1239,7 @@ static int set_filter_clk(struct snd_soc_dapm_widget *w,
 	if (rt5682->is_sdw)
 		return 0;
 
-	val = snd_soc_component_read32(component, RT5682_GPIO_CTRL_1) &
+	val = snd_soc_component_read(component, RT5682_GPIO_CTRL_1) &
 		RT5682_GP4_PIN_MASK;
 	if (w->shift == RT5682_PWR_ADC_S1F_BIT &&
 		val == RT5682_GP4_PIN_ADCDAT2)
@@ -1270,7 +1277,7 @@ static int is_sys_clk_from_pll1(struct snd_soc_dapm_widget *w,
 	struct snd_soc_component *component =
 		snd_soc_dapm_to_component(w->dapm);
 
-	val = snd_soc_component_read32(component, RT5682_GLB_CLK);
+	val = snd_soc_component_read(component, RT5682_GLB_CLK);
 	val &= RT5682_SCLK_SRC_MASK;
 	if (val == RT5682_SCLK_SRC_PLL1)
 		return 1;
@@ -1285,7 +1292,7 @@ static int is_sys_clk_from_pll2(struct snd_soc_dapm_widget *w,
 	struct snd_soc_component *component =
 		snd_soc_dapm_to_component(w->dapm);
 
-	val = snd_soc_component_read32(component, RT5682_GLB_CLK);
+	val = snd_soc_component_read(component, RT5682_GLB_CLK);
 	val &= RT5682_SCLK_SRC_MASK;
 	if (val == RT5682_SCLK_SRC_PLL2)
 		return 1;
@@ -1313,7 +1320,7 @@ static int is_using_asrc(struct snd_soc_dapm_widget *w,
 		return 0;
 	}
 
-	val = (snd_soc_component_read32(component, reg) >> shift) & 0xf;
+	val = (snd_soc_component_read(component, reg) >> shift) & 0xf;
 	switch (val) {
 	case RT5682_CLK_SEL_I2S1_ASRC:
 	case RT5682_CLK_SEL_I2S2_ASRC:
@@ -2640,8 +2647,7 @@ static unsigned long rt5682_bclk_recalc_rate(struct clk_hw *hw,
 	struct snd_soc_component *component = rt5682->component;
 	unsigned int bclks_per_wclk;
 
-	snd_soc_component_read(component, RT5682_TDM_TCON_CTRL,
-		&bclks_per_wclk);
+	bclks_per_wclk = snd_soc_component_read(component, RT5682_TDM_TCON_CTRL);
 
 	switch (bclks_per_wclk & RT5682_TDM_BCLK_MS1_MASK) {
 	case RT5682_TDM_BCLK_MS1_256:
