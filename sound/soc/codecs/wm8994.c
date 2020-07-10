@@ -853,7 +853,7 @@ static void vmid_reference(struct snd_soc_component *component)
 		switch (wm8994->vmid_mode) {
 		default:
 			WARN_ON(NULL == "Invalid VMID mode");
-			/* fall through */
+			fallthrough;
 		case WM8994_VMID_NORMAL:
 			/* Startup bias, VMID ramp & buffer */
 			snd_soc_component_update_bits(component, WM8994_ANTIPOP_2,
@@ -2776,7 +2776,7 @@ static int wm8994_set_dai_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 	case SND_SOC_DAIFMT_DSP_B:
 		aif1 |= WM8994_AIF1_LRCLK_INV;
 		lrclk |= WM8958_AIF1_LRCLK_INV;
-		/* fall through */
+		fallthrough;
 	case SND_SOC_DAIFMT_DSP_A:
 		aif1 |= 0x18;
 		break;
@@ -3877,6 +3877,10 @@ static void wm1811_jackdet_bootstrap(struct work_struct *work)
  *
  * @component:   WM8958 component
  * @jack:    jack to report detection events on
+ * @det_cb: detection callback
+ * @det_cb_data: data for detection callback
+ * @id_cb: mic id callback
+ * @id_cb_data: data for mic id callback
  *
  * Enable microphone detection functionality for the WM8958.  By
  * default simple detection which supports the detection of up to 6
