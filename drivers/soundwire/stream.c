@@ -1867,7 +1867,7 @@ static int set_stream(struct snd_pcm_substream *substream,
 /**
  * sdw_startup_stream() - Startup SoundWire stream
  *
- * @stream: Soundwire stream
+ * @sdw_substream: Soundwire stream
  *
  * Documentation/driver-api/soundwire/stream.rst explains this API in detail
  */
@@ -1911,7 +1911,7 @@ EXPORT_SYMBOL(sdw_startup_stream);
 /**
  * sdw_shutdown_stream() - Shutdown SoundWire stream
  *
- * @stream: Soundwire stream
+ * @sdw_substream: Soundwire stream
  *
  * Documentation/driver-api/soundwire/stream.rst explains this API in detail
  */
