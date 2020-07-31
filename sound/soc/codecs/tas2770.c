@@ -3,7 +3,7 @@
 // ALSA SoC Texas Instruments TAS2770 20-W Digital Input Mono Class-D
 // Audio Amplifier with Speaker I/V Sense
 //
-// Copyright (C) 2016-2017 Texas Instruments Incorporated - http://www.ti.com/
+// Copyright (C) 2016-2017 Texas Instruments Incorporated - https://www.ti.com/
 //	Author: Tracy Yi <tracy-yi@ti.com>
 //	Frank Shi <shifu0704@thundersoft.com>
 
@@ -759,8 +759,7 @@ static int tas2770_i2c_probe(struct i2c_client *client,
 		}
 	}
 
-	tas2770->reset_gpio = devm_gpiod_get_optional(tas2770->dev,
-							  "reset-gpio",
+	tas2770->reset_gpio = devm_gpiod_get_optional(tas2770->dev, "reset",
 						      GPIOD_OUT_HIGH);
 	if (IS_ERR(tas2770->reset_gpio)) {
 		if (PTR_ERR(tas2770->reset_gpio) == -EPROBE_DEFER) {

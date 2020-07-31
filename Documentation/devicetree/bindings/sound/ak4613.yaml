@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
 %YAML 1.2
 ---
 $id: http://devicetree.org/schemas/sound/ak4613.yaml#
@@ -22,29 +22,13 @@ properties:
   "#sound-dai-cells":
     const: 0
 
-  # for OF-graph
-  port:
-    $ref: "audio-graph-card.yaml#definitions/port"
-  ports:
-    $ref: "audio-graph-card.yaml#definitions/ports"
-
-# use patternProperties to avoid naming "xxx,yyy" issue
 patternProperties:
-  "^asahi-kasei,in1-single-end$":
+  "^asahi-kasei,in[1-2]-single-end$":
+    description: Input Pin 1 - 2.
     $ref: /schemas/types.yaml#/definitions/flag
-  "^asahi-kasei,in2-single-end$":
-    $ref: /schemas/types.yaml#/definitions/flag
-  "^asahi-kasei,out1-single-end$":
-    $ref: /schemas/types.yaml#/definitions/flag
-  "^asahi-kasei,out2-single-end$":
-    $ref: /schemas/types.yaml#/definitions/flag
-  "^asahi-kasei,out3-single-end$":
-    $ref: /schemas/types.yaml#/definitions/flag
-  "^asahi-kasei,out4-single-end$":
-    $ref: /schemas/types.yaml#/definitions/flag
-  "^asahi-kasei,out5-single-end$":
-    $ref: /schemas/types.yaml#/definitions/flag
-  "^asahi-kasei,out6-single-end$":
+
+  "^asahi-kasei,out[1-6]-single-end$":
+    description: Output Pin 1 - 6.
     $ref: /schemas/types.yaml#/definitions/flag
 
 required:
