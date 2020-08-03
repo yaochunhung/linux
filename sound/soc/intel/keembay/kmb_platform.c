@@ -28,8 +28,10 @@ static const struct snd_pcm_hardware kmb_pcm_hardware = {
 		SNDRV_PCM_INFO_MMAP_VALID |
 		SNDRV_PCM_INFO_BATCH |
 		SNDRV_PCM_INFO_BLOCK_TRANSFER,
-	.rates = SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_48000,
-	.rate_min = 16000,
+	.rates = SNDRV_PCM_RATE_8000 |
+		 SNDRV_PCM_RATE_16000 |
+		 SNDRV_PCM_RATE_48000,
+	.rate_min = 8000,
 	.rate_max = 48000,
 	.formats = SNDRV_PCM_FMTBIT_S16_LE |
 		   SNDRV_PCM_FMTBIT_S24_LE |
@@ -107,14 +109,14 @@ static unsigned int kmb_pcm_rx_fn(struct kmb_i2s_info *kmb_i2s,
 static inline void kmb_i2s_disable_channels(struct kmb_i2s_info *kmb_i2s,
 					    u32 stream)
 {
-	struct i2s_clk_config_data *config = &kmb_i2s->config;
 	u32 i;
 
+	/* Disable all channels regardless of configuration*/
 	if (stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		for (i = 0; i < config->chan_nr / 2; i++)
+		for (i = 0; i < MAX_ISR; i++)
 			writel(0, kmb_i2s->i2s_base + TER(i));
 	} else {
-		for (i = 0; i < config->chan_nr / 2; i++)
+		for (i = 0; i < MAX_ISR; i++)
 			writel(0, kmb_i2s->i2s_base + RER(i));
 	}
 }
@@ -191,7 +193,7 @@ static int kmb_pcm_open(struct snd_soc_component *component,
 			struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
 	struct kmb_i2s_info *kmb_i2s;
 
 	kmb_i2s = snd_soc_dai_get_drvdata(asoc_rtd_to_cpu(rtd, 0));
@@ -533,8 +535,10 @@ static struct snd_soc_dai_driver intel_kmb_platform_dai[] = {
 		.playback = {
 			.channels_min = 2,
 			.channels_max = 2,
-			.rates = SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_48000,
-			.rate_min = 16000,
+			.rates = SNDRV_PCM_RATE_8000 |
+				 SNDRV_PCM_RATE_16000 |
+				 SNDRV_PCM_RATE_48000,
+			.rate_min = 8000,
 			.rate_max = 48000,
 			.formats = (SNDRV_PCM_FMTBIT_S32_LE |
 				    SNDRV_PCM_FMTBIT_S24_LE |
@@ -543,8 +547,14 @@ static struct snd_soc_dai_driver intel_kmb_platform_dai[] = {
 		.capture = {
 			.channels_min = 2,
 			.channels_max = 2,
-			.rates = SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_48000,
-			.rate_min = 16000,
+			/*
+			 * .channels_max will be overwritten
+			 * if provided by Device Tree
+			 */
+			.rates = SNDRV_PCM_RATE_8000 |
+				 SNDRV_PCM_RATE_16000 |
+				 SNDRV_PCM_RATE_48000,
+			.rate_min = 8000,
 			.rate_max = 48000,
 			.formats = (SNDRV_PCM_FMTBIT_S32_LE |
 				    SNDRV_PCM_FMTBIT_S24_LE |
@@ -626,6 +636,10 @@ static int kmb_plat_dai_probe(struct platform_device *pdev)
 		dev_err(dev, "not able to register dai\n");
 		return ret;
 	}
+
+	/* To ensure none of the channels are enabled at boot up */
+	kmb_i2s_disable_channels(kmb_i2s, SNDRV_PCM_STREAM_PLAYBACK);
+	kmb_i2s_disable_channels(kmb_i2s, SNDRV_PCM_STREAM_CAPTURE);
 
 	dev_set_drvdata(dev, kmb_i2s);
 
