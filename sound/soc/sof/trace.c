@@ -44,9 +44,8 @@ static int trace_filter_parse_entry(struct snd_sof_dev *sdev, const char *line,
 	int ret;
 
 	/* ignore empty content */
-	ret = sscanf(line, " %n", &read);
-	if (!ret && read == len)
-		return len;
+	if (!line[0])
+		return 0;
 
 	ret = sscanf(line, " %d %x %d %d %n", &log_level, &uuid_id, &pipe_id, &comp_id, &read);
 	if (ret != TRACE_FILTER_ELEMENTS_PER_ENTRY || read != len) {
