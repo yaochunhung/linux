@@ -331,7 +331,7 @@ static int sst_media_open(struct snd_pcm_substream *substream,
 
 	ret_val = power_up_sst(stream);
 	if (ret_val < 0)
-		return ret_val;
+		goto out_power_up;
 
 	/* Make sure, that the period size is always even */
 	snd_pcm_hw_constraint_step(substream->runtime, 0,
@@ -340,8 +340,9 @@ static int sst_media_open(struct snd_pcm_substream *substream,
 	return snd_pcm_hw_constraint_integer(runtime,
 			 SNDRV_PCM_HW_PARAM_PERIODS);
 out_ops:
-	kfree(stream);
 	mutex_unlock(&sst_lock);
+out_power_up:
+	kfree(stream);
 	return ret_val;
 }
 
@@ -365,7 +366,7 @@ static int sst_media_prepare(struct snd_pcm_substream *substream,
 		struct snd_soc_dai *dai)
 {
 	struct sst_runtime_stream *stream;
-	int ret_val = 0, str_id;
+	int ret_val, str_id;
 
 	stream = substream->runtime->private_data;
 	str_id = stream->stream_info.str_id;
@@ -384,7 +385,7 @@ static int sst_media_prepare(struct snd_pcm_substream *substream,
 	if (ret_val)
 		return ret_val;
 	substream->runtime->hw.info = SNDRV_PCM_INFO_BLOCK_TRANSFER;
-	return ret_val;
+	return 0;
 }
 
 static int sst_enable_ssp(struct snd_pcm_substream *substream,
