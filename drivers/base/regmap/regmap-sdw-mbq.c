@@ -3,7 +3,6 @@
 
 #include <linux/device.h>
 #include <linux/errno.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/regmap.h>
 #include <linux/soundwire/sdw.h>
@@ -54,14 +53,14 @@ static int regmap_sdw_mbq_config_check(const struct regmap_config *config)
 {
 	/* MBQ-based controls are only 16-bits for now */
 	if (config->val_bits != 16)
-		return -EOPNOTSUPP;
+		return -ENOTSUPP;
 
 	/* Registers are 32 bits wide */
 	if (config->reg_bits != 32)
-		return -EOPNOTSUPP;
+		return -ENOTSUPP;
 
 	if (config->pad_bits != 0)
-		return -EOPNOTSUPP;
+		return -ENOTSUPP;
 
 	return 0;
 }
