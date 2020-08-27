@@ -42,14 +42,14 @@ static int regmap_sdw_config_check(const struct regmap_config *config)
 {
 	/* All register are 8-bits wide as per MIPI Soundwire 1.0 Spec */
 	if (config->val_bits != 8)
-		return -EOPNOTSUPP;
+		return -ENOTSUPP;
 
 	/* Registers are 32 bits wide */
 	if (config->reg_bits != 32)
-		return -EOPNOTSUPP;
+		return -ENOTSUPP;
 
 	if (config->pad_bits != 0)
-		return -EOPNOTSUPP;
+		return -ENOTSUPP;
 
 	return 0;
 }
