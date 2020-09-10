@@ -121,9 +121,6 @@
 #define SOF_IPC_TRACE_FILTER_UPDATE		SOF_CMD_TYPE(0x004) /**< ABI3.17 */
 
 /* debug */
-#define SOF_IPC_DEBUG_MEM_USAGE			SOF_CMD_TYPE(0x001)
-
-/* test */
 #define SOF_IPC_TEST_IPC_FLOOD			SOF_CMD_TYPE(0x001)
 
 /* Get message component id */
