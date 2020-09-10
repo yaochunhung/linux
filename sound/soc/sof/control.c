@@ -356,7 +356,6 @@ int snd_sof_bytes_ext_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-
 int snd_sof_bytes_ext_volatile_get(struct snd_kcontrol *kcontrol, unsigned int __user *binary_data,
 				   unsigned int size)
 {
