@@ -688,7 +688,7 @@ static int aic32x4_set_processing_blocks(struct snd_soc_component *component,
 }
 
 static int aic32x4_setup_clocks(struct snd_soc_component *component,
-				unsigned int sample_rate, unsigned int channel,
+				unsigned int sample_rate, unsigned int channels,
 				unsigned int bit_depth)
 {
 	u8 aosr;
@@ -777,8 +777,9 @@ static int aic32x4_setup_clocks(struct snd_soc_component *component,
 							dosr);
 
 						clk_set_rate(clocks[5].clk,
-							sample_rate * channel *
+							sample_rate * channels *
 							bit_depth);
+
 						return 0;
 					}
 				}
@@ -981,8 +982,6 @@ static int aic32x4_component_probe(struct snd_soc_component *component)
 	if (ret)
 		return ret;
 
-	snd_soc_component_write(component, AIC32X4_RESET, 0x01);
-
 	if (aic32x4->setup)
 		aic32x4_setup_gpios(component);
 
@@ -1031,6 +1030,14 @@ static int aic32x4_component_probe(struct snd_soc_component *component)
 	snd_soc_component_write(component, AIC32X4_ADCSETUP, tmp_reg |
 				AIC32X4_LADC_EN | AIC32X4_RADC_EN);
 	snd_soc_component_write(component, AIC32X4_ADCSETUP, tmp_reg);
+
+	/*
+	 * Enable the fast charging feature and ensure the needed 40ms ellapsed
+	 * before using the analog circuits.
+	 */
+	snd_soc_component_write(component, AIC32X4_REFPOWERUP,
+				AIC32X4_REFPOWERUP_40MS);
+	msleep(40);
 
 	return 0;
 }
@@ -1226,25 +1233,33 @@ int aic32x4_probe(struct device *dev, struct regmap *regmap)
 		return ret;
 	}
 
-	ret = devm_snd_soc_register_component(dev,
-			&soc_component_dev_aic32x4, &aic32x4_dai, 1);
-	if (ret) {
-		dev_err(dev, "Failed to register component\n");
-		aic32x4_disable_regulators(aic32x4);
-		return ret;
-	}
-
 	if (gpio_is_valid(aic32x4->rstn_gpio)) {
 		ndelay(10);
 		gpio_set_value_cansleep(aic32x4->rstn_gpio, 1);
 		mdelay(1);
 	}
 
+	ret = regmap_write(regmap, AIC32X4_RESET, 0x01);
+	if (ret)
+		goto err_disable_regulators;
+
+	ret = devm_snd_soc_register_component(dev,
+			&soc_component_dev_aic32x4, &aic32x4_dai, 1);
+	if (ret) {
+		dev_err(dev, "Failed to register component\n");
+		goto err_disable_regulators;
+	}
+
 	ret = aic32x4_register_clocks(dev, aic32x4->mclk_name);
 	if (ret)
-		return ret;
+		goto err_disable_regulators;
 
 	return 0;
+
+err_disable_regulators:
+	aic32x4_disable_regulators(aic32x4);
+
+	return ret;
 }
 EXPORT_SYMBOL(aic32x4_probe);
 
