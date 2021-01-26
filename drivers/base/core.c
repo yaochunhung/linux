@@ -4438,7 +4438,7 @@ void set_primary_fwnode(struct device *dev, struct fwnode_handle *fwnode)
 	} else {
 		if (fwnode_is_primary(fn)) {
 			dev->fwnode = fn->secondary;
-			/* Set fn->secondary = NULL to keep fn as a primary fwnode */
+			/* Set fn->secondary = NULL, so fn remains the primary fwnode */
 			if (!(parent && fn == parent->fwnode))
 				fn->secondary = NULL;
 		} else {
