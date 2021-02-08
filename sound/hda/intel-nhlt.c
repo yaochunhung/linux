@@ -89,6 +89,9 @@ int intel_nhlt_get_dmic_geo(struct device *dev, struct nhlt_acpi_table *nhlt)
 					 __func__, cfg->array_type);
 			}
 
+			if (dmic_geo > 0) {
+				dev_dbg(dev, "%s: Array with %d dmics\n", __func__, dmic_geo);
+			}
 			if (max_ch > dmic_geo) {
 				dev_dbg(dev, "%s: max channels %d exceed dmic number %d\n",
 					__func__, max_ch, dmic_geo);
