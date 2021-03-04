@@ -55,7 +55,11 @@
 #include <asm/cio.h>
 #include "entry.h"
 
-union tod_clock tod_clock_base __section(".data");
+unsigned char tod_clock_base[16] __aligned(8) = {
+	/* Force to data section. */
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
+};
 EXPORT_SYMBOL_GPL(tod_clock_base);
 
 u64 clock_comparator_max = -1ULL;
@@ -82,7 +86,7 @@ void __init time_early_init(void)
 	struct ptff_qui qui;
 
 	/* Initialize TOD steering parameters */
-	tod_steering_end = tod_clock_base.tod;
+	tod_steering_end = *(unsigned long long *) &tod_clock_base[1];
 	vdso_data->arch_data.tod_steering_end = tod_steering_end;
 
 	if (!test_facility(28))
@@ -109,13 +113,18 @@ unsigned long long notrace sched_clock(void)
 }
 NOKPROBE_SYMBOL(sched_clock);
 
-static void ext_to_timespec64(union tod_clock *clk, struct timespec64 *xt)
+static void ext_to_timespec64(unsigned char *clk, struct timespec64 *xt)
 {
-	unsigned long rem, sec, nsec;
+	unsigned long long high, low, rem, sec, nsec;
 
-	sec = clk->us;
+	/* Split extendnd TOD clock to micro-seconds and sub-micro-seconds */
+	high = (*(unsigned long long *) clk) >> 4;
+	low = (*(unsigned long long *)&clk[7]) << 4;
+	/* Calculate seconds and nano-seconds */
+	sec = high;
 	rem = do_div(sec, 1000000);
-	nsec = ((clk->sus + (rem << 12)) * 125) >> 9;
+	nsec = (((low >> 32) + (rem << 32)) * 1000) >> 32;
+
 	xt->tv_sec = sec;
 	xt->tv_nsec = nsec;
 }
@@ -195,26 +204,30 @@ static void stp_reset(void);
 
 void read_persistent_clock64(struct timespec64 *ts)
 {
-	union tod_clock clk;
-	u64 delta;
+	unsigned char clk[STORE_CLOCK_EXT_SIZE];
+	__u64 delta;
 
 	delta = initial_leap_seconds + TOD_UNIX_EPOCH;
-	store_tod_clock_ext(&clk);
-	clk.eitod -= delta;
-	ext_to_timespec64(&clk, ts);
+	get_tod_clock_ext(clk);
+	*(__u64 *) &clk[1] -= delta;
+	if (*(__u64 *) &clk[1] > delta)
+		clk[0]--;
+	ext_to_timespec64(clk, ts);
 }
 
 void __init read_persistent_wall_and_boot_offset(struct timespec64 *wall_time,
 						 struct timespec64 *boot_offset)
 {
+	unsigned char clk[STORE_CLOCK_EXT_SIZE];
 	struct timespec64 boot_time;
-	union tod_clock clk;
-	u64 delta;
+	__u64 delta;
 
 	delta = initial_leap_seconds + TOD_UNIX_EPOCH;
-	clk = tod_clock_base;
-	clk.eitod -= delta;
-	ext_to_timespec64(&clk, &boot_time);
+	memcpy(clk, tod_clock_base, STORE_CLOCK_EXT_SIZE);
+	*(__u64 *)&clk[1] -= delta;
+	if (*(__u64 *)&clk[1] > delta)
+		clk[0]--;
+	ext_to_timespec64(clk, &boot_time);
 
 	read_persistent_clock64(wall_time);
 	*boot_offset = timespec64_sub(*wall_time, boot_time);
@@ -368,7 +381,10 @@ static void clock_sync_global(unsigned long long delta)
 	struct ptff_qto qto;
 
 	/* Fixup the monotonic sched clock. */
-	tod_clock_base.eitod += delta;
+	*(unsigned long long *) &tod_clock_base[1] += delta;
+	if (*(unsigned long long *) &tod_clock_base[1] < delta)
+		/* Epoch overflow */
+		tod_clock_base[0]++;
 	/* Adjust TOD steering parameters. */
 	now = get_tod_clock();
 	adj = tod_steering_end - now;

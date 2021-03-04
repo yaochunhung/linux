@@ -10,8 +10,6 @@
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-#define pr_fmt(fmt) "ACPI: PM: " fmt
-
 #include <linux/acpi.h>
 #include <linux/export.h>
 #include <linux/mutex.h>
@@ -21,6 +19,9 @@
 #include <linux/suspend.h>
 
 #include "internal.h"
+
+#define _COMPONENT	ACPI_POWER_COMPONENT
+ACPI_MODULE_NAME("device_pm");
 
 /**
  * acpi_power_state_string - String representation of ACPI device power state.
@@ -129,8 +130,8 @@ int acpi_device_get_power(struct acpi_device *device, int *state)
 	*state = result;
 
  out:
-	dev_dbg(&device->dev, "Device power state is %s\n",
-		acpi_power_state_string(*state));
+	ACPI_DEBUG_PRINT((ACPI_DB_INFO, "Device [%s] power state is %s\n",
+			  device->pnp.bus_id, acpi_power_state_string(*state)));
 
 	return 0;
 }
@@ -173,8 +174,9 @@ int acpi_device_set_power(struct acpi_device *device, int state)
 
 	/* There is a special case for D0 addressed below. */
 	if (state > ACPI_STATE_D0 && state == device->power.state) {
-		dev_dbg(&device->dev, "Device already in %s\n",
-			acpi_power_state_string(state));
+		ACPI_DEBUG_PRINT((ACPI_DB_INFO, "Device [%s] already in %s\n",
+				  device->pnp.bus_id,
+				  acpi_power_state_string(state)));
 		return 0;
 	}
 
@@ -274,8 +276,10 @@ int acpi_device_set_power(struct acpi_device *device, int state)
 			 acpi_power_state_string(target_state));
 	} else {
 		device->power.state = target_state;
-		dev_dbg(&device->dev, "Power state changed to %s\n",
-			acpi_power_state_string(target_state));
+		ACPI_DEBUG_PRINT((ACPI_DB_INFO,
+				  "Device [%s] transitioned to %s\n",
+				  device->pnp.bus_id,
+				  acpi_power_state_string(target_state)));
 	}
 
 	return result;

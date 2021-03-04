@@ -226,7 +226,7 @@ struct sock_common {
 		struct hlist_nulls_node skc_nulls_node;
 	};
 	unsigned short		skc_tx_queue_mapping;
-#ifdef CONFIG_SOCK_RX_QUEUE_MAPPING
+#ifdef CONFIG_XPS
 	unsigned short		skc_rx_queue_mapping;
 #endif
 	union {
@@ -356,7 +356,7 @@ struct sock {
 #define sk_nulls_node		__sk_common.skc_nulls_node
 #define sk_refcnt		__sk_common.skc_refcnt
 #define sk_tx_queue_mapping	__sk_common.skc_tx_queue_mapping
-#ifdef CONFIG_SOCK_RX_QUEUE_MAPPING
+#ifdef CONFIG_XPS
 #define sk_rx_queue_mapping	__sk_common.skc_rx_queue_mapping
 #endif
 
@@ -1174,8 +1174,6 @@ struct proto {
 
 	int			(*backlog_rcv) (struct sock *sk,
 						struct sk_buff *skb);
-	bool			(*bpf_bypass_getsockopt)(int level,
-							 int optname);
 
 	void		(*release_cb)(struct sock *sk);
 
@@ -1352,18 +1350,14 @@ sk_memory_allocated_sub(struct sock *sk, int amt)
 	atomic_long_sub(amt, sk->sk_prot->memory_allocated);
 }
 
-#define SK_ALLOC_PERCPU_COUNTER_BATCH 16
-
 static inline void sk_sockets_allocated_dec(struct sock *sk)
 {
-	percpu_counter_add_batch(sk->sk_prot->sockets_allocated, -1,
-				 SK_ALLOC_PERCPU_COUNTER_BATCH);
+	percpu_counter_dec(sk->sk_prot->sockets_allocated);
 }
 
 static inline void sk_sockets_allocated_inc(struct sock *sk)
 {
-	percpu_counter_add_batch(sk->sk_prot->sockets_allocated, 1,
-				 SK_ALLOC_PERCPU_COUNTER_BATCH);
+	percpu_counter_inc(sk->sk_prot->sockets_allocated);
 }
 
 static inline u64
@@ -1840,7 +1834,7 @@ static inline int sk_tx_queue_get(const struct sock *sk)
 
 static inline void sk_rx_queue_set(struct sock *sk, const struct sk_buff *skb)
 {
-#ifdef CONFIG_SOCK_RX_QUEUE_MAPPING
+#ifdef CONFIG_XPS
 	if (skb_rx_queue_recorded(skb)) {
 		u16 rx_queue = skb_get_rx_queue(skb);
 
@@ -1854,20 +1848,20 @@ static inline void sk_rx_queue_set(struct sock *sk, const struct sk_buff *skb)
 
 static inline void sk_rx_queue_clear(struct sock *sk)
 {
-#ifdef CONFIG_SOCK_RX_QUEUE_MAPPING
+#ifdef CONFIG_XPS
 	sk->sk_rx_queue_mapping = NO_QUEUE_MAPPING;
 #endif
 }
 
+#ifdef CONFIG_XPS
 static inline int sk_rx_queue_get(const struct sock *sk)
 {
-#ifdef CONFIG_SOCK_RX_QUEUE_MAPPING
 	if (sk && sk->sk_rx_queue_mapping != NO_QUEUE_MAPPING)
 		return sk->sk_rx_queue_mapping;
-#endif
 
 	return -1;
 }
+#endif
 
 static inline void sk_set_socket(struct sock *sk, struct socket *sock)
 {

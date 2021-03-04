@@ -655,6 +655,7 @@ static int camss_of_parse_ports(struct camss *camss)
 
 	for_each_endpoint_of_node(dev->of_node, node) {
 		struct camss_async_subdev *csd;
+		struct v4l2_async_subdev *asd;
 
 		if (!of_device_is_available(node))
 			continue;
@@ -666,14 +667,16 @@ static int camss_of_parse_ports(struct camss *camss)
 			goto err_cleanup;
 		}
 
-		csd = v4l2_async_notifier_add_fwnode_subdev(
+		asd = v4l2_async_notifier_add_fwnode_subdev(
 			&camss->notifier, of_fwnode_handle(remote),
-			struct camss_async_subdev);
+			sizeof(*csd));
 		of_node_put(remote);
-		if (IS_ERR(csd)) {
-			ret = PTR_ERR(csd);
+		if (IS_ERR(asd)) {
+			ret = PTR_ERR(asd);
 			goto err_cleanup;
 		}
+
+		csd = container_of(asd, struct camss_async_subdev, asd);
 
 		ret = camss_of_parse_endpoint_node(dev, node, csd);
 		if (ret < 0)

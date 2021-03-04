@@ -2243,8 +2243,10 @@ emit_jmp:
 				return -EFAULT;
 			}
 			break;
-		case BPF_STX | BPF_ATOMIC | BPF_W:
-		case BPF_STX | BPF_ATOMIC | BPF_DW:
+		/* STX XADD: lock *(u32 *)(dst + off) += src */
+		case BPF_STX | BPF_XADD | BPF_W:
+		/* STX XADD: lock *(u64 *)(dst + off) += src */
+		case BPF_STX | BPF_XADD | BPF_DW:
 			goto notyet;
 		case BPF_JMP | BPF_EXIT:
 			if (seen_exit) {

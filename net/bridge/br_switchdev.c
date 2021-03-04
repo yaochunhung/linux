@@ -60,47 +60,42 @@ bool nbp_switchdev_allowed_egress(const struct net_bridge_port *p,
 
 int br_switchdev_set_port_flag(struct net_bridge_port *p,
 			       unsigned long flags,
-			       unsigned long mask,
-			       struct netlink_ext_ack *extack)
+			       unsigned long mask)
 {
 	struct switchdev_attr attr = {
 		.orig_dev = p->dev,
+		.id = SWITCHDEV_ATTR_ID_PORT_PRE_BRIDGE_FLAGS,
+		.u.brport_flags = mask,
 	};
 	struct switchdev_notifier_port_attr_info info = {
 		.attr = &attr,
 	};
 	int err;
 
-	mask &= BR_PORT_FLAGS_HW_OFFLOAD;
-	if (!mask)
+	if (mask & ~BR_PORT_FLAGS_HW_OFFLOAD)
 		return 0;
-
-	attr.id = SWITCHDEV_ATTR_ID_PORT_PRE_BRIDGE_FLAGS;
-	attr.u.brport_flags.val = flags;
-	attr.u.brport_flags.mask = mask;
 
 	/* We run from atomic context here */
 	err = call_switchdev_notifiers(SWITCHDEV_PORT_ATTR_SET, p->dev,
-				       &info.info, extack);
+				       &info.info, NULL);
 	err = notifier_to_errno(err);
 	if (err == -EOPNOTSUPP)
 		return 0;
 
 	if (err) {
-		if (extack && !extack->_msg)
-			NL_SET_ERR_MSG_MOD(extack,
-					   "bridge flag offload is not supported");
+		br_warn(p->br, "bridge flag offload is not supported %u(%s)\n",
+			(unsigned int)p->port_no, p->dev->name);
 		return -EOPNOTSUPP;
 	}
 
 	attr.id = SWITCHDEV_ATTR_ID_PORT_BRIDGE_FLAGS;
 	attr.flags = SWITCHDEV_F_DEFER;
+	attr.u.brport_flags = flags;
 
-	err = switchdev_port_attr_set(p->dev, &attr, extack);
+	err = switchdev_port_attr_set(p->dev, &attr);
 	if (err) {
-		if (extack && !extack->_msg)
-			NL_SET_ERR_MSG_MOD(extack,
-					   "error setting offload flag on port");
+		br_warn(p->br, "error setting offload flag on port %u(%s)\n",
+			(unsigned int)p->port_no, p->dev->name);
 		return err;
 	}
 
@@ -158,7 +153,8 @@ int br_switchdev_port_vlan_add(struct net_device *dev, u16 vid, u16 flags,
 		.obj.orig_dev = dev,
 		.obj.id = SWITCHDEV_OBJ_ID_PORT_VLAN,
 		.flags = flags,
-		.vid = vid,
+		.vid_begin = vid,
+		.vid_end = vid,
 	};
 
 	return switchdev_port_obj_add(dev, &v.obj, extack);
@@ -169,7 +165,8 @@ int br_switchdev_port_vlan_del(struct net_device *dev, u16 vid)
 	struct switchdev_obj_port_vlan v = {
 		.obj.orig_dev = dev,
 		.obj.id = SWITCHDEV_OBJ_ID_PORT_VLAN,
-		.vid = vid,
+		.vid_begin = vid,
+		.vid_end = vid,
 	};
 
 	return switchdev_port_obj_del(dev, &v.obj);

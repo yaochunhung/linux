@@ -325,8 +325,7 @@ struct btrfs_dio_private {
 	struct inode *inode;
 	u64 logical_offset;
 	u64 disk_bytenr;
-	/* Used for bio::bi_size */
-	u32 bytes;
+	u64 bytes;
 
 	/*
 	 * References to this structure. There is one reference per in-flight

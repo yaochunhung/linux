@@ -571,7 +571,7 @@ static ssize_t proc_sys_call_handler(struct kiocb *iocb, struct iov_iter *iter,
 	error = -ENOMEM;
 	if (count >= KMALLOC_MAX_SIZE)
 		goto out;
-	kbuf = kvzalloc(count + 1, GFP_KERNEL);
+	kbuf = kzalloc(count + 1, GFP_KERNEL);
 	if (!kbuf)
 		goto out;
 
@@ -600,7 +600,7 @@ static ssize_t proc_sys_call_handler(struct kiocb *iocb, struct iov_iter *iter,
 
 	error = count;
 out_free_buf:
-	kvfree(kbuf);
+	kfree(kbuf);
 out:
 	sysctl_head_finish(head);
 
@@ -785,8 +785,7 @@ out:
 	return 0;
 }
 
-static int proc_sys_permission(struct user_namespace *mnt_userns,
-			       struct inode *inode, int mask)
+static int proc_sys_permission(struct inode *inode, int mask)
 {
 	/*
 	 * sysctl entries that are not writeable,
@@ -814,8 +813,7 @@ static int proc_sys_permission(struct user_namespace *mnt_userns,
 	return error;
 }
 
-static int proc_sys_setattr(struct user_namespace *mnt_userns,
-			    struct dentry *dentry, struct iattr *attr)
+static int proc_sys_setattr(struct dentry *dentry, struct iattr *attr)
 {
 	struct inode *inode = d_inode(dentry);
 	int error;
@@ -823,17 +821,16 @@ static int proc_sys_setattr(struct user_namespace *mnt_userns,
 	if (attr->ia_valid & (ATTR_MODE | ATTR_UID | ATTR_GID))
 		return -EPERM;
 
-	error = setattr_prepare(&init_user_ns, dentry, attr);
+	error = setattr_prepare(dentry, attr);
 	if (error)
 		return error;
 
-	setattr_copy(&init_user_ns, inode, attr);
+	setattr_copy(inode, attr);
 	mark_inode_dirty(inode);
 	return 0;
 }
 
-static int proc_sys_getattr(struct user_namespace *mnt_userns,
-			    const struct path *path, struct kstat *stat,
+static int proc_sys_getattr(const struct path *path, struct kstat *stat,
 			    u32 request_mask, unsigned int query_flags)
 {
 	struct inode *inode = d_inode(path->dentry);
@@ -843,7 +840,7 @@ static int proc_sys_getattr(struct user_namespace *mnt_userns,
 	if (IS_ERR(head))
 		return PTR_ERR(head);
 
-	generic_fillattr(&init_user_ns, inode, stat);
+	generic_fillattr(inode, stat);
 	if (table)
 		stat->mode = (stat->mode & S_IFMT) | table->mode;
 

@@ -408,8 +408,7 @@ static inline u8 ac_change(struct wilc *wilc, u8 *ac)
 	return 1;
 }
 
-int wilc_wlan_txq_add_net_pkt(struct net_device *dev,
-			      struct tx_complete_data *tx_data, u8 *buffer,
+int wilc_wlan_txq_add_net_pkt(struct net_device *dev, void *priv, u8 *buffer,
 			      u32 buffer_size,
 			      void (*tx_complete_fn)(void *, int))
 {
@@ -421,27 +420,27 @@ int wilc_wlan_txq_add_net_pkt(struct net_device *dev,
 	wilc = vif->wilc;
 
 	if (wilc->quit) {
-		tx_complete_fn(tx_data, 0);
+		tx_complete_fn(priv, 0);
 		return 0;
 	}
 
 	tqe = kmalloc(sizeof(*tqe), GFP_ATOMIC);
 
 	if (!tqe) {
-		tx_complete_fn(tx_data, 0);
+		tx_complete_fn(priv, 0);
 		return 0;
 	}
 	tqe->type = WILC_NET_PKT;
 	tqe->buffer = buffer;
 	tqe->buffer_size = buffer_size;
 	tqe->tx_complete_func = tx_complete_fn;
-	tqe->priv = tx_data;
+	tqe->priv = priv;
 	tqe->vif = vif;
 
-	q_num = ac_classify(wilc, tx_data->skb);
+	q_num = ac_classify(wilc, priv);
 	tqe->q_num = q_num;
 	if (ac_change(wilc, &q_num)) {
-		tx_complete_fn(tx_data, 0);
+		tx_complete_fn(priv, 0);
 		kfree(tqe);
 		return 0;
 	}
@@ -452,7 +451,7 @@ int wilc_wlan_txq_add_net_pkt(struct net_device *dev,
 			tcp_process(dev, tqe);
 		wilc_wlan_txq_add_to_tail(dev, q_num, tqe);
 	} else {
-		tx_complete_fn(tx_data, 0);
+		tx_complete_fn(priv, 0);
 		kfree(tqe);
 	}
 

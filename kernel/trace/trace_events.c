@@ -258,19 +258,22 @@ void *trace_event_buffer_reserve(struct trace_event_buffer *fbuffer,
 	    trace_event_ignore_this_pid(trace_file))
 		return NULL;
 
+	local_save_flags(fbuffer->flags);
+	fbuffer->pc = preempt_count();
 	/*
 	 * If CONFIG_PREEMPTION is enabled, then the tracepoint itself disables
 	 * preemption (adding one to the preempt_count). Since we are
 	 * interested in the preempt_count at the time the tracepoint was
 	 * hit, we need to subtract one to offset the increment.
 	 */
-	fbuffer->trace_ctx = tracing_gen_ctx_dec();
+	if (IS_ENABLED(CONFIG_PREEMPTION))
+		fbuffer->pc--;
 	fbuffer->trace_file = trace_file;
 
 	fbuffer->event =
 		trace_event_buffer_lock_reserve(&fbuffer->buffer, trace_file,
 						event_call->event.type, len,
-						fbuffer->trace_ctx);
+						fbuffer->flags, fbuffer->pc);
 	if (!fbuffer->event)
 		return NULL;
 
@@ -1209,8 +1212,7 @@ system_enable_read(struct file *filp, char __user *ubuf, size_t cnt,
 	mutex_lock(&event_mutex);
 	list_for_each_entry(file, &tr->events, list) {
 		call = file->event_call;
-		if ((call->flags & TRACE_EVENT_FL_IGNORE_ENABLE) ||
-		    !trace_event_name(call) || !call->class || !call->class->reg)
+		if (!trace_event_name(call) || !call->class || !call->class->reg)
 			continue;
 
 		if (system && strcmp(call->class->system, system->name) != 0)
@@ -2098,20 +2100,16 @@ event_subsystem_dir(struct trace_array *tr, const char *name,
 	dir->subsystem = system;
 	file->system = dir;
 
-	/* the ftrace system is special, do not create enable or filter files */
-	if (strcmp(name, "ftrace") != 0) {
-
-		entry = tracefs_create_file("filter", 0644, dir->entry, dir,
-					    &ftrace_subsystem_filter_fops);
-		if (!entry) {
-			kfree(system->filter);
-			system->filter = NULL;
-			pr_warn("Could not create tracefs '%s/filter' entry\n", name);
-		}
-
-		trace_create_file("enable", 0644, dir->entry, dir,
-				  &ftrace_system_enable_fops);
+	entry = tracefs_create_file("filter", 0644, dir->entry, dir,
+				    &ftrace_subsystem_filter_fops);
+	if (!entry) {
+		kfree(system->filter);
+		system->filter = NULL;
+		pr_warn("Could not create tracefs '%s/filter' entry\n", name);
 	}
+
+	trace_create_file("enable", 0644, dir->entry, dir,
+			  &ftrace_system_enable_fops);
 
 	list_add(&dir->list, &tr->systems);
 
@@ -3680,11 +3678,12 @@ function_test_events_call(unsigned long ip, unsigned long parent_ip,
 	struct trace_buffer *buffer;
 	struct ring_buffer_event *event;
 	struct ftrace_entry *entry;
-	unsigned int trace_ctx;
+	unsigned long flags;
 	long disabled;
 	int cpu;
+	int pc;
 
-	trace_ctx = tracing_gen_ctx();
+	pc = preempt_count();
 	preempt_disable_notrace();
 	cpu = raw_smp_processor_id();
 	disabled = atomic_inc_return(&per_cpu(ftrace_test_event_disable, cpu));
@@ -3692,9 +3691,11 @@ function_test_events_call(unsigned long ip, unsigned long parent_ip,
 	if (disabled != 1)
 		goto out;
 
+	local_save_flags(flags);
+
 	event = trace_event_buffer_lock_reserve(&buffer, &event_trace_file,
 						TRACE_FN, sizeof(*entry),
-						trace_ctx);
+						flags, pc);
 	if (!event)
 		goto out;
 	entry	= ring_buffer_event_data(event);
@@ -3702,7 +3703,7 @@ function_test_events_call(unsigned long ip, unsigned long parent_ip,
 	entry->parent_ip		= parent_ip;
 
 	event_trigger_unlock_commit(&event_trace_file, buffer, event,
-				    entry, trace_ctx);
+				    entry, flags, pc);
  out:
 	atomic_dec(&per_cpu(ftrace_test_event_disable, cpu));
 	preempt_enable_notrace();

@@ -50,7 +50,6 @@
 		sys_led: led-1 {
 			gpios = <&gpio0 RK_PA2 GPIO_ACTIVE_HIGH>;
 			label = "nanopi-r2s:red:sys";
-			default-state = "on";
 		};
 
 		wan_led: led-2 {
@@ -285,7 +284,7 @@
 		};
 	};
 
-	gmac2io {
+	ethernet-phy {
 		eth_phy_reset_pin: eth-phy-reset-pin {
 			rockchip,pins = <1 RK_PC2 RK_FUNC_GPIO &pcfg_pull_down>;
 		};

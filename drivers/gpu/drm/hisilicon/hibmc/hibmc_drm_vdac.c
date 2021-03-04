@@ -14,7 +14,6 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_print.h>
-#include <drm/drm_simple_kms_helper.h>
 
 #include "hibmc_drm_drv.h"
 #include "hibmc_drm_regs.h"
@@ -43,6 +42,12 @@ out:
 	return count;
 }
 
+static enum drm_mode_status hibmc_connector_mode_valid(struct drm_connector *connector,
+						       struct drm_display_mode *mode)
+{
+	return MODE_OK;
+}
+
 static void hibmc_connector_destroy(struct drm_connector *connector)
 {
 	struct hibmc_connector *hibmc_connector = to_hibmc_connector(connector);
@@ -54,6 +59,7 @@ static void hibmc_connector_destroy(struct drm_connector *connector)
 static const struct drm_connector_helper_funcs
 	hibmc_connector_helper_funcs = {
 	.get_modes = hibmc_connector_get_modes,
+	.mode_valid = hibmc_connector_mode_valid,
 };
 
 static const struct drm_connector_funcs hibmc_connector_funcs = {
@@ -84,12 +90,15 @@ static const struct drm_encoder_helper_funcs hibmc_encoder_helper_funcs = {
 	.mode_set = hibmc_encoder_mode_set,
 };
 
+static const struct drm_encoder_funcs hibmc_encoder_funcs = {
+	.destroy = drm_encoder_cleanup,
+};
+
 int hibmc_vdac_init(struct hibmc_drm_private *priv)
 {
-	struct drm_device *dev = &priv->dev;
+	struct drm_device *dev = priv->dev;
 	struct hibmc_connector *hibmc_connector = &priv->connector;
 	struct drm_encoder *encoder = &priv->encoder;
-	struct drm_crtc *crtc = &priv->crtc;
 	struct drm_connector *connector = &hibmc_connector->base;
 	int ret;
 
@@ -99,8 +108,9 @@ int hibmc_vdac_init(struct hibmc_drm_private *priv)
 		return ret;
 	}
 
-	encoder->possible_crtcs = drm_crtc_mask(crtc);
-	ret = drm_simple_encoder_init(dev, encoder, DRM_MODE_ENCODER_DAC);
+	encoder->possible_crtcs = 0x1;
+	ret = drm_encoder_init(dev, encoder, &hibmc_encoder_funcs,
+			       DRM_MODE_ENCODER_DAC, NULL);
 	if (ret) {
 		drm_err(dev, "failed to init encoder: %d\n", ret);
 		return ret;

@@ -239,7 +239,7 @@
 
 &soc {
 	serial@f991d000 {
-		status = "okay";
+		status = "ok";
 	};
 
 	pinctrl@fd510000 {
@@ -410,7 +410,7 @@
 	};
 
 	sdhci@f9824900 {
-		status = "okay";
+		status = "ok";
 
 		vmmc-supply = <&pm8941_l20>;
 		vqmmc-supply = <&pm8941_s3>;
@@ -423,7 +423,7 @@
 	};
 
 	sdhci@f98a4900 {
-		status = "okay";
+		status = "ok";
 
 		max-frequency = <100000000>;
 		bus-width = <4>;
@@ -471,7 +471,7 @@
 	};
 
 	serial@f9960000 {
-		status = "okay";
+		status = "ok";
 
 		pinctrl-names = "default";
 		pinctrl-0 = <&blsp2_uart10_pin_a>;
@@ -490,7 +490,7 @@
 	};
 
 	i2c@f9967000 {
-		status = "okay";
+		status = "ok";
 		pinctrl-names = "default";
 		pinctrl-0 = <&i2c11_pins>;
 		clock-frequency = <355000>;
@@ -498,7 +498,7 @@
 
 		led-controller@38 {
 			compatible = "ti,lm3630a";
-			status = "okay";
+			status = "ok";
 			reg = <0x38>;
 
 			#address-cells = <1>;
@@ -514,7 +514,7 @@
 	};
 
 	i2c@f9968000 {
-		status = "okay";
+		status = "ok";
 		pinctrl-names = "default";
 		pinctrl-0 = <&i2c12_pins>;
 		clock-frequency = <100000>;
@@ -551,7 +551,7 @@
 	};
 
 	i2c@f9923000 {
-		status = "okay";
+		status = "ok";
 		pinctrl-names = "default";
 		pinctrl-0 = <&i2c1_pins>;
 		clock-frequency = <100000>;
@@ -585,7 +585,7 @@
 	};
 
 	i2c@f9924000 {
-		status = "okay";
+		status = "ok";
 
 		clock-frequency = <355000>;
 		qcom,src-freq = <50000000>;
@@ -620,7 +620,7 @@
 	};
 
 	i2c@f9925000 {
-		status = "okay";
+		status = "ok";
 		pinctrl-names = "default";
 		pinctrl-0 = <&i2c3_pins>;
 		clock-frequency = <100000>;
@@ -638,7 +638,7 @@
 	};
 
 	usb@f9a55000 {
-		status = "okay";
+		status = "ok";
 
 		phys = <&usb_hs1_phy>;
 		phy-select = <&tcsr 0xb000 0>;
@@ -652,7 +652,7 @@
 
 		ulpi {
 			phy@a {
-				status = "okay";
+				status = "ok";
 
 				v1p8-supply = <&pm8941_l6>;
 				v3p3-supply = <&pm8941_l24>;
@@ -663,14 +663,14 @@
 	};
 
 	mdss@fd900000 {
-		status = "okay";
+		status = "ok";
 
 		mdp@fd900000 {
-			status = "okay";
+			status = "ok";
 		};
 
 		dsi@fd922800 {
-			status = "okay";
+			status = "ok";
 
 			vdda-supply = <&pm8941_l2>;
 			vdd-supply = <&pm8941_lvs3>;
@@ -704,7 +704,7 @@
 		};
 
 		dsi-phy@fd922a00 {
-			status = "okay";
+			status = "ok";
 
 			vddio-supply = <&pm8941_l12>;
 		};

@@ -100,7 +100,7 @@ static int iuu_port_probe(struct usb_serial_port *port)
 	return 0;
 }
 
-static void iuu_port_remove(struct usb_serial_port *port)
+static int iuu_port_remove(struct usb_serial_port *port)
 {
 	struct iuu_private *priv = usb_get_serial_port_data(port);
 
@@ -108,6 +108,8 @@ static void iuu_port_remove(struct usb_serial_port *port)
 	kfree(priv->writebuf);
 	kfree(priv->buf);
 	kfree(priv);
+
+	return 0;
 }
 
 static int iuu_tiocmset(struct tty_struct *tty,

@@ -540,9 +540,9 @@ static void do_pio_write(struct s3cmci_host *host)
 	enable_imask(host, S3C2410_SDIIMSK_TXFIFOHALF);
 }
 
-static void pio_tasklet(struct tasklet_struct *t)
+static void pio_tasklet(unsigned long data)
 {
-	struct s3cmci_host *host = from_tasklet(host, t, pio_tasklet);
+	struct s3cmci_host *host = (struct s3cmci_host *) data;
 
 	s3cmci_disable_irq(host, true);
 
@@ -1532,7 +1532,7 @@ static int s3cmci_probe(struct platform_device *pdev)
 	host->pdata = pdev->dev.platform_data;
 
 	spin_lock_init(&host->complete_lock);
-	tasklet_setup(&host->pio_tasklet, pio_tasklet);
+	tasklet_init(&host->pio_tasklet, pio_tasklet, (unsigned long) host);
 
 	if (host->is2440) {
 		host->sdiimsk	= S3C2440_SDIIMSK;

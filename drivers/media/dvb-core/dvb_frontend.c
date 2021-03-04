@@ -984,7 +984,6 @@ static int dvb_frontend_check_parameters(struct dvb_frontend *fe)
 				 fe->ops.info.symbol_rate_max);
 			return -EINVAL;
 		}
-		break;
 	default:
 		break;
 	}

@@ -577,7 +577,7 @@ static struct attribute *armpmu_common_attrs[] = {
 	NULL,
 };
 
-static const struct attribute_group armpmu_common_attr_group = {
+static struct attribute_group armpmu_common_attr_group = {
 	.attrs = armpmu_common_attrs,
 };
 

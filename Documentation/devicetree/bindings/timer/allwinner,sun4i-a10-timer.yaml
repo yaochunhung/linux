@@ -22,8 +22,6 @@ properties:
     maxItems: 1
 
   interrupts:
-    minItems: 2
-    maxItems: 6
     description:
       List of timers interrupts
 

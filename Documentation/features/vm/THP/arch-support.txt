@@ -10,6 +10,7 @@
     |         arc: |  ok  |
     |         arm: |  ok  |
     |       arm64: |  ok  |
+    |         c6x: |  ..  |
     |        csky: |  ..  |
     |       h8300: |  ..  |
     |     hexagon: |  ..  |

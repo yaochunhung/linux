@@ -1545,7 +1545,7 @@ static struct attribute *fcloop_dev_attrs[] = {
 	NULL
 };
 
-static const struct attribute_group fclopp_dev_attrs_group = {
+static struct attribute_group fclopp_dev_attrs_group = {
 	.attrs		= fcloop_dev_attrs,
 };
 

@@ -233,7 +233,8 @@ int btrfs_alloc_stripe_hash_table(struct btrfs_fs_info *info)
 	}
 
 	x = cmpxchg(&info->stripe_hash_table, NULL, table);
-	kvfree(x);
+	if (x)
+		kvfree(x);
 	return 0;
 }
 
@@ -1104,7 +1105,8 @@ static int rbio_add_io_page(struct btrfs_raid_bio *rbio,
 		 * devices or if they are not contiguous
 		 */
 		if (last_end == disk_start && !last->bi_status &&
-		    last->bi_bdev == stripe->dev->bdev) {
+		    last->bi_disk == stripe->dev->bdev->bd_disk &&
+		    last->bi_partno == stripe->dev->bdev->bd_partno) {
 			ret = bio_add_page(last, page, PAGE_SIZE, 0);
 			if (ret == PAGE_SIZE)
 				return 0;
@@ -1355,7 +1357,9 @@ static int find_bio_stripe(struct btrfs_raid_bio *rbio,
 	for (i = 0; i < rbio->bbio->num_stripes; i++) {
 		stripe = &rbio->bbio->stripes[i];
 		if (in_range(physical, stripe->physical, rbio->stripe_len) &&
-		    stripe->dev->bdev && bio->bi_bdev == stripe->dev->bdev) {
+		    stripe->dev->bdev &&
+		    bio->bi_disk == stripe->dev->bdev->bd_disk &&
+		    bio->bi_partno == stripe->dev->bdev->bd_partno) {
 			return i;
 		}
 	}

@@ -64,7 +64,6 @@ struct vm_area_struct;
 #define __S111 __pgprot(0)
 
 extern unsigned long _page_cachable_default;
-extern void __update_cache(unsigned long address, pte_t pte);
 
 /*
  * ZERO_PAGE is a global shared page that is always zero; used
@@ -95,31 +94,31 @@ extern void paging_init(void);
 
 #define htw_stop()							\
 do {									\
-	unsigned long __flags;						\
+	unsigned long flags;						\
 									\
 	if (cpu_has_htw) {						\
-		local_irq_save(__flags);				\
+		local_irq_save(flags);					\
 		if(!raw_current_cpu_data.htw_seq++) {			\
 			write_c0_pwctl(read_c0_pwctl() &		\
 				       ~(1 << MIPS_PWCTL_PWEN_SHIFT));	\
 			back_to_back_c0_hazard();			\
 		}							\
-		local_irq_restore(__flags);				\
+		local_irq_restore(flags);				\
 	}								\
 } while(0)
 
 #define htw_start()							\
 do {									\
-	unsigned long __flags;						\
+	unsigned long flags;						\
 									\
 	if (cpu_has_htw) {						\
-		local_irq_save(__flags);				\
+		local_irq_save(flags);					\
 		if (!--raw_current_cpu_data.htw_seq) {			\
 			write_c0_pwctl(read_c0_pwctl() |		\
 				       (1 << MIPS_PWCTL_PWEN_SHIFT));	\
 			back_to_back_c0_hazard();			\
 		}							\
-		local_irq_restore(__flags);				\
+		local_irq_restore(flags);				\
 	}								\
 } while(0)
 
@@ -225,6 +224,7 @@ static inline void pte_clear(struct mm_struct *mm, unsigned long addr, pte_t *pt
 static inline void set_pte_at(struct mm_struct *mm, unsigned long addr,
 			      pte_t *ptep, pte_t pteval)
 {
+	extern void __update_cache(unsigned long address, pte_t pte);
 
 	if (!pte_present(pteval))
 		goto cache_sync_done;

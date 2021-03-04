@@ -634,9 +634,6 @@ static int sh_pfc_pinconf_get(struct pinctrl_dev *pctldev, unsigned _pin,
 	}
 
 	case PIN_CONFIG_POWER_SOURCE: {
-		int idx = sh_pfc_get_pin_index(pfc, _pin);
-		const struct sh_pfc_pin *pin = &pfc->info->pins[idx];
-		unsigned int lower_voltage;
 		u32 pocctrl, val;
 		int bit;
 
@@ -651,10 +648,7 @@ static int sh_pfc_pinconf_get(struct pinctrl_dev *pctldev, unsigned _pin,
 		val = sh_pfc_read(pfc, pocctrl);
 		spin_unlock_irqrestore(&pfc->lock, flags);
 
-		lower_voltage = (pin->configs & SH_PFC_PIN_VOLTAGE_25_33) ?
-			2500 : 1800;
-
-		arg = (val & BIT(bit)) ? 3300 : lower_voltage;
+		arg = (val & BIT(bit)) ? 3300 : 1800;
 		break;
 	}
 
@@ -708,9 +702,6 @@ static int sh_pfc_pinconf_set(struct pinctrl_dev *pctldev, unsigned _pin,
 
 		case PIN_CONFIG_POWER_SOURCE: {
 			unsigned int mV = pinconf_to_config_argument(configs[i]);
-			int idx = sh_pfc_get_pin_index(pfc, _pin);
-			const struct sh_pfc_pin *pin = &pfc->info->pins[idx];
-			unsigned int lower_voltage;
 			u32 pocctrl, val;
 			int bit;
 
@@ -721,10 +712,7 @@ static int sh_pfc_pinconf_set(struct pinctrl_dev *pctldev, unsigned _pin,
 			if (WARN(bit < 0, "invalid pin %#x", _pin))
 				return bit;
 
-			lower_voltage = (pin->configs & SH_PFC_PIN_VOLTAGE_25_33) ?
-				2500 : 1800;
-
-			if (mV != lower_voltage && mV != 3300)
+			if (mV != 1800 && mV != 3300)
 				return -EINVAL;
 
 			spin_lock_irqsave(&pfc->lock, flags);

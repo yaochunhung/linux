@@ -20,7 +20,6 @@
 #include <linux/uaccess.h>
 #include <asm/thread_info.h>
 #include <cpu/mmu_context.h>
-#include <asm/softirq_stack.h>
 
 atomic_t irq_err_count;
 

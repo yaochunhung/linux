@@ -58,17 +58,14 @@ struct arch_specific_insn {
 	/* copy of the original instruction */
 	kprobe_opcode_t *insn;
 	/*
-	 * boostable = 0: This instruction type is not boostable.
-	 * boostable = 1: This instruction has been boosted: we have
+	 * boostable = false: This instruction type is not boostable.
+	 * boostable = true: This instruction has been boosted: we have
 	 * added a relative jump after the instruction copy in insn,
 	 * so no single-step and fixup are needed (unless there's
 	 * a post_handler).
 	 */
-	unsigned boostable:1;
-	unsigned if_modifier:1;
-	unsigned is_call:1;
-	unsigned is_pushf:1;
-	unsigned is_abs_ip:1;
+	bool boostable;
+	bool if_modifier;
 	/* Number of bytes of text poked */
 	int tp_len;
 };

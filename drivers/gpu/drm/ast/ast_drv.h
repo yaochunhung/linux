@@ -28,6 +28,7 @@
 #ifndef __AST_DRV_H__
 #define __AST_DRV_H__
 
+#include <linux/dma-buf-map.h>
 #include <linux/i2c.h>
 #include <linux/i2c-algo-bit.h>
 #include <linux/io.h>
@@ -132,6 +133,7 @@ struct ast_private {
 
 	struct {
 		struct drm_gem_vram_object *gbo[AST_DEFAULT_HWC_NUM];
+		struct dma_buf_map map[AST_DEFAULT_HWC_NUM];
 		unsigned int next_index;
 	} cursor;
 

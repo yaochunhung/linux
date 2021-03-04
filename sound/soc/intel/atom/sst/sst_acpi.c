@@ -328,7 +328,7 @@ static int sst_acpi_probe(struct platform_device *pdev)
 }
 
 /**
-* sst_acpi_remove - remove function
+* intel_sst_remove - remove function
 *
 * @pdev:	platform device structure
 *

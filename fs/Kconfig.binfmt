@@ -29,7 +29,7 @@ config BINFMT_ELF
 	  latest version).
 
 config COMPAT_BINFMT_ELF
-	def_bool y
+	bool
 	depends on COMPAT && BINFMT_ELF
 	select ELFCORE
 
@@ -45,7 +45,7 @@ config ARCH_USE_GNU_PROPERTY
 config BINFMT_ELF_FDPIC
 	bool "Kernel support for FDPIC ELF binaries"
 	default y if !BINFMT_ELF
-	depends on (ARM || (SUPERH && !MMU))
+	depends on (ARM || (SUPERH && !MMU) || C6X)
 	select ELFCORE
 	help
 	  ELF FDPIC binaries are based on ELF, but allow the individual load

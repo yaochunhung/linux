@@ -18,7 +18,6 @@
 *.c.[012]*.*
 *.dt.yaml
 *.dtb
-*.dtbo
 *.dtb.S
 *.dwo
 *.elf
@@ -42,7 +41,6 @@
 *.so.dbg
 *.su
 *.symtypes
-*.symversions
 *.tab.[ch]
 *.tar
 *.xz

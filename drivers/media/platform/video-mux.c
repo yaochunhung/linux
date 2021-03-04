@@ -370,13 +370,19 @@ static int video_mux_async_register(struct video_mux *vmux,
 		if (!ep)
 			continue;
 
-		asd = v4l2_async_notifier_add_fwnode_remote_subdev(
-			&vmux->notifier, ep, struct v4l2_async_subdev);
+		asd = kzalloc(sizeof(*asd), GFP_KERNEL);
+		if (!asd) {
+			fwnode_handle_put(ep);
+			return -ENOMEM;
+		}
+
+		ret = v4l2_async_notifier_add_fwnode_remote_subdev(
+			&vmux->notifier, ep, asd);
 
 		fwnode_handle_put(ep);
 
-		if (IS_ERR(asd)) {
-			ret = PTR_ERR(asd);
+		if (ret) {
+			kfree(asd);
 			/* OK if asd already exists */
 			if (ret != -EEXIST)
 				return ret;

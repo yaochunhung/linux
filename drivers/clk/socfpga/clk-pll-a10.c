@@ -73,6 +73,7 @@ static struct clk * __init __socfpga_pll_init(struct device_node *node,
 	const char *parent_name[SOCFGPA_MAX_PARENTS];
 	struct clk_init_data init;
 	struct device_node *clkmgr_np;
+	int rc;
 	int i = 0;
 
 	of_property_read_u32(node, "reg", &reg);
@@ -107,7 +108,7 @@ static struct clk * __init __socfpga_pll_init(struct device_node *node,
 		kfree(pll_clk);
 		return NULL;
 	}
-	of_clk_add_provider(node, of_clk_src_simple_get, clk);
+	rc = of_clk_add_provider(node, of_clk_src_simple_get, clk);
 	return clk;
 }
 

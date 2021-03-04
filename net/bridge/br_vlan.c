@@ -806,8 +806,7 @@ void br_recalculate_fwd_mask(struct net_bridge *br)
 					      ~(1u << br->group_addr[5]);
 }
 
-int br_vlan_filter_toggle(struct net_bridge *br, unsigned long val,
-			  struct netlink_ext_ack *extack)
+int __br_vlan_filter_toggle(struct net_bridge *br, unsigned long val)
 {
 	struct switchdev_attr attr = {
 		.orig_dev = br->dev,
@@ -820,7 +819,7 @@ int br_vlan_filter_toggle(struct net_bridge *br, unsigned long val,
 	if (br_opt_get(br, BROPT_VLAN_ENABLED) == !!val)
 		return 0;
 
-	err = switchdev_port_attr_set(br->dev, &attr, extack);
+	err = switchdev_port_attr_set(br->dev, &attr);
 	if (err && err != -EOPNOTSUPP)
 		return err;
 
@@ -830,6 +829,11 @@ int br_vlan_filter_toggle(struct net_bridge *br, unsigned long val,
 	br_recalculate_fwd_mask(br);
 
 	return 0;
+}
+
+int br_vlan_filter_toggle(struct net_bridge *br, unsigned long val)
+{
+	return __br_vlan_filter_toggle(br, val);
 }
 
 bool br_vlan_enabled(const struct net_device *dev)
@@ -850,8 +854,7 @@ int br_vlan_get_proto(const struct net_device *dev, u16 *p_proto)
 }
 EXPORT_SYMBOL_GPL(br_vlan_get_proto);
 
-int __br_vlan_set_proto(struct net_bridge *br, __be16 proto,
-			struct netlink_ext_ack *extack)
+int __br_vlan_set_proto(struct net_bridge *br, __be16 proto)
 {
 	struct switchdev_attr attr = {
 		.orig_dev = br->dev,
@@ -868,7 +871,7 @@ int __br_vlan_set_proto(struct net_bridge *br, __be16 proto,
 	if (br->vlan_proto == proto)
 		return 0;
 
-	err = switchdev_port_attr_set(br->dev, &attr, extack);
+	err = switchdev_port_attr_set(br->dev, &attr);
 	if (err && err != -EOPNOTSUPP)
 		return err;
 
@@ -898,7 +901,7 @@ int __br_vlan_set_proto(struct net_bridge *br, __be16 proto,
 
 err_filt:
 	attr.u.vlan_protocol = ntohs(oldproto);
-	switchdev_port_attr_set(br->dev, &attr, NULL);
+	switchdev_port_attr_set(br->dev, &attr);
 
 	list_for_each_entry_continue_reverse(vlan, &vg->vlan_list, vlist)
 		vlan_vid_del(p->dev, proto, vlan->vid);
@@ -912,13 +915,12 @@ err_filt:
 	return err;
 }
 
-int br_vlan_set_proto(struct net_bridge *br, unsigned long val,
-		      struct netlink_ext_ack *extack)
+int br_vlan_set_proto(struct net_bridge *br, unsigned long val)
 {
-	if (!eth_type_vlan(htons(val)))
+	if (val != ETH_P_8021Q && val != ETH_P_8021AD)
 		return -EPROTONOSUPPORT;
 
-	return __br_vlan_set_proto(br, htons(val), extack);
+	return __br_vlan_set_proto(br, htons(val));
 }
 
 int br_vlan_set_stats(struct net_bridge *br, unsigned long val)
@@ -1098,8 +1100,7 @@ err_port:
 	goto out;
 }
 
-int br_vlan_set_default_pvid(struct net_bridge *br, unsigned long val,
-			     struct netlink_ext_ack *extack)
+int br_vlan_set_default_pvid(struct net_bridge *br, unsigned long val)
 {
 	u16 pvid = val;
 	int err = 0;
@@ -1116,7 +1117,7 @@ int br_vlan_set_default_pvid(struct net_bridge *br, unsigned long val,
 		err = -EPERM;
 		goto out;
 	}
-	err = __br_vlan_set_default_pvid(br, pvid, extack);
+	err = __br_vlan_set_default_pvid(br, pvid, NULL);
 out:
 	return err;
 }
@@ -1166,7 +1167,7 @@ int nbp_vlan_init(struct net_bridge_port *p, struct netlink_ext_ack *extack)
 	if (!vg)
 		goto out;
 
-	ret = switchdev_port_attr_set(p->dev, &attr, extack);
+	ret = switchdev_port_attr_set(p->dev, &attr);
 	if (ret && ret != -EOPNOTSUPP)
 		goto err_vlan_enabled;
 

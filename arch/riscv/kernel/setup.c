@@ -216,15 +216,8 @@ static void __init init_resources(void)
 static void __init parse_dtb(void)
 {
 	/* Early scan of device tree from init memory */
-	if (early_init_dt_scan(dtb_early_va)) {
-		const char *name = of_flat_dt_get_machine_name();
-
-		if (name) {
-			pr_info("Machine model: %s\n", name);
-			dump_stack_set_arch_desc("%s (DT)", name);
-		}
+	if (early_init_dt_scan(dtb_early_va))
 		return;
-	}
 
 	pr_err("No DTB passed to the kernel\n");
 #ifdef CONFIG_CMDLINE_FORCE
@@ -259,9 +252,9 @@ void __init setup_arch(char **cmdline_p)
 	else
 		pr_err("No DTB found in kernel mappings\n");
 #endif
-	misc_mem_init();
 
-	sbi_init();
+	if (IS_ENABLED(CONFIG_RISCV_SBI))
+		sbi_init();
 
 	if (IS_ENABLED(CONFIG_STRICT_KERNEL_RWX))
 		protect_kernel_text_data();
@@ -282,19 +275,13 @@ void __init setup_arch(char **cmdline_p)
 
 static int __init topology_init(void)
 {
-	int i, ret;
-
-	for_each_online_node(i)
-		register_one_node(i);
+	int i;
 
 	for_each_possible_cpu(i) {
 		struct cpu *cpu = &per_cpu(cpu_devices, i);
 
 		cpu->hotpluggable = cpu_has_hotplug(i);
-		ret = register_cpu(cpu, i);
-		if (unlikely(ret))
-			pr_warn("Warning: %s: register_cpu %d failed (%d)\n",
-			       __func__, i, ret);
+		register_cpu(cpu, i);
 	}
 
 	return 0;

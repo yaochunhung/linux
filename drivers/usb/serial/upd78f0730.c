@@ -145,11 +145,14 @@ static int upd78f0730_send_ctl(struct usb_serial_port *port,
 
 	kfree(buf);
 
-	if (res < 0) {
+	if (res != size) {
 		struct device *dev = &port->dev;
 
 		dev_err(dev, "failed to send control request %02x: %d\n",
 			*(u8 *)data, res);
+		/* The maximum expected length of a transfer is 6 bytes */
+		if (res >= 0)
+			res = -EIO;
 
 		return res;
 	}
@@ -171,13 +174,15 @@ static int upd78f0730_port_probe(struct usb_serial_port *port)
 	return 0;
 }
 
-static void upd78f0730_port_remove(struct usb_serial_port *port)
+static int upd78f0730_port_remove(struct usb_serial_port *port)
 {
 	struct upd78f0730_port_private *private;
 
 	private = usb_get_serial_port_data(port);
 	mutex_destroy(&private->lock);
 	kfree(private);
+
+	return 0;
 }
 
 static int upd78f0730_tiocmget(struct tty_struct *tty)

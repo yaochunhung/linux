@@ -4309,18 +4309,11 @@ static int mlxsw_sp_nexthop_obj_validate(struct mlxsw_sp *mlxsw_sp,
 	if (event != NEXTHOP_EVENT_REPLACE)
 		return 0;
 
-	switch (info->type) {
-	case NH_NOTIFIER_INFO_TYPE_SINGLE:
+	if (!info->is_grp)
 		return mlxsw_sp_nexthop_obj_single_validate(mlxsw_sp, info->nh,
 							    info->extack);
-	case NH_NOTIFIER_INFO_TYPE_GRP:
-		return mlxsw_sp_nexthop_obj_group_validate(mlxsw_sp,
-							   info->nh_grp,
-							   info->extack);
-	default:
-		NL_SET_ERR_MSG_MOD(info->extack, "Unsupported nexthop type");
-		return -EOPNOTSUPP;
-	}
+	return mlxsw_sp_nexthop_obj_group_validate(mlxsw_sp, info->nh_grp,
+						   info->extack);
 }
 
 static bool mlxsw_sp_nexthop_obj_is_gateway(struct mlxsw_sp *mlxsw_sp,
@@ -4328,17 +4321,13 @@ static bool mlxsw_sp_nexthop_obj_is_gateway(struct mlxsw_sp *mlxsw_sp,
 {
 	const struct net_device *dev;
 
-	switch (info->type) {
-	case NH_NOTIFIER_INFO_TYPE_SINGLE:
-		dev = info->nh->dev;
-		return info->nh->gw_family || info->nh->is_reject ||
-		       mlxsw_sp_netdev_ipip_type(mlxsw_sp, dev, NULL);
-	case NH_NOTIFIER_INFO_TYPE_GRP:
+	if (info->is_grp)
 		/* Already validated earlier. */
 		return true;
-	default:
-		return false;
-	}
+
+	dev = info->nh->dev;
+	return info->nh->gw_family || info->nh->is_reject ||
+	       mlxsw_sp_netdev_ipip_type(mlxsw_sp, dev, NULL);
 }
 
 static void mlxsw_sp_nexthop_obj_blackhole_init(struct mlxsw_sp *mlxsw_sp,
@@ -4421,21 +4410,10 @@ mlxsw_sp_nexthop_obj_group_info_init(struct mlxsw_sp *mlxsw_sp,
 				     struct mlxsw_sp_nexthop_group *nh_grp,
 				     struct nh_notifier_info *info)
 {
+	unsigned int nhs = info->is_grp ? info->nh_grp->num_nh : 1;
 	struct mlxsw_sp_nexthop_group_info *nhgi;
 	struct mlxsw_sp_nexthop *nh;
-	unsigned int nhs;
 	int err, i;
-
-	switch (info->type) {
-	case NH_NOTIFIER_INFO_TYPE_SINGLE:
-		nhs = 1;
-		break;
-	case NH_NOTIFIER_INFO_TYPE_GRP:
-		nhs = info->nh_grp->num_nh;
-		break;
-	default:
-		return -EINVAL;
-	}
 
 	nhgi = kzalloc(struct_size(nhgi, nexthops, nhs), GFP_KERNEL);
 	if (!nhgi)
@@ -4449,18 +4427,12 @@ mlxsw_sp_nexthop_obj_group_info_init(struct mlxsw_sp *mlxsw_sp,
 		int weight;
 
 		nh = &nhgi->nexthops[i];
-		switch (info->type) {
-		case NH_NOTIFIER_INFO_TYPE_SINGLE:
-			nh_obj = info->nh;
-			weight = 1;
-			break;
-		case NH_NOTIFIER_INFO_TYPE_GRP:
+		if (info->is_grp) {
 			nh_obj = &info->nh_grp->nh_entries[i].nh;
 			weight = info->nh_grp->nh_entries[i].weight;
-			break;
-		default:
-			err = -EINVAL;
-			goto err_nexthop_obj_init;
+		} else {
+			nh_obj = info->nh;
+			weight = 1;
 		}
 		err = mlxsw_sp_nexthop_obj_init(mlxsw_sp, nh_grp, nh, nh_obj,
 						weight);
@@ -4943,25 +4915,6 @@ mlxsw_sp_rt6_nexthop(struct mlxsw_sp_nexthop_group *nh_grp,
 }
 
 static void
-mlxsw_sp_fib4_offload_failed_flag_set(struct mlxsw_sp *mlxsw_sp,
-				      struct fib_entry_notifier_info *fen_info)
-{
-	u32 *p_dst = (u32 *) &fen_info->dst;
-	struct fib_rt_info fri;
-
-	fri.fi = fen_info->fi;
-	fri.tb_id = fen_info->tb_id;
-	fri.dst = cpu_to_be32(*p_dst);
-	fri.dst_len = fen_info->dst_len;
-	fri.tos = fen_info->tos;
-	fri.type = fen_info->type;
-	fri.offload = false;
-	fri.trap = false;
-	fri.offload_failed = true;
-	fib_alias_hw_flags_set(mlxsw_sp_net(mlxsw_sp), &fri);
-}
-
-static void
 mlxsw_sp_fib4_entry_hw_flags_set(struct mlxsw_sp *mlxsw_sp,
 				 struct mlxsw_sp_fib_entry *fib_entry)
 {
@@ -4982,7 +4935,6 @@ mlxsw_sp_fib4_entry_hw_flags_set(struct mlxsw_sp *mlxsw_sp,
 	fri.type = fib4_entry->type;
 	fri.offload = should_offload;
 	fri.trap = !should_offload;
-	fri.offload_failed = false;
 	fib_alias_hw_flags_set(mlxsw_sp_net(mlxsw_sp), &fri);
 }
 
@@ -5005,35 +4957,9 @@ mlxsw_sp_fib4_entry_hw_flags_clear(struct mlxsw_sp *mlxsw_sp,
 	fri.type = fib4_entry->type;
 	fri.offload = false;
 	fri.trap = false;
-	fri.offload_failed = false;
 	fib_alias_hw_flags_set(mlxsw_sp_net(mlxsw_sp), &fri);
 }
 
-#if IS_ENABLED(CONFIG_IPV6)
-static void
-mlxsw_sp_fib6_offload_failed_flag_set(struct mlxsw_sp *mlxsw_sp,
-				      struct fib6_info **rt_arr,
-				      unsigned int nrt6)
-{
-	int i;
-
-	/* In IPv6 a multipath route is represented using multiple routes, so
-	 * we need to set the flags on all of them.
-	 */
-	for (i = 0; i < nrt6; i++)
-		fib6_info_hw_flags_set(mlxsw_sp_net(mlxsw_sp), rt_arr[i],
-				       false, false, true);
-}
-#else
-static void
-mlxsw_sp_fib6_offload_failed_flag_set(struct mlxsw_sp *mlxsw_sp,
-				      struct fib6_info **rt_arr,
-				      unsigned int nrt6)
-{
-}
-#endif
-
-#if IS_ENABLED(CONFIG_IPV6)
 static void
 mlxsw_sp_fib6_entry_hw_flags_set(struct mlxsw_sp *mlxsw_sp,
 				 struct mlxsw_sp_fib_entry *fib_entry)
@@ -5050,18 +4976,10 @@ mlxsw_sp_fib6_entry_hw_flags_set(struct mlxsw_sp *mlxsw_sp,
 	fib6_entry = container_of(fib_entry, struct mlxsw_sp_fib6_entry,
 				  common);
 	list_for_each_entry(mlxsw_sp_rt6, &fib6_entry->rt6_list, list)
-		fib6_info_hw_flags_set(mlxsw_sp_net(mlxsw_sp), mlxsw_sp_rt6->rt,
-				       should_offload, !should_offload, false);
+		fib6_info_hw_flags_set(mlxsw_sp_rt6->rt, should_offload,
+				       !should_offload);
 }
-#else
-static void
-mlxsw_sp_fib6_entry_hw_flags_set(struct mlxsw_sp *mlxsw_sp,
-				 struct mlxsw_sp_fib_entry *fib_entry)
-{
-}
-#endif
 
-#if IS_ENABLED(CONFIG_IPV6)
 static void
 mlxsw_sp_fib6_entry_hw_flags_clear(struct mlxsw_sp *mlxsw_sp,
 				   struct mlxsw_sp_fib_entry *fib_entry)
@@ -5072,16 +4990,8 @@ mlxsw_sp_fib6_entry_hw_flags_clear(struct mlxsw_sp *mlxsw_sp,
 	fib6_entry = container_of(fib_entry, struct mlxsw_sp_fib6_entry,
 				  common);
 	list_for_each_entry(mlxsw_sp_rt6, &fib6_entry->rt6_list, list)
-		fib6_info_hw_flags_set(mlxsw_sp_net(mlxsw_sp), mlxsw_sp_rt6->rt,
-				       false, false, false);
+		fib6_info_hw_flags_set(mlxsw_sp_rt6->rt, false, false);
 }
-#else
-static void
-mlxsw_sp_fib6_entry_hw_flags_clear(struct mlxsw_sp *mlxsw_sp,
-				   struct mlxsw_sp_fib_entry *fib_entry)
-{
-}
-#endif
 
 static void
 mlxsw_sp_fib_entry_hw_flags_set(struct mlxsw_sp *mlxsw_sp,
@@ -7066,8 +6976,6 @@ static void mlxsw_sp_router_fib4_event_process(struct mlxsw_sp *mlxsw_sp,
 		if (err) {
 			mlxsw_sp_fib_entry_op_ctx_priv_put_all(op_ctx);
 			mlxsw_sp_router_fib_abort(mlxsw_sp);
-			mlxsw_sp_fib4_offload_failed_flag_set(mlxsw_sp,
-							      &fib_event->fen_info);
 		}
 		fib_info_put(fib_event->fen_info.fi);
 		break;
@@ -7089,7 +6997,6 @@ static void mlxsw_sp_router_fib6_event_process(struct mlxsw_sp *mlxsw_sp,
 					       struct mlxsw_sp_fib_entry_op_ctx *op_ctx,
 					       struct mlxsw_sp_fib_event *fib_event)
 {
-	struct mlxsw_sp_fib6_event *fib6_event = &fib_event->fib6_event;
 	int err;
 
 	mlxsw_sp_span_respin(mlxsw_sp);
@@ -7101,9 +7008,6 @@ static void mlxsw_sp_router_fib6_event_process(struct mlxsw_sp *mlxsw_sp,
 		if (err) {
 			mlxsw_sp_fib_entry_op_ctx_priv_put_all(op_ctx);
 			mlxsw_sp_router_fib_abort(mlxsw_sp);
-			mlxsw_sp_fib6_offload_failed_flag_set(mlxsw_sp,
-							      fib6_event->rt_arr,
-							      fib6_event->nrt6);
 		}
 		mlxsw_sp_router_fib6_event_fini(&fib_event->fib6_event);
 		break;
@@ -7113,9 +7017,6 @@ static void mlxsw_sp_router_fib6_event_process(struct mlxsw_sp *mlxsw_sp,
 		if (err) {
 			mlxsw_sp_fib_entry_op_ctx_priv_put_all(op_ctx);
 			mlxsw_sp_router_fib_abort(mlxsw_sp);
-			mlxsw_sp_fib6_offload_failed_flag_set(mlxsw_sp,
-							      fib6_event->rt_arr,
-							      fib6_event->nrt6);
 		}
 		mlxsw_sp_router_fib6_event_fini(&fib_event->fib6_event);
 		break;

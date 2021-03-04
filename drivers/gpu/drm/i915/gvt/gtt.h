@@ -34,18 +34,9 @@
 #ifndef _GVT_GTT_H_
 #define _GVT_GTT_H_
 
-#include <linux/kernel.h>
-#include <linux/kref.h>
-#include <linux/mutex.h>
-#include <linux/radix-tree.h>
-
-#include "gt/intel_gtt.h"
-
-struct intel_gvt;
-struct intel_vgpu;
-struct intel_vgpu_mm;
-
 #define I915_GTT_PAGE_SHIFT         12
+
+struct intel_vgpu_mm;
 
 #define INTEL_GVT_INVALID_ADDR (~0UL)
 

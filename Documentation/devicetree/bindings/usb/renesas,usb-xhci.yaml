@@ -11,7 +11,7 @@ maintainers:
   - Yoshihiro Shimoda <yoshihiro.shimoda.uh@renesas.com>
 
 allOf:
-  - $ref: "usb-xhci.yaml"
+  - $ref: "usb-hcd.yaml"
 
 properties:
   compatible:
@@ -68,7 +68,7 @@ required:
   - power-domains
   - resets
 
-unevaluatedProperties: false
+additionalProperties: false
 
 examples:
   - |

@@ -382,7 +382,6 @@ our $InitAttribute = qr{$InitAttributeData|$InitAttributeConst|$InitAttributeIni
 # We need \b after 'init' otherwise 'initconst' will cause a false positive in a check
 our $Attribute	= qr{
 			const|
-			volatile|
 			__percpu|
 			__nocast|
 			__safe|
@@ -487,7 +486,7 @@ our $logFunctions = qr{(?x:
 
 our $allocFunctions = qr{(?x:
 	(?:(?:devm_)?
-		(?:kv|k|v)[czm]alloc(?:_array)?(?:_node)? |
+		(?:kv|k|v)[czm]alloc(?:_node|_array)? |
 		kstrdup(?:_const)? |
 		kmemdup(?:_nul)?) |
 	(?:\w+)?alloc_skb(?:_ip_align)? |
@@ -505,30 +504,6 @@ our $signature_tags = qr{(?xi:
 	Suggested-by:|
 	To:|
 	Cc:
-)};
-
-our $tracing_logging_tags = qr{(?xi:
-	[=-]*> |
-	<[=-]* |
-	\[ |
-	\] |
-	start |
-	called |
-	entered |
-	entry |
-	enter |
-	in |
-	inside |
-	here |
-	begin |
-	exit |
-	end |
-	done |
-	leave |
-	completed |
-	out |
-	return |
-	[\.\!:\s]*
 )};
 
 sub edit_distance_min {
@@ -2453,15 +2428,6 @@ sub get_raw_comment {
 	return $comment;
 }
 
-sub exclude_global_initialisers {
-	my ($realfile) = @_;
-
-	# Do not check for BPF programs (tools/testing/selftests/bpf/progs/*.c, samples/bpf/*_kern.c, *.bpf.c).
-	return $realfile =~ m@^tools/testing/selftests/bpf/progs/.*\.c$@ ||
-		$realfile =~ m@^samples/bpf/.*_kern\.c$@ ||
-		$realfile =~ m@/bpf/.*\.bpf\.c$@;
-}
-
 sub process {
 	my $filename = shift;
 
@@ -3007,7 +2973,7 @@ sub process {
 				}
 				if (!defined $lines[$linenr]) {
 					WARN("BAD_SIGN_OFF",
-					     "Co-developed-by: must be immediately followed by Signed-off-by:\n" . "$here\n" . $rawline);
+                                             "Co-developed-by: must be immediately followed by Signed-off-by:\n" . "$here\n" . $rawline);
 				} elsif ($rawlines[$linenr] !~ /^\s*signed-off-by:\s*(.*)/i) {
 					WARN("BAD_SIGN_OFF",
 					     "Co-developed-by: must be immediately followed by Signed-off-by:\n" . "$here\n" . $rawline . "\n" .$rawlines[$linenr]);
@@ -3030,8 +2996,8 @@ sub process {
 			if (ERROR("GERRIT_CHANGE_ID",
 			          "Remove Gerrit Change-Id's before submitting upstream\n" . $herecurr) &&
 			    $fix) {
-				fix_delete_line($fixlinenr, $rawline);
-			}
+                                fix_delete_line($fixlinenr, $rawline);
+                        }
 		}
 
 # Check if the commit log is in a possible stack dump
@@ -3273,10 +3239,10 @@ sub process {
 				next if ($start_char =~ /^\S$/);
 				next if (index(" \t.,;?!", $end_char) == -1);
 
-				# avoid repeating hex occurrences like 'ff ff fe 09 ...'
-				if ($first =~ /\b[0-9a-f]{2,}\b/i) {
-					next if (!exists($allow_repeated_words{lc($first)}));
-				}
+                                # avoid repeating hex occurrences like 'ff ff fe 09 ...'
+                                if ($first =~ /\b[0-9a-f]{2,}\b/i) {
+                                        next if (!exists($allow_repeated_words{lc($first)}));
+                                }
 
 				if (WARN("REPEATED_WORD",
 					 "Possible repeated word: '$first'\n" . $herecurr) &&
@@ -3608,13 +3574,6 @@ sub process {
 			}
 		}
 
-# check for .L prefix local symbols in .S files
-		if ($realfile =~ /\.S$/ &&
-		    $line =~ /^\+\s*(?:[A-Z]+_)?SYM_[A-Z]+_(?:START|END)(?:_[A-Z_]+)?\s*\(\s*\.L/) {
-			WARN("AVOID_L_PREFIX",
-			     "Avoid using '.L' prefixed local symbol names for denoting a range of code via 'SYM_*_START/END' annotations; see Documentation/asm-annotations.rst\n" . $herecurr);
-		}
-
 # check we are in a valid source file C or perl if not then ignore this hunk
 		next if ($realfile !~ /\.(h|c|pl|dtsi|dts)$/);
 
@@ -3817,48 +3776,43 @@ sub process {
 		}
 
 # check for missing blank lines after declarations
-# (declarations must have the same indentation and not be at the start of line)
-		if (($prevline =~ /\+(\s+)\S/) && $sline =~ /^\+$1\S/) {
-			# use temporaries
-			my $sl = $sline;
-			my $pl = $prevline;
-			# remove $Attribute/$Sparse uses to simplify comparisons
-			$sl =~ s/\b(?:$Attribute|$Sparse)\b//g;
-			$pl =~ s/\b(?:$Attribute|$Sparse)\b//g;
-			if (($pl =~ /^\+\s+$Declare\s*$Ident\s*[=,;:\[]/ ||
+		if ($sline =~ /^\+\s+\S/ &&			#Not at char 1
+			# actual declarations
+		    ($prevline =~ /^\+\s+$Declare\s*$Ident\s*[=,;:\[]/ ||
 			# function pointer declarations
-			     $pl =~ /^\+\s+$Declare\s*\(\s*\*\s*$Ident\s*\)\s*[=,;:\[\(]/ ||
+		     $prevline =~ /^\+\s+$Declare\s*\(\s*\*\s*$Ident\s*\)\s*[=,;:\[\(]/ ||
 			# foo bar; where foo is some local typedef or #define
-			     $pl =~ /^\+\s+$Ident(?:\s+|\s*\*\s*)$Ident\s*[=,;\[]/ ||
+		     $prevline =~ /^\+\s+$Ident(?:\s+|\s*\*\s*)$Ident\s*[=,;\[]/ ||
 			# known declaration macros
-			     $pl =~ /^\+\s+$declaration_macros/) &&
+		     $prevline =~ /^\+\s+$declaration_macros/) &&
 			# for "else if" which can look like "$Ident $Ident"
-			    !($pl =~ /^\+\s+$c90_Keywords\b/ ||
+		    !($prevline =~ /^\+\s+$c90_Keywords\b/ ||
 			# other possible extensions of declaration lines
-			      $pl =~ /(?:$Compare|$Assignment|$Operators)\s*$/ ||
+		      $prevline =~ /(?:$Compare|$Assignment|$Operators)\s*$/ ||
 			# not starting a section or a macro "\" extended line
-			      $pl =~ /(?:\{\s*|\\)$/) &&
+		      $prevline =~ /(?:\{\s*|\\)$/) &&
 			# looks like a declaration
-			    !($sl =~ /^\+\s+$Declare\s*$Ident\s*[=,;:\[]/ ||
+		    !($sline =~ /^\+\s+$Declare\s*$Ident\s*[=,;:\[]/ ||
 			# function pointer declarations
-			      $sl =~ /^\+\s+$Declare\s*\(\s*\*\s*$Ident\s*\)\s*[=,;:\[\(]/ ||
+		      $sline =~ /^\+\s+$Declare\s*\(\s*\*\s*$Ident\s*\)\s*[=,;:\[\(]/ ||
 			# foo bar; where foo is some local typedef or #define
-			      $sl =~ /^\+\s+$Ident(?:\s+|\s*\*\s*)$Ident\s*[=,;\[]/ ||
+		      $sline =~ /^\+\s+$Ident(?:\s+|\s*\*\s*)$Ident\s*[=,;\[]/ ||
 			# known declaration macros
-			      $sl =~ /^\+\s+$declaration_macros/ ||
+		      $sline =~ /^\+\s+$declaration_macros/ ||
 			# start of struct or union or enum
-			      $sl =~ /^\+\s+(?:static\s+)?(?:const\s+)?(?:union|struct|enum|typedef)\b/ ||
+		      $sline =~ /^\+\s+(?:static\s+)?(?:const\s+)?(?:union|struct|enum|typedef)\b/ ||
 			# start or end of block or continuation of declaration
-			      $sl =~ /^\+\s+(?:$|[\{\}\.\#\"\?\:\(\[])/ ||
+		      $sline =~ /^\+\s+(?:$|[\{\}\.\#\"\?\:\(\[])/ ||
 			# bitfield continuation
-			      $sl =~ /^\+\s+$Ident\s*:\s*\d+\s*[,;]/ ||
+		      $sline =~ /^\+\s+$Ident\s*:\s*\d+\s*[,;]/ ||
 			# other possible extensions of declaration lines
-			      $sl =~ /^\+\s+\(?\s*(?:$Compare|$Assignment|$Operators)/)) {
-				if (WARN("LINE_SPACING",
-					 "Missing a blank line after declarations\n" . $hereprev) &&
-				    $fix) {
-					fix_insert_line($fixlinenr, "\+");
-				}
+		      $sline =~ /^\+\s+\(?\s*(?:$Compare|$Assignment|$Operators)/) &&
+			# indentation of previous and current line are the same
+		    (($prevline =~ /\+(\s+)\S/) && $sline =~ /^\+$1\S/)) {
+			if (WARN("LINE_SPACING",
+				 "Missing a blank line after declarations\n" . $hereprev) &&
+			    $fix) {
+				fix_insert_line($fixlinenr, "\+");
 			}
 		}
 
@@ -4329,7 +4283,8 @@ sub process {
 		if (defined $realline_next &&
 		    exists $lines[$realline_next - 1] &&
 		    !defined $suppress_export{$realline_next} &&
-		    ($lines[$realline_next - 1] =~ /EXPORT_SYMBOL.*\((.*)\)/)) {
+		    ($lines[$realline_next - 1] =~ /EXPORT_SYMBOL.*\((.*)\)/ ||
+		     $lines[$realline_next - 1] =~ /EXPORT_UNUSED_SYMBOL.*\((.*)\)/)) {
 			# Handle definitions which produce identifiers with
 			# a prefix:
 			#   XXX(foo);
@@ -4356,7 +4311,8 @@ sub process {
 		}
 		if (!defined $suppress_export{$linenr} &&
 		    $prevline =~ /^.\s*$/ &&
-		    ($line =~ /EXPORT_SYMBOL.*\((.*)\)/)) {
+		    ($line =~ /EXPORT_SYMBOL.*\((.*)\)/ ||
+		     $line =~ /EXPORT_UNUSED_SYMBOL.*\((.*)\)/)) {
 #print "FOO B <$lines[$linenr - 1]>\n";
 			$suppress_export{$linenr} = 2;
 		}
@@ -4367,8 +4323,7 @@ sub process {
 		}
 
 # check for global initialisers.
-		if ($line =~ /^\+$Type\s*$Ident(?:\s+$Modifier)*\s*=\s*($zero_initializer)\s*;/ &&
-		    !exclude_global_initialisers($realfile)) {
+		if ($line =~ /^\+$Type\s*$Ident(?:\s+$Modifier)*\s*=\s*($zero_initializer)\s*;/) {
 			if (ERROR("GLOBAL_INITIALISERS",
 				  "do not initialise globals to $1\n" . $herecurr) &&
 			    $fix) {
@@ -4464,7 +4419,7 @@ sub process {
 			WARN("STATIC_CONST_CHAR_ARRAY",
 			     "char * array declaration might be better as static const\n" .
 				$herecurr);
-		}
+               }
 
 # check for sizeof(foo)/sizeof(foo[0]) that could be ARRAY_SIZE(foo)
 		if ($line =~ m@\bsizeof\s*\(\s*($Lval)\s*\)@) {
@@ -5054,7 +5009,7 @@ sub process {
 				# A colon needs no spaces before when it is
 				# terminating a case value or a label.
 				} elsif ($opv eq ':C' || $opv eq ':L') {
-					if ($ctx =~ /Wx./ and $realfile !~ m@.*\.lds\.h$@) {
+					if ($ctx =~ /Wx./) {
 						if (ERROR("SPACING",
 							  "space prohibited before that '$op' $at\n" . $hereptr)) {
 							$good = rtrim($fix_elements[$n]) . trim($fix_elements[$n + 1]);
@@ -5317,7 +5272,7 @@ sub process {
 		    $lines[$linenr - 3] !~ /^[ +]\s*$Ident\s*:/) {
 			WARN("RETURN_VOID",
 			     "void function return statements are not generally useful\n" . $hereprev);
-		}
+               }
 
 # if statements using unnecessary parentheses - ie: if ((foo == bar))
 		if ($perl_version_ok &&
@@ -6013,17 +5968,6 @@ sub process {
 			     "Prefer using '\"%s...\", __func__' to using '$context_function', this function's name, in a string\n" . $herecurr);
 		}
 
-# check for unnecessary function tracing like uses
-# This does not use $logFunctions because there are many instances like
-# 'dprintk(FOO, "%s()\n", __func__);' which do not match $logFunctions
-		if ($rawline =~ /^\+.*\([^"]*"$tracing_logging_tags{0,3}%s(?:\s*\(\s*\)\s*)?$tracing_logging_tags{0,3}(?:\\n)?"\s*,\s*__func__\s*\)\s*;/) {
-			if (WARN("TRACING_LOGGING",
-				 "Unnecessary ftrace-like logging - prefer using ftrace\n" . $herecurr) &&
-			    $fix) {
-                                fix_delete_line($fixlinenr, $rawline);
-			}
-		}
-
 # check for spaces before a quoted newline
 		if ($rawline =~ /^.*\".*\s\\n/) {
 			if (WARN("QUOTED_WHITESPACE_BEFORE_NEWLINE",
@@ -6535,18 +6479,18 @@ sub process {
 		if ($line =~ /(\(\s*$C90_int_types\s*\)\s*)($Constant)\b/) {
 			my $cast = $1;
 			my $const = $2;
-			my $suffix = "";
-			my $newconst = $const;
-			$newconst =~ s/${Int_type}$//;
-			$suffix .= 'U' if ($cast =~ /\bunsigned\b/);
-			if ($cast =~ /\blong\s+long\b/) {
-			    $suffix .= 'LL';
-			} elsif ($cast =~ /\blong\b/) {
-			    $suffix .= 'L';
-			}
 			if (WARN("TYPECAST_INT_CONSTANT",
-				 "Unnecessary typecast of c90 int constant - '$cast$const' could be '$const$suffix'\n" . $herecurr) &&
+				 "Unnecessary typecast of c90 int constant\n" . $herecurr) &&
 			    $fix) {
+				my $suffix = "";
+				my $newconst = $const;
+				$newconst =~ s/${Int_type}$//;
+				$suffix .= 'U' if ($cast =~ /\bunsigned\b/);
+				if ($cast =~ /\blong\s+long\b/) {
+					$suffix .= 'LL';
+				} elsif ($cast =~ /\blong\b/) {
+					$suffix .= 'L';
+				}
 				$fixed[$fixlinenr] =~ s/\Q$cast\E$const\b/$newconst$suffix/;
 			}
 		}
@@ -7077,14 +7021,12 @@ sub process {
 
 # use of NR_CPUS is usually wrong
 # ignore definitions of NR_CPUS and usage to define arrays as likely right
-# ignore designated initializers using NR_CPUS
 		if ($line =~ /\bNR_CPUS\b/ &&
 		    $line !~ /^.\s*\s*#\s*if\b.*\bNR_CPUS\b/ &&
 		    $line !~ /^.\s*\s*#\s*define\b.*\bNR_CPUS\b/ &&
 		    $line !~ /^.\s*$Declare\s.*\[[^\]]*NR_CPUS[^\]]*\]/ &&
 		    $line !~ /\[[^\]]*\.\.\.[^\]]*NR_CPUS[^\]]*\]/ &&
-		    $line !~ /\[[^\]]*NR_CPUS[^\]]*\.\.\.[^\]]*\]/ &&
-		    $line !~ /^.\s*\.\w+\s*=\s*.*\bNR_CPUS\b/)
+		    $line !~ /\[[^\]]*NR_CPUS[^\]]*\.\.\.[^\]]*\]/)
 		{
 			WARN("NR_CPUS",
 			     "usage of NR_CPUS is often wrong - consider using cpu_possible(), num_possible_cpus(), for_each_possible_cpu(), etc\n" . $herecurr);
@@ -7118,6 +7060,12 @@ sub process {
 				WARN("IN_ATOMIC",
 				     "use of in_atomic() is incorrect outside core kernel code\n" . $herecurr);
 			}
+		}
+
+# check for mutex_trylock_recursive usage
+		if ($line =~ /mutex_trylock_recursive/) {
+			ERROR("LOCKING",
+			      "recursive locking is bad, do not use this ever.\n" . $herecurr);
 		}
 
 # check for lockdep_set_novalidate_class

@@ -20,10 +20,12 @@ static int __igt_client_fill(struct intel_engine_cs *engine)
 {
 	struct intel_context *ce = engine->kernel_context;
 	struct drm_i915_gem_object *obj;
-	I915_RND_STATE(prng);
+	struct rnd_state prng;
 	IGT_TIMEOUT(end);
 	u32 *vaddr;
 	int err = 0;
+
+	prandom_seed_state(&prng, i915_selftest.random_seed);
 
 	intel_engine_pm_get(engine);
 	do {

@@ -8,6 +8,10 @@
 #ifndef WFX_HIF_API_CMD_H
 #define WFX_HIF_API_CMD_H
 
+#include <linux/ieee80211.h>
+
+#include "hif_api_general.h"
+
 enum hif_requests_ids {
 	HIF_REQ_ID_RESET                = 0x0a,
 	HIF_REQ_ID_READ_MIB             = 0x05,
@@ -96,7 +100,7 @@ struct hif_req_update_ie {
 	u8     reserved1:5;
 	u8     reserved2;
 	__le16 num_ies;
-	u8     ie[];
+	struct element ie[];
 } __packed;
 
 struct hif_cnf_update_ie {

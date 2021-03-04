@@ -608,10 +608,11 @@ i915_gem_object_release_stolen(struct drm_i915_gem_object *obj)
 	struct drm_mm_node *stolen = fetch_and_zero(&obj->stolen);
 
 	GEM_BUG_ON(!stolen);
-	i915_gem_stolen_remove_node(i915, stolen);
-	kfree(stolen);
 
 	i915_gem_object_release_memory_region(obj);
+
+	i915_gem_stolen_remove_node(i915, stolen);
+	kfree(stolen);
 }
 
 static const struct drm_i915_gem_object_ops i915_gem_object_stolen_ops = {
@@ -621,13 +622,18 @@ static const struct drm_i915_gem_object_ops i915_gem_object_stolen_ops = {
 	.release = i915_gem_object_release_stolen,
 };
 
-static int __i915_gem_object_create_stolen(struct intel_memory_region *mem,
-					   struct drm_i915_gem_object *obj,
-					   struct drm_mm_node *stolen)
+static struct drm_i915_gem_object *
+__i915_gem_object_create_stolen(struct intel_memory_region *mem,
+				struct drm_mm_node *stolen)
 {
 	static struct lock_class_key lock_class;
+	struct drm_i915_gem_object *obj;
 	unsigned int cache_level;
-	int err;
+	int err = -ENOMEM;
+
+	obj = i915_gem_object_alloc();
+	if (!obj)
+		goto err;
 
 	drm_gem_private_object_init(&mem->i915->drm, &obj->base, stolen->size);
 	i915_gem_object_init(obj, &i915_gem_object_stolen_ops, &lock_class);
@@ -639,47 +645,55 @@ static int __i915_gem_object_create_stolen(struct intel_memory_region *mem,
 
 	err = i915_gem_object_pin_pages(obj);
 	if (err)
-		return err;
+		goto cleanup;
 
 	i915_gem_object_init_memory_region(obj, mem, 0);
 
-	return 0;
+	return obj;
+
+cleanup:
+	i915_gem_object_free(obj);
+err:
+	return ERR_PTR(err);
 }
 
-static int _i915_gem_object_stolen_init(struct intel_memory_region *mem,
-					struct drm_i915_gem_object *obj,
-					resource_size_t size,
-					unsigned int flags)
+static struct drm_i915_gem_object *
+_i915_gem_object_create_stolen(struct intel_memory_region *mem,
+			       resource_size_t size,
+			       unsigned int flags)
 {
 	struct drm_i915_private *i915 = mem->i915;
+	struct drm_i915_gem_object *obj;
 	struct drm_mm_node *stolen;
 	int ret;
 
 	if (!drm_mm_initialized(&i915->mm.stolen))
-		return -ENODEV;
+		return ERR_PTR(-ENODEV);
 
 	if (size == 0)
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 
 	stolen = kzalloc(sizeof(*stolen), GFP_KERNEL);
 	if (!stolen)
-		return -ENOMEM;
+		return ERR_PTR(-ENOMEM);
 
 	ret = i915_gem_stolen_insert_node(i915, stolen, size, 4096);
-	if (ret)
+	if (ret) {
+		obj = ERR_PTR(ret);
 		goto err_free;
+	}
 
-	ret = __i915_gem_object_create_stolen(mem, obj, stolen);
-	if (ret)
+	obj = __i915_gem_object_create_stolen(mem, stolen);
+	if (IS_ERR(obj))
 		goto err_remove;
 
-	return 0;
+	return obj;
 
 err_remove:
 	i915_gem_stolen_remove_node(i915, stolen);
 err_free:
 	kfree(stolen);
-	return ret;
+	return obj;
 }
 
 struct drm_i915_gem_object *
@@ -709,7 +723,7 @@ static void release_stolen(struct intel_memory_region *mem)
 static const struct intel_memory_region_ops i915_region_stolen_ops = {
 	.init = init_stolen,
 	.release = release_stolen,
-	.init_object = _i915_gem_object_stolen_init,
+	.create_object = _i915_gem_object_create_stolen,
 };
 
 struct intel_memory_region *i915_gem_stolen_setup(struct drm_i915_private *i915)
@@ -753,32 +767,21 @@ i915_gem_object_create_stolen_for_preallocated(struct drm_i915_private *i915,
 	mutex_lock(&i915->mm.stolen_lock);
 	ret = drm_mm_reserve_node(&i915->mm.stolen, stolen);
 	mutex_unlock(&i915->mm.stolen_lock);
-	if (ret)
+	if (ret) {
+		obj = ERR_PTR(ret);
 		goto err_free;
-
-	obj = i915_gem_object_alloc();
-	if (!obj) {
-		ret = -ENOMEM;
-		goto err_stolen;
 	}
 
-	ret = __i915_gem_object_create_stolen(mem, obj, stolen);
-	if (ret)
-		goto err_object_free;
+	obj = __i915_gem_object_create_stolen(mem, stolen);
+	if (IS_ERR(obj))
+		goto err_stolen;
 
 	i915_gem_object_set_cache_coherency(obj, I915_CACHE_NONE);
 	return obj;
 
-err_object_free:
-	i915_gem_object_free(obj);
 err_stolen:
 	i915_gem_stolen_remove_node(i915, stolen);
 err_free:
 	kfree(stolen);
-	return ERR_PTR(ret);
-}
-
-bool i915_gem_object_is_stolen(const struct drm_i915_gem_object *obj)
-{
-	return obj->ops == &i915_gem_object_stolen_ops;
+	return obj;
 }

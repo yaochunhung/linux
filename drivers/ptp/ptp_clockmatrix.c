@@ -160,6 +160,7 @@ static int idtcm_xfer_read(struct idtcm *idtcm,
 	struct i2c_client *client = idtcm->client;
 	struct i2c_msg msg[2];
 	int cnt;
+	char *fmt = "i2c_transfer failed at %d in %s, at addr: %04X!\n";
 
 	msg[0].addr = client->addr;
 	msg[0].flags = 0;
@@ -175,12 +176,14 @@ static int idtcm_xfer_read(struct idtcm *idtcm,
 
 	if (cnt < 0) {
 		dev_err(&client->dev,
-			"i2c_transfer failed at %d in %s, at addr: %04x!",
-			__LINE__, __func__, regaddr);
+			fmt,
+			__LINE__,
+			__func__,
+			regaddr);
 		return cnt;
 	} else if (cnt != 2) {
 		dev_err(&client->dev,
-			"i2c_transfer sent only %d of %d messages", cnt, 2);
+			"i2c_transfer sent only %d of %d messages\n", cnt, 2);
 		return -EIO;
 	}
 
@@ -196,6 +199,7 @@ static int idtcm_xfer_write(struct idtcm *idtcm,
 	/* we add 1 byte for device register */
 	u8 msg[IDTCM_MAX_WRITE_COUNT + 1];
 	int cnt;
+	char *fmt = "i2c_master_send failed at %d in %s, at addr: %04X!\n";
 
 	if (count > IDTCM_MAX_WRITE_COUNT)
 		return -EINVAL;
@@ -207,8 +211,10 @@ static int idtcm_xfer_write(struct idtcm *idtcm,
 
 	if (cnt < 0) {
 		dev_err(&client->dev,
-			"i2c_master_send failed at %d in %s, at addr: %04x!",
-			__LINE__, __func__, regaddr);
+			fmt,
+			__LINE__,
+			__func__,
+			regaddr);
 		return cnt;
 	}
 
@@ -229,9 +235,10 @@ static int idtcm_page_offset(struct idtcm *idtcm, u8 val)
 	buf[3] = 0x20;
 
 	err = idtcm_xfer_write(idtcm, PAGE_ADDR, buf, sizeof(buf));
+
 	if (err) {
 		idtcm->page_offset = 0xff;
-		dev_err(&idtcm->client->dev, "failed to set page offset");
+		dev_err(&idtcm->client->dev, "failed to set page offset\n");
 	} else {
 		idtcm->page_offset = val;
 	}
@@ -253,6 +260,7 @@ static int _idtcm_rdwr(struct idtcm *idtcm,
 	lo = regaddr & 0xff;
 
 	err = idtcm_page_offset(idtcm, hi);
+
 	if (err)
 		return err;
 
@@ -282,9 +290,12 @@ static int idtcm_write(struct idtcm *idtcm,
 
 static int clear_boot_status(struct idtcm *idtcm)
 {
+	int err;
 	u8 buf[4] = {0};
 
-	return idtcm_write(idtcm, GENERAL_STATUS, BOOT_STATUS, buf, sizeof(buf));
+	err = idtcm_write(idtcm, GENERAL_STATUS, BOOT_STATUS, buf, sizeof(buf));
+
+	return err;
 }
 
 static int read_boot_status(struct idtcm *idtcm, u32 *status)
@@ -307,6 +318,7 @@ static int wait_for_boot_status_ready(struct idtcm *idtcm)
 
 	do {
 		err = read_boot_status(idtcm, &status);
+
 		if (err)
 			return err;
 
@@ -318,70 +330,9 @@ static int wait_for_boot_status_ready(struct idtcm *idtcm)
 
 	} while (i);
 
-	dev_warn(&idtcm->client->dev, "%s timed out", __func__);
+	dev_warn(&idtcm->client->dev, "%s timed out\n", __func__);
 
 	return -EBUSY;
-}
-
-static int read_sys_apll_status(struct idtcm *idtcm, u8 *status)
-{
-	return idtcm_read(idtcm, STATUS, DPLL_SYS_APLL_STATUS, status,
-			  sizeof(u8));
-}
-
-static int read_sys_dpll_status(struct idtcm *idtcm, u8 *status)
-{
-	return idtcm_read(idtcm, STATUS, DPLL_SYS_STATUS, status, sizeof(u8));
-}
-
-static int wait_for_sys_apll_dpll_lock(struct idtcm *idtcm)
-{
-	unsigned long timeout = jiffies + msecs_to_jiffies(LOCK_TIMEOUT_MS);
-	u8 apll = 0;
-	u8 dpll = 0;
-	int err;
-
-	do {
-		err = read_sys_apll_status(idtcm, &apll);
-		if (err)
-			return err;
-
-		err = read_sys_dpll_status(idtcm, &dpll);
-		if (err)
-			return err;
-
-		apll &= SYS_APLL_LOSS_LOCK_LIVE_MASK;
-		dpll &= DPLL_SYS_STATE_MASK;
-
-		if (apll == SYS_APLL_LOSS_LOCK_LIVE_LOCKED &&
-		    dpll == DPLL_STATE_LOCKED) {
-			return 0;
-		} else if (dpll == DPLL_STATE_FREERUN ||
-			   dpll == DPLL_STATE_HOLDOVER ||
-			   dpll == DPLL_STATE_OPEN_LOOP) {
-			dev_warn(&idtcm->client->dev,
-				"No wait state: DPLL_SYS_STATE %d", dpll);
-			return -EPERM;
-		}
-
-		msleep(LOCK_POLL_INTERVAL_MS);
-	} while (time_is_after_jiffies(timeout));
-
-	dev_warn(&idtcm->client->dev,
-		 "%d ms lock timeout: SYS APLL Loss Lock %d  SYS DPLL state %d",
-		 LOCK_TIMEOUT_MS, apll, dpll);
-
-	return -ETIME;
-}
-
-static void wait_for_chip_ready(struct idtcm *idtcm)
-{
-	if (wait_for_boot_status_ready(idtcm))
-		dev_warn(&idtcm->client->dev, "BOOT_STATUS != 0xA0");
-
-	if (wait_for_sys_apll_dpll_lock(idtcm))
-		dev_warn(&idtcm->client->dev,
-			 "Continuing while SYS APLL/DPLL is not locked");
 }
 
 static int _idtcm_gettime(struct idtcm_channel *channel,
@@ -409,12 +360,14 @@ static int _idtcm_gettime(struct idtcm_channel *channel,
 
 	/* wait trigger to be 0 */
 	while (trigger & TOD_READ_TRIGGER_MASK) {
+
 		if (idtcm->calculate_overhead_flag)
 			idtcm->start_time = ktime_get_raw();
 
 		err = idtcm_read(idtcm, channel->tod_read_primary,
 				 TOD_READ_PRIMARY_CMD, &trigger,
 				 sizeof(trigger));
+
 		if (err)
 			return err;
 
@@ -424,6 +377,7 @@ static int _idtcm_gettime(struct idtcm_channel *channel,
 
 	err = idtcm_read(idtcm, channel->tod_read_primary,
 			 TOD_READ_PRIMARY, buf, sizeof(buf));
+
 	if (err)
 		return err;
 
@@ -444,7 +398,7 @@ static int _sync_pll_output(struct idtcm *idtcm,
 	u16 sync_ctrl1;
 	u8 temp;
 
-	if (qn == 0 && qn_plus_1 == 0)
+	if ((qn == 0) && (qn_plus_1 == 0))
 		return 0;
 
 	switch (pll) {
@@ -509,7 +463,7 @@ static int _sync_pll_output(struct idtcm *idtcm,
 		return err;
 
 	/* PLL5 can have OUT8 as second additional output. */
-	if (pll == 5 && qn_plus_1 != 0) {
+	if ((pll == 5) && (qn_plus_1 != 0)) {
 		err = idtcm_read(idtcm, 0, HW_Q8_CTRL_SPARE,
 				 &temp, sizeof(temp));
 		if (err)
@@ -531,7 +485,7 @@ static int _sync_pll_output(struct idtcm *idtcm,
 	}
 
 	/* PLL6 can have OUT11 as second additional output. */
-	if (pll == 6 && qn_plus_1 != 0) {
+	if ((pll == 6) && (qn_plus_1 != 0)) {
 		err = idtcm_read(idtcm, 0, HW_Q11_CTRL_SPARE,
 				 &temp, sizeof(temp));
 		if (err)
@@ -586,6 +540,7 @@ static int sync_source_dpll_tod_pps(u16 tod_addr, u8 *sync_src)
 static int idtcm_sync_pps_output(struct idtcm_channel *channel)
 {
 	struct idtcm *idtcm = channel->idtcm;
+
 	u8 pll;
 	u8 sync_src;
 	u8 qn;
@@ -594,6 +549,7 @@ static int idtcm_sync_pps_output(struct idtcm_channel *channel)
 	u8 out8_mux = 0;
 	u8 out11_mux = 0;
 	u8 temp;
+
 	u16 output_mask = channel->output_mask;
 
 	err = sync_source_dpll_tod_pps(channel->tod_n, &sync_src);
@@ -654,7 +610,7 @@ static int idtcm_sync_pps_output(struct idtcm_channel *channel)
 			}
 		}
 
-		if (qn != 0 || qn_plus_1 != 0)
+		if ((qn != 0) || (qn_plus_1 != 0))
 			err = _sync_pll_output(idtcm, pll, sync_src, qn,
 					       qn_plus_1);
 
@@ -670,6 +626,7 @@ static int _idtcm_set_dpll_hw_tod(struct idtcm_channel *channel,
 			       enum hw_tod_write_trig_sel wr_trig)
 {
 	struct idtcm *idtcm = channel->idtcm;
+
 	u8 buf[TOD_BYTE_COUNT];
 	u8 cmd;
 	int err;
@@ -679,6 +636,7 @@ static int _idtcm_set_dpll_hw_tod(struct idtcm_channel *channel,
 	/* Configure HW TOD write trigger. */
 	err = idtcm_read(idtcm, channel->hw_dpll_n, HW_DPLL_TOD_CTRL_1,
 			 &cmd, sizeof(cmd));
+
 	if (err)
 		return err;
 
@@ -687,16 +645,20 @@ static int _idtcm_set_dpll_hw_tod(struct idtcm_channel *channel,
 
 	err = idtcm_write(idtcm, channel->hw_dpll_n, HW_DPLL_TOD_CTRL_1,
 			  &cmd, sizeof(cmd));
+
 	if (err)
 		return err;
 
 	if (wr_trig  != HW_TOD_WR_TRIG_SEL_MSB) {
+
 		err = timespec_to_char_array(&local_ts, buf, sizeof(buf));
+
 		if (err)
 			return err;
 
 		err = idtcm_write(idtcm, channel->hw_dpll_n,
 				  HW_DPLL_TOD_OVR__0, buf, sizeof(buf));
+
 		if (err)
 			return err;
 	}
@@ -708,6 +670,7 @@ static int _idtcm_set_dpll_hw_tod(struct idtcm_channel *channel,
 			  &cmd, sizeof(cmd));
 
 	if (wr_trig == HW_TOD_WR_TRIG_SEL_MSB) {
+
 		if (idtcm->calculate_overhead_flag) {
 			/* Assumption: I2C @ 400KHz */
 			ktime_t diff = ktime_sub(ktime_get_raw(),
@@ -722,6 +685,7 @@ static int _idtcm_set_dpll_hw_tod(struct idtcm_channel *channel,
 		}
 
 		err = timespec_to_char_array(&local_ts, buf, sizeof(buf));
+
 		if (err)
 			return err;
 
@@ -745,6 +709,7 @@ static int _idtcm_set_dpll_scsr_tod(struct idtcm_channel *channel,
 	timespec64_add_ns(&local_ts, SETTIME_CORRECTION);
 
 	err = timespec_to_char_array(&local_ts, buf, sizeof(buf));
+
 	if (err)
 		return err;
 
@@ -785,7 +750,7 @@ static int _idtcm_set_dpll_scsr_tod(struct idtcm_channel *channel,
 
 		if (++count > 20) {
 			dev_err(&idtcm->client->dev,
-				"Timed out waiting for the write counter");
+				"Timed out waiting for the write counter\n");
 			return -EIO;
 		}
 	}
@@ -848,9 +813,10 @@ static int _idtcm_settime_deprecated(struct idtcm_channel *channel,
 	int err;
 
 	err = _idtcm_set_dpll_hw_tod(channel, ts, HW_TOD_WR_TRIG_SEL_MSB);
+
 	if (err) {
 		dev_err(&idtcm->client->dev,
-			"%s: Set HW ToD failed", __func__);
+			"%s: Set HW ToD failed\n", __func__);
 		return err;
 	}
 
@@ -872,6 +838,7 @@ static int idtcm_set_phase_pull_in_offset(struct idtcm_channel *channel,
 	int err;
 	int i;
 	struct idtcm *idtcm = channel->idtcm;
+
 	u8 buf[4];
 
 	for (i = 0; i < 4; i++) {
@@ -891,6 +858,7 @@ static int idtcm_set_phase_pull_in_slope_limit(struct idtcm_channel *channel,
 	int err;
 	u8 i;
 	struct idtcm *idtcm = channel->idtcm;
+
 	u8 buf[3];
 
 	if (max_ffo_ppb & 0xff000000)
@@ -911,10 +879,12 @@ static int idtcm_start_phase_pull_in(struct idtcm_channel *channel)
 {
 	int err;
 	struct idtcm *idtcm = channel->idtcm;
+
 	u8 buf;
 
 	err = idtcm_read(idtcm, channel->dpll_phase_pull_in, PULL_IN_CTRL,
 			 &buf, sizeof(buf));
+
 	if (err)
 		return err;
 
@@ -936,10 +906,12 @@ static int idtcm_do_phase_pull_in(struct idtcm_channel *channel,
 	int err;
 
 	err = idtcm_set_phase_pull_in_offset(channel, -offset_ns);
+
 	if (err)
 		return err;
 
 	err = idtcm_set_phase_pull_in_slope_limit(channel, max_ffo_ppb);
+
 	if (err)
 		return err;
 
@@ -955,6 +927,7 @@ static int set_tod_write_overhead(struct idtcm_channel *channel)
 	s64 lowest_ns = 0;
 	int err;
 	u8 i;
+
 	ktime_t start;
 	ktime_t stop;
 	ktime_t diff;
@@ -966,10 +939,12 @@ static int set_tod_write_overhead(struct idtcm_channel *channel)
 		    buf, sizeof(buf));
 
 	for (i = 0; i < TOD_WRITE_OVERHEAD_COUNT_MAX; i++) {
+
 		start = ktime_get_raw();
 
 		err = idtcm_write(idtcm, channel->hw_dpll_n,
 				  HW_DPLL_TOD_OVR__0, buf, sizeof(buf));
+
 		if (err)
 			return err;
 
@@ -1005,10 +980,12 @@ static int _idtcm_adjtime_deprecated(struct idtcm_channel *channel, s64 delta)
 		idtcm->calculate_overhead_flag = 1;
 
 		err = set_tod_write_overhead(channel);
+
 		if (err)
 			return err;
 
 		err = _idtcm_gettime(channel, &ts);
+
 		if (err)
 			return err;
 
@@ -1041,14 +1018,14 @@ static int idtcm_state_machine_reset(struct idtcm *idtcm)
 
 			if (status == 0xA0) {
 				dev_dbg(&idtcm->client->dev,
-					"SM_RESET completed in %d ms", i * 100);
+					"SM_RESET completed in %d ms\n",
+					i * 100);
 				break;
 			}
 		}
 
 		if (!status)
-			dev_err(&idtcm->client->dev,
-				"Timed out waiting for CM_RESET to complete");
+			dev_err(&idtcm->client->dev, "Timed out waiting for CM_RESET to complete\n");
 	}
 
 	return err;
@@ -1144,12 +1121,12 @@ static int set_pll_output_mask(struct idtcm *idtcm, u16 addr, u8 val)
 static int set_tod_ptp_pll(struct idtcm *idtcm, u8 index, u8 pll)
 {
 	if (index >= MAX_TOD) {
-		dev_err(&idtcm->client->dev, "ToD%d not supported", index);
+		dev_err(&idtcm->client->dev, "ToD%d not supported\n", index);
 		return -EINVAL;
 	}
 
 	if (pll >= MAX_PLL) {
-		dev_err(&idtcm->client->dev, "Pll%d not supported", pll);
+		dev_err(&idtcm->client->dev, "Pll%d not supported\n", pll);
 		return -EINVAL;
 	}
 
@@ -1167,7 +1144,8 @@ static int check_and_set_masks(struct idtcm *idtcm,
 	switch (regaddr) {
 	case TOD_MASK_ADDR:
 		if ((val & 0xf0) || !(val & 0x0f)) {
-			dev_err(&idtcm->client->dev, "Invalid TOD mask 0x%02x", val);
+			dev_err(&idtcm->client->dev,
+				"Invalid TOD mask 0x%hhx\n", val);
 			err = -EINVAL;
 		} else {
 			idtcm->tod_mask = val;
@@ -1198,14 +1176,14 @@ static void display_pll_and_masks(struct idtcm *idtcm)
 	u8 i;
 	u8 mask;
 
-	dev_dbg(&idtcm->client->dev, "tod_mask = 0x%02x", idtcm->tod_mask);
+	dev_dbg(&idtcm->client->dev, "tod_mask = 0x%02x\n", idtcm->tod_mask);
 
 	for (i = 0; i < MAX_TOD; i++) {
 		mask = 1 << i;
 
 		if (mask & idtcm->tod_mask)
 			dev_dbg(&idtcm->client->dev,
-				"TOD%d pll = %d    output_mask = 0x%04x",
+				"TOD%d pll = %d    output_mask = 0x%04x\n",
 				i, idtcm->channel[i].pll,
 				idtcm->channel[i].output_mask);
 	}
@@ -1226,16 +1204,19 @@ static int idtcm_load_firmware(struct idtcm *idtcm,
 	if (firmware) /* module parameter */
 		snprintf(fname, sizeof(fname), "%s", firmware);
 
-	dev_dbg(&idtcm->client->dev, "requesting firmware '%s'", fname);
+	dev_dbg(&idtcm->client->dev, "requesting firmware '%s'\n", fname);
 
 	err = request_firmware(&fw, fname, dev);
+
 	if (err) {
 		dev_err(&idtcm->client->dev,
-			"Failed at line %d in %s!", __LINE__, __func__);
+			"Failed at line %d in func %s!\n",
+			__LINE__,
+			__func__);
 		return err;
 	}
 
-	dev_dbg(&idtcm->client->dev, "firmware size %zu bytes", fw->size);
+	dev_dbg(&idtcm->client->dev, "firmware size %zu bytes\n", fw->size);
 
 	rec = (struct idtcm_fwrc *) fw->data;
 
@@ -1243,9 +1224,10 @@ static int idtcm_load_firmware(struct idtcm *idtcm,
 		idtcm_state_machine_reset(idtcm);
 
 	for (len = fw->size; len > 0; len -= sizeof(*rec)) {
+
 		if (rec->reserved) {
 			dev_err(&idtcm->client->dev,
-				"bad firmware, reserved field non-zero");
+				"bad firmware, reserved field non-zero\n");
 			err = -EINVAL;
 		} else {
 			regaddr = rec->hiaddr << 8;
@@ -1263,11 +1245,13 @@ static int idtcm_load_firmware(struct idtcm *idtcm,
 			err = 0;
 
 			/* Top (status registers) and bottom are read-only */
-			if (regaddr < GPIO_USER_CONTROL || regaddr >= SCRATCH)
+			if ((regaddr < GPIO_USER_CONTROL)
+			    || (regaddr >= SCRATCH))
 				continue;
 
 			/* Page size 128, last 4 bytes of page skipped */
-			if ((loaddr > 0x7b && loaddr <= 0x7f) || loaddr > 0xfb)
+			if (((loaddr > 0x7b) && (loaddr <= 0x7f))
+			     || loaddr > 0xfb)
 				continue;
 
 			err = idtcm_write(idtcm, regaddr, 0, &val, sizeof(val));
@@ -1301,6 +1285,7 @@ static int idtcm_output_enable(struct idtcm_channel *channel,
 	}
 
 	err = idtcm_read(idtcm, (u16)base, OUT_CTRL_1, &val, sizeof(val));
+
 	if (err)
 		return err;
 
@@ -1323,8 +1308,11 @@ static int idtcm_output_mask_enable(struct idtcm_channel *channel,
 	outn = 0;
 
 	while (mask) {
+
 		if (mask & 0x1) {
+
 			err = idtcm_output_enable(channel, enable, outn);
+
 			if (err)
 				return err;
 		}
@@ -1340,23 +1328,13 @@ static int idtcm_perout_enable(struct idtcm_channel *channel,
 			       bool enable,
 			       struct ptp_perout_request *perout)
 {
-	struct idtcm *idtcm = channel->idtcm;
 	unsigned int flags = perout->flags;
-	struct timespec64 ts = {0, 0};
-	int err;
 
 	if (flags == PEROUT_ENABLE_OUTPUT_MASK)
-		err = idtcm_output_mask_enable(channel, enable);
-	else
-		err = idtcm_output_enable(channel, enable, perout->index);
+		return idtcm_output_mask_enable(channel, enable);
 
-	if (err) {
-		dev_err(&idtcm->client->dev, "Unable to set output enable");
-		return err;
-	}
-
-	/* Align output to internal 1 PPS */
-	return _idtcm_settime(channel, &ts, SCSR_TOD_WR_TYPE_SEL_DELTA_PLUS);
+	/* Enable/disable individual output instead */
+	return idtcm_output_enable(channel, enable, perout->index);
 }
 
 static int idtcm_get_pll_mode(struct idtcm_channel *channel,
@@ -1414,6 +1392,7 @@ static int idtcm_set_pll_mode(struct idtcm_channel *channel,
 static int _idtcm_adjphase(struct idtcm_channel *channel, s32 delta_ns)
 {
 	struct idtcm *idtcm = channel->idtcm;
+
 	int err;
 	u8 i;
 	u8 buf[4] = {0};
@@ -1421,7 +1400,9 @@ static int _idtcm_adjphase(struct idtcm_channel *channel, s32 delta_ns)
 	s64 offset_ps;
 
 	if (channel->pll_mode != PLL_MODE_WRITE_PHASE) {
+
 		err = idtcm_set_pll_mode(channel, PLL_MODE_WRITE_PHASE);
+
 		if (err)
 			return err;
 	}
@@ -1497,16 +1478,20 @@ static int _idtcm_adjfine(struct idtcm_channel *channel, long scaled_ppm)
 
 static int idtcm_gettime(struct ptp_clock_info *ptp, struct timespec64 *ts)
 {
-	struct idtcm_channel *channel = container_of(ptp, struct idtcm_channel, caps);
+	struct idtcm_channel *channel =
+		container_of(ptp, struct idtcm_channel, caps);
 	struct idtcm *idtcm = channel->idtcm;
 	int err;
 
 	mutex_lock(&idtcm->reg_lock);
 
 	err = _idtcm_gettime(channel, ts);
+
 	if (err)
-		dev_err(&idtcm->client->dev, "Failed at line %d in %s!",
-			__LINE__, __func__);
+		dev_err(&idtcm->client->dev,
+			"Failed at line %d in func %s!\n",
+			__LINE__,
+			__func__);
 
 	mutex_unlock(&idtcm->reg_lock);
 
@@ -1516,16 +1501,20 @@ static int idtcm_gettime(struct ptp_clock_info *ptp, struct timespec64 *ts)
 static int idtcm_settime_deprecated(struct ptp_clock_info *ptp,
 				    const struct timespec64 *ts)
 {
-	struct idtcm_channel *channel = container_of(ptp, struct idtcm_channel, caps);
+	struct idtcm_channel *channel =
+		container_of(ptp, struct idtcm_channel, caps);
 	struct idtcm *idtcm = channel->idtcm;
 	int err;
 
 	mutex_lock(&idtcm->reg_lock);
 
 	err = _idtcm_settime_deprecated(channel, ts);
+
 	if (err)
 		dev_err(&idtcm->client->dev,
-			"Failed at line %d in %s!", __LINE__, __func__);
+			"Failed at line %d in func %s!\n",
+			__LINE__,
+			__func__);
 
 	mutex_unlock(&idtcm->reg_lock);
 
@@ -1535,16 +1524,20 @@ static int idtcm_settime_deprecated(struct ptp_clock_info *ptp,
 static int idtcm_settime(struct ptp_clock_info *ptp,
 			 const struct timespec64 *ts)
 {
-	struct idtcm_channel *channel = container_of(ptp, struct idtcm_channel, caps);
+	struct idtcm_channel *channel =
+		container_of(ptp, struct idtcm_channel, caps);
 	struct idtcm *idtcm = channel->idtcm;
 	int err;
 
 	mutex_lock(&idtcm->reg_lock);
 
 	err = _idtcm_settime(channel, ts, SCSR_TOD_WR_TYPE_SEL_ABSOLUTE);
+
 	if (err)
 		dev_err(&idtcm->client->dev,
-			"Failed at line %d in %s!", __LINE__, __func__);
+			"Failed at line %d in func %s!\n",
+			__LINE__,
+			__func__);
 
 	mutex_unlock(&idtcm->reg_lock);
 
@@ -1553,16 +1546,20 @@ static int idtcm_settime(struct ptp_clock_info *ptp,
 
 static int idtcm_adjtime_deprecated(struct ptp_clock_info *ptp, s64 delta)
 {
-	struct idtcm_channel *channel = container_of(ptp, struct idtcm_channel, caps);
+	struct idtcm_channel *channel =
+		container_of(ptp, struct idtcm_channel, caps);
 	struct idtcm *idtcm = channel->idtcm;
 	int err;
 
 	mutex_lock(&idtcm->reg_lock);
 
 	err = _idtcm_adjtime_deprecated(channel, delta);
+
 	if (err)
 		dev_err(&idtcm->client->dev,
-			"Failed at line %d in %s!", __LINE__, __func__);
+			"Failed at line %d in func %s!\n",
+			__LINE__,
+			__func__);
 
 	mutex_unlock(&idtcm->reg_lock);
 
@@ -1571,7 +1568,8 @@ static int idtcm_adjtime_deprecated(struct ptp_clock_info *ptp, s64 delta)
 
 static int idtcm_adjtime(struct ptp_clock_info *ptp, s64 delta)
 {
-	struct idtcm_channel *channel = container_of(ptp, struct idtcm_channel, caps);
+	struct idtcm_channel *channel =
+		container_of(ptp, struct idtcm_channel, caps);
 	struct idtcm *idtcm = channel->idtcm;
 	struct timespec64 ts;
 	enum scsr_tod_write_type_sel type;
@@ -1581,7 +1579,9 @@ static int idtcm_adjtime(struct ptp_clock_info *ptp, s64 delta)
 		err = idtcm_do_phase_pull_in(channel, delta, 0);
 		if (err)
 			dev_err(&idtcm->client->dev,
-				"Failed at line %d in %s!", __LINE__, __func__);
+				"Failed at line %d in func %s!\n",
+				__LINE__,
+				__func__);
 		return err;
 	}
 
@@ -1596,9 +1596,12 @@ static int idtcm_adjtime(struct ptp_clock_info *ptp, s64 delta)
 	mutex_lock(&idtcm->reg_lock);
 
 	err = _idtcm_settime(channel, &ts, type);
+
 	if (err)
 		dev_err(&idtcm->client->dev,
-			"Failed at line %d in %s!", __LINE__, __func__);
+			"Failed at line %d in func %s!\n",
+			__LINE__,
+			__func__);
 
 	mutex_unlock(&idtcm->reg_lock);
 
@@ -1607,16 +1610,22 @@ static int idtcm_adjtime(struct ptp_clock_info *ptp, s64 delta)
 
 static int idtcm_adjphase(struct ptp_clock_info *ptp, s32 delta)
 {
-	struct idtcm_channel *channel = container_of(ptp, struct idtcm_channel, caps);
+	struct idtcm_channel *channel =
+		container_of(ptp, struct idtcm_channel, caps);
+
 	struct idtcm *idtcm = channel->idtcm;
+
 	int err;
 
 	mutex_lock(&idtcm->reg_lock);
 
 	err = _idtcm_adjphase(channel, delta);
+
 	if (err)
 		dev_err(&idtcm->client->dev,
-			"Failed at line %d in %s!", __LINE__, __func__);
+			"Failed at line %d in func %s!\n",
+			__LINE__,
+			__func__);
 
 	mutex_unlock(&idtcm->reg_lock);
 
@@ -1625,16 +1634,22 @@ static int idtcm_adjphase(struct ptp_clock_info *ptp, s32 delta)
 
 static int idtcm_adjfine(struct ptp_clock_info *ptp,  long scaled_ppm)
 {
-	struct idtcm_channel *channel = container_of(ptp, struct idtcm_channel, caps);
+	struct idtcm_channel *channel =
+		container_of(ptp, struct idtcm_channel, caps);
+
 	struct idtcm *idtcm = channel->idtcm;
+
 	int err;
 
 	mutex_lock(&idtcm->reg_lock);
 
 	err = _idtcm_adjfine(channel, scaled_ppm);
+
 	if (err)
 		dev_err(&idtcm->client->dev,
-			"Failed at line %d in %s!", __LINE__, __func__);
+			"Failed at line %d in func %s!\n",
+			__LINE__,
+			__func__);
 
 	mutex_unlock(&idtcm->reg_lock);
 
@@ -1645,7 +1660,9 @@ static int idtcm_enable(struct ptp_clock_info *ptp,
 			struct ptp_clock_request *rq, int on)
 {
 	int err;
-	struct idtcm_channel *channel = container_of(ptp, struct idtcm_channel, caps);
+
+	struct idtcm_channel *channel =
+		container_of(ptp, struct idtcm_channel, caps);
 
 	switch (rq->type) {
 	case PTP_CLK_REQ_PEROUT:
@@ -1653,8 +1670,9 @@ static int idtcm_enable(struct ptp_clock_info *ptp,
 			err = idtcm_perout_enable(channel, false, &rq->perout);
 			if (err)
 				dev_err(&channel->idtcm->client->dev,
-					"Failed at line %d in %s!",
-					__LINE__, __func__);
+					"Failed at line %d in func %s!\n",
+					__LINE__,
+					__func__);
 			return err;
 		}
 
@@ -1666,7 +1684,9 @@ static int idtcm_enable(struct ptp_clock_info *ptp,
 		err = idtcm_perout_enable(channel, true, &rq->perout);
 		if (err)
 			dev_err(&channel->idtcm->client->dev,
-				"Failed at line %d in %s!", __LINE__, __func__);
+				"Failed at line %d in func %s!\n",
+				__LINE__,
+				__func__);
 		return err;
 	default:
 		break;
@@ -1686,7 +1706,7 @@ static int _enable_pll_tod_sync(struct idtcm *idtcm,
 	u16 dpll;
 	u16 out0 = 0, out1 = 0;
 
-	if (qn == 0 && qn_plus_1 == 0)
+	if ((qn == 0) && (qn_plus_1 == 0))
 		return 0;
 
 	switch (pll) {
@@ -1751,24 +1771,28 @@ static int _enable_pll_tod_sync(struct idtcm *idtcm,
 	 */
 	if (out0) {
 		err = idtcm_read(idtcm, out0, OUT_CTRL_1, &val, sizeof(val));
+
 		if (err)
 			return err;
 
 		val &= ~OUT_SYNC_DISABLE;
 
 		err = idtcm_write(idtcm, out0, OUT_CTRL_1, &val, sizeof(val));
+
 		if (err)
 			return err;
 	}
 
 	if (out1) {
 		err = idtcm_read(idtcm, out1, OUT_CTRL_1, &val, sizeof(val));
+
 		if (err)
 			return err;
 
 		val &= ~OUT_SYNC_DISABLE;
 
 		err = idtcm_write(idtcm, out1, OUT_CTRL_1, &val, sizeof(val));
+
 		if (err)
 			return err;
 	}
@@ -1788,6 +1812,7 @@ static int _enable_pll_tod_sync(struct idtcm *idtcm,
 static int idtcm_enable_tod_sync(struct idtcm_channel *channel)
 {
 	struct idtcm *idtcm = channel->idtcm;
+
 	u8 pll;
 	u8 sync_src;
 	u8 qn;
@@ -1829,7 +1854,8 @@ static int idtcm_enable_tod_sync(struct idtcm_channel *channel)
 		return -EINVAL;
 	}
 
-	err = idtcm_read(idtcm, 0, HW_Q8_CTRL_SPARE, &temp, sizeof(temp));
+	err = idtcm_read(idtcm, 0, HW_Q8_CTRL_SPARE,
+			 &temp, sizeof(temp));
 	if (err)
 		return err;
 
@@ -1837,7 +1863,8 @@ static int idtcm_enable_tod_sync(struct idtcm_channel *channel)
 	    Q9_TO_Q8_FANOUT_AND_CLOCK_SYNC_ENABLE_MASK)
 		out8_mux = 1;
 
-	err = idtcm_read(idtcm, 0, HW_Q11_CTRL_SPARE, &temp, sizeof(temp));
+	err = idtcm_read(idtcm, 0, HW_Q11_CTRL_SPARE,
+			 &temp, sizeof(temp));
 	if (err)
 		return err;
 
@@ -1881,9 +1908,10 @@ static int idtcm_enable_tod_sync(struct idtcm_channel *channel)
 			}
 		}
 
-		if (qn != 0 || qn_plus_1 != 0)
+		if ((qn != 0) || (qn_plus_1 != 0))
 			err = _enable_pll_tod_sync(idtcm, pll, sync_src, qn,
 					       qn_plus_1);
+
 		if (err)
 			return err;
 	}
@@ -1926,6 +1954,7 @@ static void idtcm_set_version_info(struct idtcm *idtcm)
 	u16 product_id;
 	u8 hw_rev_id;
 	u8 config_select;
+	char *fmt = "%d.%d.%d, Id: 0x%04x  HW Rev: %d  OTP Config Select: %d\n";
 
 	idtcm_read_major_release(idtcm, &major);
 	idtcm_read_minor_release(idtcm, &minor);
@@ -1944,9 +1973,7 @@ static void idtcm_set_version_info(struct idtcm *idtcm)
 	else
 		idtcm->deprecated = 1;
 
-	dev_info(&idtcm->client->dev,
-		 "%d.%d.%d, Id: 0x%04x  HW Rev: %d  OTP Config Select: %d",
-		 major, minor, hotfix,
+	dev_info(&idtcm->client->dev, fmt, major, minor, hotfix,
 		 product_id, hw_rev_id, config_select);
 }
 
@@ -2105,7 +2132,9 @@ static int idtcm_enable_channel(struct idtcm *idtcm, u32 index)
 		err = idtcm_enable_tod_sync(channel);
 		if (err) {
 			dev_err(&idtcm->client->dev,
-				"Failed at line %d in %s!", __LINE__, __func__);
+				"Failed at line %d in func %s!\n",
+				__LINE__,
+				__func__);
 			return err;
 		}
 	}
@@ -2114,14 +2143,16 @@ static int idtcm_enable_channel(struct idtcm *idtcm, u32 index)
 	err = idtcm_get_pll_mode(channel, &channel->pll_mode);
 	if (err) {
 		dev_err(&idtcm->client->dev,
-			"Error: %s - Unable to read pll mode", __func__);
+			"Error: %s - Unable to read pll mode\n", __func__);
 		return err;
 	}
 
 	err = idtcm_enable_tod(channel);
 	if (err) {
 		dev_err(&idtcm->client->dev,
-			"Failed at line %d in %s!", __LINE__, __func__);
+			"Failed at line %d in func %s!\n",
+			__LINE__,
+			__func__);
 		return err;
 	}
 
@@ -2136,7 +2167,7 @@ static int idtcm_enable_channel(struct idtcm *idtcm, u32 index)
 	if (!channel->ptp_clock)
 		return -ENOTSUPP;
 
-	dev_info(&idtcm->client->dev, "PLL%d registered as ptp%d",
+	dev_info(&idtcm->client->dev, "PLL%d registered as ptp%d\n",
 		 index, channel->ptp_clock->index);
 
 	return 0;
@@ -2148,6 +2179,7 @@ static void ptp_clock_unregister_all(struct idtcm *idtcm)
 	struct idtcm_channel *channel;
 
 	for (i = 0; i < MAX_TOD; i++) {
+
 		channel = &idtcm->channel[i];
 
 		if (channel->ptp_clock)
@@ -2176,6 +2208,7 @@ static int idtcm_probe(struct i2c_client *client,
 	struct idtcm *idtcm;
 	int err;
 	u8 i;
+	char *fmt = "Failed at %d in line %s with channel output %d!\n";
 
 	/* Unused for now */
 	(void)id;
@@ -2197,10 +2230,13 @@ static int idtcm_probe(struct i2c_client *client,
 	idtcm_set_version_info(idtcm);
 
 	err = idtcm_load_firmware(idtcm, &client->dev);
-	if (err)
-		dev_warn(&idtcm->client->dev, "loading firmware failed with %d", err);
 
-	wait_for_chip_ready(idtcm);
+	if (err)
+		dev_warn(&idtcm->client->dev,
+			 "loading firmware failed with %d\n", err);
+
+	if (wait_for_boot_status_ready(idtcm))
+		dev_warn(&idtcm->client->dev, "BOOT_STATUS != 0xA0\n");
 
 	if (idtcm->tod_mask) {
 		for (i = 0; i < MAX_TOD; i++) {
@@ -2208,14 +2244,17 @@ static int idtcm_probe(struct i2c_client *client,
 				err = idtcm_enable_channel(idtcm, i);
 				if (err) {
 					dev_err(&idtcm->client->dev,
-						"idtcm_enable_channel %d failed!", i);
+						fmt,
+						__LINE__,
+						__func__,
+						i);
 					break;
 				}
 			}
 		}
 	} else {
 		dev_err(&idtcm->client->dev,
-			"no PLLs flagged as PHCs, nothing to do");
+			"no PLLs flagged as PHCs, nothing to do\n");
 		err = -ENODEV;
 	}
 

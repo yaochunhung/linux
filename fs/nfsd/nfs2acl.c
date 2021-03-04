@@ -113,12 +113,10 @@ static __be32 nfsacld_proc_setacl(struct svc_rqst *rqstp)
 
 	fh_lock(fh);
 
-	error = set_posix_acl(&init_user_ns, inode, ACL_TYPE_ACCESS,
-			      argp->acl_access);
+	error = set_posix_acl(inode, ACL_TYPE_ACCESS, argp->acl_access);
 	if (error)
 		goto out_drop_lock;
-	error = set_posix_acl(&init_user_ns, inode, ACL_TYPE_DEFAULT,
-			      argp->acl_default);
+	error = set_posix_acl(inode, ACL_TYPE_DEFAULT, argp->acl_default);
 	if (error)
 		goto out_drop_lock;
 
@@ -190,49 +188,63 @@ out:
 
 static int nfsaclsvc_decode_getaclargs(struct svc_rqst *rqstp, __be32 *p)
 {
-	struct xdr_stream *xdr = &rqstp->rq_arg_stream;
 	struct nfsd3_getaclargs *argp = rqstp->rq_argp;
 
-	if (!svcxdr_decode_fhandle(xdr, &argp->fh))
+	p = nfs2svc_decode_fh(p, &argp->fh);
+	if (!p)
 		return 0;
-	if (xdr_stream_decode_u32(xdr, &argp->mask) < 0)
-		return 0;
+	argp->mask = ntohl(*p); p++;
 
-	return 1;
+	return xdr_argsize_check(rqstp, p);
 }
+
 
 static int nfsaclsvc_decode_setaclargs(struct svc_rqst *rqstp, __be32 *p)
 {
-	struct xdr_stream *xdr = &rqstp->rq_arg_stream;
 	struct nfsd3_setaclargs *argp = rqstp->rq_argp;
+	struct kvec *head = rqstp->rq_arg.head;
+	unsigned int base;
+	int n;
 
-	if (!svcxdr_decode_fhandle(xdr, &argp->fh))
+	p = nfs2svc_decode_fh(p, &argp->fh);
+	if (!p)
 		return 0;
-	if (xdr_stream_decode_u32(xdr, &argp->mask) < 0)
-		return 0;
-	if (argp->mask & ~NFS_ACL_MASK)
-		return 0;
-	if (!nfs_stream_decode_acl(xdr, NULL, (argp->mask & NFS_ACL) ?
-				   &argp->acl_access : NULL))
-		return 0;
-	if (!nfs_stream_decode_acl(xdr, NULL, (argp->mask & NFS_DFACL) ?
-				   &argp->acl_default : NULL))
+	argp->mask = ntohl(*p++);
+	if (argp->mask & ~NFS_ACL_MASK ||
+	    !xdr_argsize_check(rqstp, p))
 		return 0;
 
-	return 1;
+	base = (char *)p - (char *)head->iov_base;
+	n = nfsacl_decode(&rqstp->rq_arg, base, NULL,
+			  (argp->mask & NFS_ACL) ?
+			  &argp->acl_access : NULL);
+	if (n > 0)
+		n = nfsacl_decode(&rqstp->rq_arg, base + n, NULL,
+				  (argp->mask & NFS_DFACL) ?
+				  &argp->acl_default : NULL);
+	return (n > 0);
+}
+
+static int nfsaclsvc_decode_fhandleargs(struct svc_rqst *rqstp, __be32 *p)
+{
+	struct nfsd_fhandle *argp = rqstp->rq_argp;
+
+	p = nfs2svc_decode_fh(p, &argp->fh);
+	if (!p)
+		return 0;
+	return xdr_argsize_check(rqstp, p);
 }
 
 static int nfsaclsvc_decode_accessargs(struct svc_rqst *rqstp, __be32 *p)
 {
-	struct xdr_stream *xdr = &rqstp->rq_arg_stream;
-	struct nfsd3_accessargs *args = rqstp->rq_argp;
+	struct nfsd3_accessargs *argp = rqstp->rq_argp;
 
-	if (!svcxdr_decode_fhandle(xdr, &args->fh))
+	p = nfs2svc_decode_fh(p, &argp->fh);
+	if (!p)
 		return 0;
-	if (xdr_stream_decode_u32(xdr, &args->access) < 0)
-		return 0;
+	argp->access = ntohl(*p++);
 
-	return 1;
+	return xdr_argsize_check(rqstp, p);
 }
 
 /*
@@ -359,7 +371,6 @@ static const struct svc_procedure nfsd_acl_procedures2[5] = {
 		.pc_ressize = sizeof(struct nfsd_voidres),
 		.pc_cachetype = RC_NOCACHE,
 		.pc_xdrressize = ST,
-		.pc_name = "NULL",
 	},
 	[ACLPROC2_GETACL] = {
 		.pc_func = nfsacld_proc_getacl,
@@ -370,7 +381,6 @@ static const struct svc_procedure nfsd_acl_procedures2[5] = {
 		.pc_ressize = sizeof(struct nfsd3_getaclres),
 		.pc_cachetype = RC_NOCACHE,
 		.pc_xdrressize = ST+1+2*(1+ACL),
-		.pc_name = "GETACL",
 	},
 	[ACLPROC2_SETACL] = {
 		.pc_func = nfsacld_proc_setacl,
@@ -381,18 +391,16 @@ static const struct svc_procedure nfsd_acl_procedures2[5] = {
 		.pc_ressize = sizeof(struct nfsd_attrstat),
 		.pc_cachetype = RC_NOCACHE,
 		.pc_xdrressize = ST+AT,
-		.pc_name = "SETACL",
 	},
 	[ACLPROC2_GETATTR] = {
 		.pc_func = nfsacld_proc_getattr,
-		.pc_decode = nfssvc_decode_fhandleargs,
+		.pc_decode = nfsaclsvc_decode_fhandleargs,
 		.pc_encode = nfsaclsvc_encode_attrstatres,
 		.pc_release = nfsaclsvc_release_attrstat,
 		.pc_argsize = sizeof(struct nfsd_fhandle),
 		.pc_ressize = sizeof(struct nfsd_attrstat),
 		.pc_cachetype = RC_NOCACHE,
 		.pc_xdrressize = ST+AT,
-		.pc_name = "GETATTR",
 	},
 	[ACLPROC2_ACCESS] = {
 		.pc_func = nfsacld_proc_access,
@@ -403,7 +411,6 @@ static const struct svc_procedure nfsd_acl_procedures2[5] = {
 		.pc_ressize = sizeof(struct nfsd3_accessres),
 		.pc_cachetype = RC_NOCACHE,
 		.pc_xdrressize = ST+AT+1,
-		.pc_name = "SETATTR",
 	},
 };
 

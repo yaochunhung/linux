@@ -672,12 +672,14 @@ static int keyspan_pda_port_probe(struct usb_serial_port *port)
 	return 0;
 }
 
-static void keyspan_pda_port_remove(struct usb_serial_port *port)
+static int keyspan_pda_port_remove(struct usb_serial_port *port)
 {
 	struct keyspan_pda_private *priv;
 
 	priv = usb_get_serial_port_data(port);
 	kfree(priv);
+
+	return 0;
 }
 
 static struct usb_serial_driver keyspan_pda_fake_device = {

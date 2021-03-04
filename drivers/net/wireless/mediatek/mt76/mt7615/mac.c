@@ -7,7 +7,6 @@
  *         Lorenzo Bianconi <lorenzo@kernel.org>
  */
 
-#include <linux/devcoredump.h>
 #include <linux/etherdevice.h>
 #include <linux/timekeeping.h>
 #include "mt7615.h"
@@ -15,7 +14,6 @@
 #include "../dma.h"
 #include "mt7615_trace.h"
 #include "mac.h"
-#include "mcu.h"
 
 #define to_rssi(field, rxv)		((FIELD_GET(field, rxv) - 220) / 2)
 
@@ -188,7 +186,7 @@ mt7615_get_status_freq_info(struct mt7615_dev *dev, struct mt76_phy *mphy,
 	status->freq = ieee80211_channel_to_frequency(chfreq, status->band);
 }
 
-static void mt7615_mac_fill_tm_rx(struct mt7615_phy *phy, __le32 *rxv)
+static void mt7615_mac_fill_tm_rx(struct mt7615_dev *dev, __le32 *rxv)
 {
 #ifdef CONFIG_NL80211_TESTMODE
 	u32 rxv1 = le32_to_cpu(rxv[0]);
@@ -212,13 +210,13 @@ static void mt7615_mac_fill_tm_rx(struct mt7615_phy *phy, __le32 *rxv)
 		foe = (foe * foe_const) >> 15;
 	}
 
-	phy->test.last_freq_offset = foe;
-	phy->test.last_rcpi[0] = FIELD_GET(MT_RXV4_RCPI0, rxv4);
-	phy->test.last_rcpi[1] = FIELD_GET(MT_RXV4_RCPI1, rxv4);
-	phy->test.last_rcpi[2] = FIELD_GET(MT_RXV4_RCPI2, rxv4);
-	phy->test.last_rcpi[3] = FIELD_GET(MT_RXV4_RCPI3, rxv4);
-	phy->test.last_ib_rssi[0] = FIELD_GET(MT_RXV3_IB_RSSI, rxv3);
-	phy->test.last_wb_rssi[0] = FIELD_GET(MT_RXV3_WB_RSSI, rxv3);
+	dev->test.last_freq_offset = foe;
+	dev->test.last_rcpi[0] = FIELD_GET(MT_RXV4_RCPI0, rxv4);
+	dev->test.last_rcpi[1] = FIELD_GET(MT_RXV4_RCPI1, rxv4);
+	dev->test.last_rcpi[2] = FIELD_GET(MT_RXV4_RCPI2, rxv4);
+	dev->test.last_rcpi[3] = FIELD_GET(MT_RXV4_RCPI3, rxv4);
+	dev->test.last_ib_rssi[0] = FIELD_GET(MT_RXV3_IB_RSSI, rxv3);
+	dev->test.last_wb_rssi[0] = FIELD_GET(MT_RXV3_WB_RSSI, rxv3);
 #endif
 }
 
@@ -328,7 +326,7 @@ static int mt7615_mac_fill_rx(struct mt7615_dev *dev, struct sk_buff *skb)
 		 * that PHY.
 		 */
 		if (phy_idx < 0) {
-			int first_chain = ffs(phy2->mt76->chainmask) - 1;
+			int first_chain = ffs(phy2->chainmask) - 1;
 
 			phy_idx = ((rxdg5 >> (first_chain * 8)) & 0xff) == 0;
 		}
@@ -437,7 +435,7 @@ static int mt7615_mac_fill_rx(struct mt7615_dev *dev, struct sk_buff *skb)
 					     status->chain_signal[i]);
 		}
 
-		mt7615_mac_fill_tm_rx(mphy->priv, rxd);
+		mt7615_mac_fill_tm_rx(dev, rxd);
 
 		rxd += 6;
 		if ((u8 *)rxd - skb->data >= skb->len)
@@ -546,7 +544,7 @@ int mt7615_mac_write_txwi(struct mt7615_dev *dev, __le32 *txwi,
 	u16 seqno = 0;
 
 	if (vif) {
-		struct mt76_vif *mvif = (struct mt76_vif *)vif->drv_priv;
+		struct mt7615_vif *mvif = (struct mt7615_vif *)vif->drv_priv;
 
 		omac_idx = mvif->omac_idx;
 		wmm_idx = mvif->wmm_idx;
@@ -1467,7 +1465,7 @@ static void mt7615_mac_tx_free(struct mt7615_dev *dev, struct sk_buff *skb)
 	mt7615_mac_sta_poll(dev);
 	rcu_read_unlock();
 
-	mt76_connac_power_save_sched(&dev->mphy, &dev->pm);
+	mt7615_pm_power_save_sched(dev);
 	mt76_worker_schedule(&dev->mt76.tx_worker);
 }
 
@@ -1791,11 +1789,11 @@ void mt7615_update_channel(struct mt76_dev *mdev)
 {
 	struct mt7615_dev *dev = container_of(mdev, struct mt7615_dev, mt76);
 
-	if (mt76_connac_pm_wake(&dev->mphy, &dev->pm))
+	if (mt7615_pm_wake(dev))
 		return;
 
 	__mt7615_update_channel(dev);
-	mt76_connac_power_save_sched(&dev->mphy, &dev->pm);
+	mt7615_pm_power_save_sched(dev);
 }
 EXPORT_SYMBOL_GPL(mt7615_update_channel);
 
@@ -1864,19 +1862,96 @@ void mt7615_pm_wake_work(struct work_struct *work)
 {
 	struct mt7615_dev *dev;
 	struct mt76_phy *mphy;
+	int i;
 
 	dev = (struct mt7615_dev *)container_of(work, struct mt7615_dev,
 						pm.wake_work);
 	mphy = dev->phy.mt76;
 
-	if (!mt7615_mcu_set_drv_ctrl(dev))
-		mt76_connac_pm_dequeue_skbs(mphy, &dev->pm);
-	else
+	if (mt7615_mcu_set_drv_ctrl(dev)) {
 		dev_err(mphy->dev->dev, "failed to wake device\n");
+		goto out;
+	}
 
+	spin_lock_bh(&dev->pm.txq_lock);
+	for (i = 0; i < IEEE80211_NUM_ACS; i++) {
+		struct mt7615_sta *msta = dev->pm.tx_q[i].msta;
+		struct ieee80211_sta *sta = NULL;
+		struct mt76_wcid *wcid;
+
+		if (!dev->pm.tx_q[i].skb)
+			continue;
+
+		wcid = msta ? &msta->wcid : &dev->mt76.global_wcid;
+		if (msta && wcid->sta)
+			sta = container_of((void *)msta, struct ieee80211_sta,
+					   drv_priv);
+
+		mt76_tx(mphy, sta, wcid, dev->pm.tx_q[i].skb);
+		dev->pm.tx_q[i].skb = NULL;
+	}
+	spin_unlock_bh(&dev->pm.txq_lock);
+
+	mt76_worker_schedule(&dev->mt76.tx_worker);
+
+out:
 	ieee80211_wake_queues(mphy->hw);
 	complete_all(&dev->pm.wake_cmpl);
 }
+
+int mt7615_pm_wake(struct mt7615_dev *dev)
+{
+	struct mt76_phy *mphy = dev->phy.mt76;
+
+	if (!mt7615_firmware_offload(dev))
+		return 0;
+
+	if (!mt76_is_mmio(mphy->dev))
+		return 0;
+
+	if (!test_bit(MT76_STATE_PM, &mphy->state))
+		return 0;
+
+	if (test_bit(MT76_HW_SCANNING, &mphy->state) ||
+	    test_bit(MT76_HW_SCHED_SCANNING, &mphy->state))
+		return 0;
+
+	if (queue_work(dev->mt76.wq, &dev->pm.wake_work))
+		reinit_completion(&dev->pm.wake_cmpl);
+
+	if (!wait_for_completion_timeout(&dev->pm.wake_cmpl, 3 * HZ)) {
+		ieee80211_wake_queues(mphy->hw);
+		return -ETIMEDOUT;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mt7615_pm_wake);
+
+void mt7615_pm_power_save_sched(struct mt7615_dev *dev)
+{
+	struct mt76_phy *mphy = dev->phy.mt76;
+
+	if (!mt7615_firmware_offload(dev))
+		return;
+
+	if (!mt76_is_mmio(mphy->dev))
+		return;
+
+	if (!dev->pm.enable || !test_bit(MT76_STATE_RUNNING, &mphy->state))
+		return;
+
+	dev->pm.last_activity = jiffies;
+
+	if (test_bit(MT76_HW_SCANNING, &mphy->state) ||
+	    test_bit(MT76_HW_SCHED_SCANNING, &mphy->state))
+		return;
+
+	if (!test_bit(MT76_STATE_PM, &mphy->state))
+		queue_delayed_work(dev->mt76.wq, &dev->pm.ps_work,
+				   dev->pm.idle_timeout);
+}
+EXPORT_SYMBOL_GPL(mt7615_pm_power_save_sched);
 
 void mt7615_pm_power_save_work(struct work_struct *work)
 {
@@ -1901,17 +1976,17 @@ out:
 void mt7615_mac_work(struct work_struct *work)
 {
 	struct mt7615_phy *phy;
-	struct mt76_phy *mphy;
+	struct mt76_dev *mdev;
 
-	mphy = (struct mt76_phy *)container_of(work, struct mt76_phy,
-					       mac_work.work);
-	phy = mphy->priv;
+	phy = (struct mt7615_phy *)container_of(work, struct mt7615_phy,
+						mac_work.work);
+	mdev = &phy->dev->mt76;
 
 	mt7615_mutex_acquire(phy->dev);
 
 	mt7615_update_survey(phy->dev);
-	if (++mphy->mac_work_count == 5) {
-		mphy->mac_work_count = 0;
+	if (++phy->mac_work_count == 5) {
+		phy->mac_work_count = 0;
 
 		mt7615_mac_update_mib_stats(phy);
 		mt7615_mac_scs_check(phy);
@@ -1919,8 +1994,8 @@ void mt7615_mac_work(struct work_struct *work)
 
 	mt7615_mutex_release(phy->dev);
 
-	mt76_tx_status_check(mphy->dev, NULL, false);
-	ieee80211_queue_delayed_work(mphy->hw, &mphy->mac_work,
+	mt76_tx_status_check(mdev, NULL, false);
+	ieee80211_queue_delayed_work(phy->mt76->hw, &phy->mac_work,
 				     MT7615_WATCHDOG_TIME);
 }
 
@@ -1942,16 +2017,7 @@ mt7615_update_vif_beacon(void *priv, u8 *mac, struct ieee80211_vif *vif)
 	struct ieee80211_hw *hw = priv;
 	struct mt7615_dev *dev = mt7615_hw_dev(hw);
 
-	switch (vif->type) {
-	case NL80211_IFTYPE_MESH_POINT:
-	case NL80211_IFTYPE_ADHOC:
-	case NL80211_IFTYPE_AP:
-		mt7615_mcu_add_beacon(dev, hw, vif,
-				      vif->bss_conf.enable_beacon);
-		break;
-	default:
-		break;
-	}
+	mt7615_mcu_add_beacon(dev, hw, vif, vif->bss_conf.enable_beacon);
 }
 
 static void
@@ -1992,23 +2058,6 @@ void mt7615_dma_reset(struct mt7615_dev *dev)
 }
 EXPORT_SYMBOL_GPL(mt7615_dma_reset);
 
-void mt7615_tx_token_put(struct mt7615_dev *dev)
-{
-	struct mt76_txwi_cache *txwi;
-	int id;
-
-	spin_lock_bh(&dev->token_lock);
-	idr_for_each_entry(&dev->token, txwi, id) {
-		mt7615_txp_skb_unmap(&dev->mt76, txwi);
-		if (txwi->skb)
-			dev_kfree_skb_any(txwi->skb);
-		mt76_put_txwi(&dev->mt76, txwi);
-	}
-	spin_unlock_bh(&dev->token_lock);
-	idr_destroy(&dev->token);
-}
-EXPORT_SYMBOL_GPL(mt7615_tx_token_put);
-
 void mt7615_mac_reset_work(struct work_struct *work)
 {
 	struct mt7615_phy *phy2;
@@ -2029,11 +2078,11 @@ void mt7615_mac_reset_work(struct work_struct *work)
 	set_bit(MT76_RESET, &dev->mphy.state);
 	set_bit(MT76_MCU_RESET, &dev->mphy.state);
 	wake_up(&dev->mt76.mcu.wait);
-	cancel_delayed_work_sync(&dev->mphy.mac_work);
+	cancel_delayed_work_sync(&dev->phy.mac_work);
 	del_timer_sync(&dev->phy.roc_timer);
 	cancel_work_sync(&dev->phy.roc_work);
 	if (phy2) {
-		cancel_delayed_work_sync(&phy2->mt76->mac_work);
+		cancel_delayed_work_sync(&phy2->mac_work);
 		del_timer_sync(&phy2->roc_timer);
 		cancel_work_sync(&phy2->roc_work);
 	}
@@ -2051,9 +2100,6 @@ void mt7615_mac_reset_work(struct work_struct *work)
 	mt7615_mutex_acquire(dev);
 
 	mt76_wr(dev, MT_MCU_INT_EVENT, MT_MCU_INT_EVENT_PDMA_STOPPED);
-
-	mt7615_tx_token_put(dev);
-	idr_init(&dev->token);
 
 	if (mt7615_wait_reset_state(dev, MT_MCU_CMD_RESET_DONE)) {
 		mt7615_dma_reset(dev);
@@ -2088,11 +2134,10 @@ void mt7615_mac_reset_work(struct work_struct *work)
 
 	mt7615_mutex_release(dev);
 
-	ieee80211_queue_delayed_work(mt76_hw(dev), &dev->mphy.mac_work,
+	ieee80211_queue_delayed_work(mt76_hw(dev), &dev->phy.mac_work,
 				     MT7615_WATCHDOG_TIME);
 	if (phy2)
-		ieee80211_queue_delayed_work(ext_phy->hw,
-					     &phy2->mt76->mac_work,
+		ieee80211_queue_delayed_work(ext_phy->hw, &phy2->mac_work,
 					     MT7615_WATCHDOG_TIME);
 
 }
@@ -2273,45 +2318,4 @@ int mt7615_mac_set_beacon_filter(struct mt7615_phy *phy,
 	}
 
 	return 0;
-}
-
-void mt7615_coredump_work(struct work_struct *work)
-{
-	struct mt7615_dev *dev;
-	char *dump, *data;
-
-	dev = (struct mt7615_dev *)container_of(work, struct mt7615_dev,
-						coredump.work.work);
-
-	if (time_is_after_jiffies(dev->coredump.last_activity +
-				  4 * MT76_CONNAC_COREDUMP_TIMEOUT)) {
-		queue_delayed_work(dev->mt76.wq, &dev->coredump.work,
-				   MT76_CONNAC_COREDUMP_TIMEOUT);
-		return;
-	}
-
-	dump = vzalloc(MT76_CONNAC_COREDUMP_SZ);
-	data = dump;
-
-	while (true) {
-		struct sk_buff *skb;
-
-		spin_lock_bh(&dev->mt76.lock);
-		skb = __skb_dequeue(&dev->coredump.msg_list);
-		spin_unlock_bh(&dev->mt76.lock);
-
-		if (!skb)
-			break;
-
-		skb_pull(skb, sizeof(struct mt7615_mcu_rxd));
-		if (data + skb->len - dump > MT76_CONNAC_COREDUMP_SZ)
-			break;
-
-		memcpy(data, skb->data, skb->len);
-		data += skb->len;
-
-		dev_kfree_skb(skb);
-	}
-	dev_coredumpv(dev->mt76.dev, dump, MT76_CONNAC_COREDUMP_SZ,
-		      GFP_KERNEL);
 }

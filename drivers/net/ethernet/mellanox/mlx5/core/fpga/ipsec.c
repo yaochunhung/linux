@@ -124,7 +124,7 @@ struct mlx5_fpga_ipsec {
 	struct ida halloc;
 };
 
-bool mlx5_fpga_is_ipsec_device(struct mlx5_core_dev *mdev)
+static bool mlx5_fpga_is_ipsec_device(struct mlx5_core_dev *mdev)
 {
 	if (!mdev->fpga || !MLX5_CAP_GEN(mdev, fpga))
 		return false;

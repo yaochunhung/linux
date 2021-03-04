@@ -20,7 +20,6 @@
  * This file contains firmware loading/unloading support functionality
  */
 
-#include <linux/device.h>
 #include "ia_css_err.h"
 #include "ia_css_env.h"
 

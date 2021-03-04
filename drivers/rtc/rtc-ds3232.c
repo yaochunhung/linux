@@ -406,10 +406,11 @@ static irqreturn_t ds3232_irq(int irq, void *dev_id)
 {
 	struct device *dev = dev_id;
 	struct ds3232 *ds3232 = dev_get_drvdata(dev);
+	struct mutex *lock = &ds3232->rtc->ops_lock;
 	int ret;
 	int stat, control;
 
-	rtc_lock(ds3232->rtc);
+	mutex_lock(lock);
 
 	ret = regmap_read(ds3232->regmap, DS3232_REG_SR, &stat);
 	if (ret)
@@ -447,7 +448,7 @@ static irqreturn_t ds3232_irq(int irq, void *dev_id)
 	}
 
 unlock:
-	rtc_unlock(ds3232->rtc);
+	mutex_unlock(lock);
 
 	return IRQ_HANDLED;
 }
@@ -592,7 +593,7 @@ static const struct i2c_device_id ds3232_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, ds3232_id);
 
-static const  __maybe_unused struct of_device_id ds3232_of_match[] = {
+static const struct of_device_id ds3232_of_match[] = {
 	{ .compatible = "dallas,ds3232" },
 	{ }
 };

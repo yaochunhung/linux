@@ -15,37 +15,38 @@ description:
 
 properties:
   compatible:
-    const: ralink,rt2880-pinmux
+    enum:
+      - ralink,rt2880-pinmux
 
-patternProperties:
-  '-pins$':
-    type: object
-    patternProperties:
-      '^(.*-)?pinmux$':
-        type: object
-        description: node for pinctrl.
-        $ref: pinmux-node.yaml#
+  pinctrl-0:
+    description:
+      A phandle to the node containing the subnodes containing default
+      configurations. This is for pinctrl hogs.
 
-        properties:
-          groups:
-            description: Name of the pin group to use for the functions.
-            enum: [i2c, spi, uart1, uart2, uart3, rgmii1, rgmii2, mdio,
-                   pcie, sdhci]
-          function:
-            description: The mux function to select
-            enum: [gpio, i2c, spi, uart1, uart2, uart3, rgmii1, rgmii2,
-                   mdio, nand1, nand2, sdhci]
-
-        required:
-          - groups
-          - function
-
-        additionalProperties: false
-
-    additionalProperties: false
+  pinctrl-names:
+    description:
+      A pinctrl state named "default" can be defined.
+    const: default
 
 required:
   - compatible
+
+patternProperties:
+  '[a-z0-9_-]+':
+    if:
+      type: object
+      description: node for pinctrl.
+      $ref: "pinmux-node.yaml"
+    then:
+      properties:
+        groups:
+          description: Name of the pin group to use for the functions.
+          enum: [i2c, spi, uart1, uart2, uart3, rgmii1, rgmii2, mdio,
+                 pcie, sdhci]
+        function:
+          description: The mux function to select
+          enum: [gpio, i2c, spi, uart1, uart2, uart3, rgmii1, rgmii2,
+                 mdio, nand1, nand2, sdhci]
 
 additionalProperties: false
 
@@ -54,9 +55,14 @@ examples:
   - |
     pinctrl {
       compatible = "ralink,rt2880-pinmux";
+      pinctrl-names = "default";
+      pinctrl-0 = <&state_default>;
 
-      i2c_pins: i2c0-pins {
-        pinmux {
+      state_default: pinctrl0 {
+      };
+
+      i2c_pins: i2c0 {
+        i2c0 {
           groups = "i2c";
           function = "i2c";
         };

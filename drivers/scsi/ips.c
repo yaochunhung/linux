@@ -1045,10 +1045,10 @@ static int ips_queue_lck(struct scsi_cmnd *SC, void (*done) (struct scsi_cmnd *)
 	ha = (ips_ha_t *) SC->device->host->hostdata;
 
 	if (!ha)
-		goto out_error;
+		return (1);
 
 	if (!ha->active)
-		goto out_error;
+		return (DID_ERROR);
 
 	if (ips_is_passthru(SC)) {
 		if (ha->copp_waitlist.count == IPS_MAX_IOCTL_QUEUE) {
@@ -1122,11 +1122,6 @@ static int ips_queue_lck(struct scsi_cmnd *SC, void (*done) (struct scsi_cmnd *)
 	}
 
 	ips_next(ha, IPS_INTR_IORL);
-
-	return (0);
-out_error:
-	SC->result = DID_ERROR << 16;
-	done(SC);
 
 	return (0);
 }

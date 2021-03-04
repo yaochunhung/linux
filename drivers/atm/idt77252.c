@@ -3743,7 +3743,16 @@ static int __init idt77252_init(void)
 	struct sk_buff *skb;
 
 	printk("%s: at %p\n", __func__, idt77252_init);
-	BUILD_BUG_ON(sizeof(skb->cb) < sizeof(struct idt77252_skb_prv) + sizeof(struct atm_skb_data));
+
+	if (sizeof(skb->cb) < sizeof(struct atm_skb_data) +
+			      sizeof(struct idt77252_skb_prv)) {
+		printk(KERN_ERR "%s: skb->cb is too small (%lu < %lu)\n",
+		       __func__, (unsigned long) sizeof(skb->cb),
+		       (unsigned long) sizeof(struct atm_skb_data) +
+				       sizeof(struct idt77252_skb_prv));
+		return -EIO;
+	}
+
 	return pci_register_driver(&idt77252_driver);
 }
 

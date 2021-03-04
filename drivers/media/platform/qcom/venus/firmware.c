@@ -201,9 +201,6 @@ int venus_boot(struct venus_core *core)
 		return -EINVAL;
 	}
 
-	core->fw.mem_size = mem_size;
-	core->fw.mem_phys = mem_phys;
-
 	if (core->use_tz)
 		ret = qcom_scm_pas_auth_and_reset(VENUS_PAS_ID);
 	else

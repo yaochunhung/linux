@@ -181,7 +181,7 @@ static int clp_store_query_pci_fn(struct zpci_dev *zdev,
 	return 0;
 }
 
-int clp_query_pci_fn(struct zpci_dev *zdev)
+static int clp_query_pci_fn(struct zpci_dev *zdev, u32 fh)
 {
 	struct clp_req_rsp_query_pci *rrb;
 	int rc;
@@ -194,7 +194,7 @@ int clp_query_pci_fn(struct zpci_dev *zdev)
 	rrb->request.hdr.len = sizeof(rrb->request);
 	rrb->request.hdr.cmd = CLP_QUERY_PCI_FN;
 	rrb->response.hdr.len = sizeof(rrb->response);
-	rrb->request.fh = zdev->fh;
+	rrb->request.fh = fh;
 
 	rc = clp_req(rrb, CLP_LPS_PCI);
 	if (!rc && rrb->response.hdr.rsp == CLP_RC_OK) {
@@ -209,6 +209,40 @@ int clp_query_pci_fn(struct zpci_dev *zdev)
 	}
 out:
 	clp_free_block(rrb);
+	return rc;
+}
+
+int clp_add_pci_device(u32 fid, u32 fh, int configured)
+{
+	struct zpci_dev *zdev;
+	int rc = -ENOMEM;
+
+	zpci_dbg(3, "add fid:%x, fh:%x, c:%d\n", fid, fh, configured);
+	zdev = kzalloc(sizeof(*zdev), GFP_KERNEL);
+	if (!zdev)
+		goto error;
+
+	zdev->fh = fh;
+	zdev->fid = fid;
+
+	/* Query function properties and update zdev */
+	rc = clp_query_pci_fn(zdev, fh);
+	if (rc)
+		goto error;
+
+	if (configured)
+		zdev->state = ZPCI_FN_STATE_CONFIGURED;
+	else
+		zdev->state = ZPCI_FN_STATE_STANDBY;
+
+	rc = zpci_create_device(zdev);
+	if (rc)
+		goto error;
+	return 0;
+
+error:
+	zpci_dbg(0, "add fid:%x, rc:%d\n", fid, rc);
+	kfree(zdev);
 	return rc;
 }
 
@@ -374,7 +408,7 @@ static void __clp_add(struct clp_fh_list_entry *entry, void *data)
 
 	zdev = get_zdev_by_fid(entry->fid);
 	if (!zdev)
-		zpci_create_device(entry->fid, entry->fh, entry->config_state);
+		clp_add_pci_device(entry->fid, entry->fh, entry->config_state);
 }
 
 int clp_scan_pci_devices(void)

@@ -25,6 +25,7 @@
 #include "f2fs.h"
 #include "node.h"
 #include "segment.h"
+#include "trace.h"
 #include <trace/events/f2fs.h>
 
 #define NUM_PREALLOC_POST_READ_CTXS	128
@@ -47,6 +48,27 @@ int __init f2fs_init_bioset(void)
 void f2fs_destroy_bioset(void)
 {
 	bioset_exit(&f2fs_bioset);
+}
+
+static inline struct bio *__f2fs_bio_alloc(gfp_t gfp_mask,
+						unsigned int nr_iovecs)
+{
+	return bio_alloc_bioset(gfp_mask, nr_iovecs, &f2fs_bioset);
+}
+
+struct bio *f2fs_bio_alloc(struct f2fs_sb_info *sbi, int npages, bool noio)
+{
+	if (noio) {
+		/* No failure on bio allocation */
+		return __f2fs_bio_alloc(GFP_NOIO, npages);
+	}
+
+	if (time_to_inject(sbi, FAULT_ALLOC_BIO)) {
+		f2fs_show_injection_info(sbi, FAULT_ALLOC_BIO);
+		return NULL;
+	}
+
+	return __f2fs_bio_alloc(GFP_KERNEL, npages);
 }
 
 static bool __is_cp_guaranteed(struct page *page)
@@ -93,21 +115,10 @@ static enum count_type __read_io_type(struct page *page)
 
 /* postprocessing steps for read bios */
 enum bio_post_read_step {
-#ifdef CONFIG_FS_ENCRYPTION
-	STEP_DECRYPT	= 1 << 0,
-#else
-	STEP_DECRYPT	= 0,	/* compile out the decryption-related code */
-#endif
-#ifdef CONFIG_F2FS_FS_COMPRESSION
-	STEP_DECOMPRESS	= 1 << 1,
-#else
-	STEP_DECOMPRESS	= 0,	/* compile out the decompression-related code */
-#endif
-#ifdef CONFIG_FS_VERITY
-	STEP_VERITY	= 1 << 2,
-#else
-	STEP_VERITY	= 0,	/* compile out the verity-related code */
-#endif
+	STEP_DECRYPT,
+	STEP_DECOMPRESS_NOWQ,		/* handle normal cluster data inplace */
+	STEP_DECOMPRESS,		/* handle compressed cluster data in workqueue */
+	STEP_VERITY,
 };
 
 struct bio_post_read_ctx {
@@ -117,26 +128,25 @@ struct bio_post_read_ctx {
 	unsigned int enabled_steps;
 };
 
-static void f2fs_finish_read_bio(struct bio *bio)
+static void __read_end_io(struct bio *bio, bool compr, bool verity)
 {
+	struct page *page;
 	struct bio_vec *bv;
 	struct bvec_iter_all iter_all;
 
-	/*
-	 * Update and unlock the bio's pagecache pages, and put the
-	 * decompression context for any compressed pages.
-	 */
 	bio_for_each_segment_all(bv, bio, iter_all) {
-		struct page *page = bv->bv_page;
+		page = bv->bv_page;
 
-		if (f2fs_is_compressed_page(page)) {
-			if (bio->bi_status)
-				f2fs_end_read_compressed_page(page, true);
-			f2fs_put_page_dic(page);
+#ifdef CONFIG_F2FS_FS_COMPRESSION
+		if (compr && f2fs_is_compressed_page(page)) {
+			f2fs_decompress_pages(bio, page, verity);
 			continue;
 		}
+		if (verity)
+			continue;
+#endif
 
-		/* PG_error was set if decryption or verity failed. */
+		/* PG_error was set if any post_read step failed */
 		if (bio->bi_status || PageError(page)) {
 			ClearPageUptodate(page);
 			/* will re-read again later */
@@ -147,104 +157,106 @@ static void f2fs_finish_read_bio(struct bio *bio)
 		dec_page_count(F2FS_P_SB(page), __read_io_type(page));
 		unlock_page(page);
 	}
-
-	if (bio->bi_private)
-		mempool_free(bio->bi_private, bio_post_read_ctx_pool);
-	bio_put(bio);
 }
 
-static void f2fs_verify_bio(struct work_struct *work)
+static void f2fs_release_read_bio(struct bio *bio);
+static void __f2fs_read_end_io(struct bio *bio, bool compr, bool verity)
+{
+	if (!compr)
+		__read_end_io(bio, false, verity);
+	f2fs_release_read_bio(bio);
+}
+
+static void f2fs_decompress_bio(struct bio *bio, bool verity)
+{
+	__read_end_io(bio, true, verity);
+}
+
+static void bio_post_read_processing(struct bio_post_read_ctx *ctx);
+
+static void f2fs_decrypt_work(struct bio_post_read_ctx *ctx)
+{
+	fscrypt_decrypt_bio(ctx->bio);
+}
+
+static void f2fs_decompress_work(struct bio_post_read_ctx *ctx)
+{
+	f2fs_decompress_bio(ctx->bio, ctx->enabled_steps & (1 << STEP_VERITY));
+}
+
+#ifdef CONFIG_F2FS_FS_COMPRESSION
+static void f2fs_verify_pages(struct page **rpages, unsigned int cluster_size)
+{
+	f2fs_decompress_end_io(rpages, cluster_size, false, true);
+}
+
+static void f2fs_verify_bio(struct bio *bio)
+{
+	struct bio_vec *bv;
+	struct bvec_iter_all iter_all;
+
+	bio_for_each_segment_all(bv, bio, iter_all) {
+		struct page *page = bv->bv_page;
+		struct decompress_io_ctx *dic;
+
+		dic = (struct decompress_io_ctx *)page_private(page);
+
+		if (dic) {
+			if (atomic_dec_return(&dic->verity_pages))
+				continue;
+			f2fs_verify_pages(dic->rpages,
+						dic->cluster_size);
+			f2fs_free_dic(dic);
+			continue;
+		}
+
+		if (bio->bi_status || PageError(page))
+			goto clear_uptodate;
+
+		if (fsverity_verify_page(page)) {
+			SetPageUptodate(page);
+			goto unlock;
+		}
+clear_uptodate:
+		ClearPageUptodate(page);
+		ClearPageError(page);
+unlock:
+		dec_page_count(F2FS_P_SB(page), __read_io_type(page));
+		unlock_page(page);
+	}
+}
+#endif
+
+static void f2fs_verity_work(struct work_struct *work)
 {
 	struct bio_post_read_ctx *ctx =
 		container_of(work, struct bio_post_read_ctx, work);
 	struct bio *bio = ctx->bio;
-	bool may_have_compressed_pages = (ctx->enabled_steps & STEP_DECOMPRESS);
+#ifdef CONFIG_F2FS_FS_COMPRESSION
+	unsigned int enabled_steps = ctx->enabled_steps;
+#endif
 
 	/*
 	 * fsverity_verify_bio() may call readpages() again, and while verity
-	 * will be disabled for this, decryption and/or decompression may still
-	 * be needed, resulting in another bio_post_read_ctx being allocated.
-	 * So to prevent deadlocks we need to release the current ctx to the
-	 * mempool first.  This assumes that verity is the last post-read step.
+	 * will be disabled for this, decryption may still be needed, resulting
+	 * in another bio_post_read_ctx being allocated.  So to prevent
+	 * deadlocks we need to release the current ctx to the mempool first.
+	 * This assumes that verity is the last post-read step.
 	 */
 	mempool_free(ctx, bio_post_read_ctx_pool);
 	bio->bi_private = NULL;
 
-	/*
-	 * Verify the bio's pages with fs-verity.  Exclude compressed pages,
-	 * as those were handled separately by f2fs_end_read_compressed_page().
-	 */
-	if (may_have_compressed_pages) {
-		struct bio_vec *bv;
-		struct bvec_iter_all iter_all;
-
-		bio_for_each_segment_all(bv, bio, iter_all) {
-			struct page *page = bv->bv_page;
-
-			if (!f2fs_is_compressed_page(page) &&
-			    !PageError(page) && !fsverity_verify_page(page))
-				SetPageError(page);
-		}
-	} else {
-		fsverity_verify_bio(bio);
+#ifdef CONFIG_F2FS_FS_COMPRESSION
+	/* previous step is decompression */
+	if (enabled_steps & (1 << STEP_DECOMPRESS)) {
+		f2fs_verify_bio(bio);
+		f2fs_release_read_bio(bio);
+		return;
 	}
+#endif
 
-	f2fs_finish_read_bio(bio);
-}
-
-/*
- * If the bio's data needs to be verified with fs-verity, then enqueue the
- * verity work for the bio.  Otherwise finish the bio now.
- *
- * Note that to avoid deadlocks, the verity work can't be done on the
- * decryption/decompression workqueue.  This is because verifying the data pages
- * can involve reading verity metadata pages from the file, and these verity
- * metadata pages may be encrypted and/or compressed.
- */
-static void f2fs_verify_and_finish_bio(struct bio *bio)
-{
-	struct bio_post_read_ctx *ctx = bio->bi_private;
-
-	if (ctx && (ctx->enabled_steps & STEP_VERITY)) {
-		INIT_WORK(&ctx->work, f2fs_verify_bio);
-		fsverity_enqueue_verify_work(&ctx->work);
-	} else {
-		f2fs_finish_read_bio(bio);
-	}
-}
-
-/*
- * Handle STEP_DECOMPRESS by decompressing any compressed clusters whose last
- * remaining page was read by @ctx->bio.
- *
- * Note that a bio may span clusters (even a mix of compressed and uncompressed
- * clusters) or be for just part of a cluster.  STEP_DECOMPRESS just indicates
- * that the bio includes at least one compressed page.  The actual decompression
- * is done on a per-cluster basis, not a per-bio basis.
- */
-static void f2fs_handle_step_decompress(struct bio_post_read_ctx *ctx)
-{
-	struct bio_vec *bv;
-	struct bvec_iter_all iter_all;
-	bool all_compressed = true;
-
-	bio_for_each_segment_all(bv, ctx->bio, iter_all) {
-		struct page *page = bv->bv_page;
-
-		/* PG_error was set if decryption failed. */
-		if (f2fs_is_compressed_page(page))
-			f2fs_end_read_compressed_page(page, PageError(page));
-		else
-			all_compressed = false;
-	}
-
-	/*
-	 * Optimization: if all the bio's pages are compressed, then scheduling
-	 * the per-bio verity work is unnecessary, as verity will be fully
-	 * handled at the compression cluster level.
-	 */
-	if (all_compressed)
-		ctx->enabled_steps &= ~STEP_VERITY;
+	fsverity_verify_bio(bio);
+	__f2fs_read_end_io(bio, false, false);
 }
 
 static void f2fs_post_read_work(struct work_struct *work)
@@ -252,36 +264,74 @@ static void f2fs_post_read_work(struct work_struct *work)
 	struct bio_post_read_ctx *ctx =
 		container_of(work, struct bio_post_read_ctx, work);
 
-	if (ctx->enabled_steps & STEP_DECRYPT)
-		fscrypt_decrypt_bio(ctx->bio);
+	if (ctx->enabled_steps & (1 << STEP_DECRYPT))
+		f2fs_decrypt_work(ctx);
 
-	if (ctx->enabled_steps & STEP_DECOMPRESS)
-		f2fs_handle_step_decompress(ctx);
+	if (ctx->enabled_steps & (1 << STEP_DECOMPRESS))
+		f2fs_decompress_work(ctx);
 
-	f2fs_verify_and_finish_bio(ctx->bio);
+	if (ctx->enabled_steps & (1 << STEP_VERITY)) {
+		INIT_WORK(&ctx->work, f2fs_verity_work);
+		fsverity_enqueue_verify_work(&ctx->work);
+		return;
+	}
+
+	__f2fs_read_end_io(ctx->bio,
+		ctx->enabled_steps & (1 << STEP_DECOMPRESS), false);
+}
+
+static void f2fs_enqueue_post_read_work(struct f2fs_sb_info *sbi,
+						struct work_struct *work)
+{
+	queue_work(sbi->post_read_wq, work);
+}
+
+static void bio_post_read_processing(struct bio_post_read_ctx *ctx)
+{
+	/*
+	 * We use different work queues for decryption and for verity because
+	 * verity may require reading metadata pages that need decryption, and
+	 * we shouldn't recurse to the same workqueue.
+	 */
+
+	if (ctx->enabled_steps & (1 << STEP_DECRYPT) ||
+		ctx->enabled_steps & (1 << STEP_DECOMPRESS)) {
+		INIT_WORK(&ctx->work, f2fs_post_read_work);
+		f2fs_enqueue_post_read_work(ctx->sbi, &ctx->work);
+		return;
+	}
+
+	if (ctx->enabled_steps & (1 << STEP_VERITY)) {
+		INIT_WORK(&ctx->work, f2fs_verity_work);
+		fsverity_enqueue_verify_work(&ctx->work);
+		return;
+	}
+
+	__f2fs_read_end_io(ctx->bio, false, false);
+}
+
+static bool f2fs_bio_post_read_required(struct bio *bio)
+{
+	return bio->bi_private;
 }
 
 static void f2fs_read_end_io(struct bio *bio)
 {
 	struct f2fs_sb_info *sbi = F2FS_P_SB(bio_first_page_all(bio));
-	struct bio_post_read_ctx *ctx = bio->bi_private;
 
 	if (time_to_inject(sbi, FAULT_READ_IO)) {
 		f2fs_show_injection_info(sbi, FAULT_READ_IO);
 		bio->bi_status = BLK_STS_IOERR;
 	}
 
-	if (bio->bi_status) {
-		f2fs_finish_read_bio(bio);
+	if (f2fs_bio_post_read_required(bio)) {
+		struct bio_post_read_ctx *ctx = bio->bi_private;
+
+		bio_post_read_processing(ctx);
 		return;
 	}
 
-	if (ctx && (ctx->enabled_steps & (STEP_DECRYPT | STEP_DECOMPRESS))) {
-		INIT_WORK(&ctx->work, f2fs_post_read_work);
-		queue_work(ctx->sbi->post_read_wq, &ctx->work);
-	} else {
-		f2fs_verify_and_finish_bio(bio);
-	}
+	__f2fs_read_end_io(bio, false, false);
 }
 
 static void f2fs_write_end_io(struct bio *bio)
@@ -377,12 +427,22 @@ int f2fs_target_device_index(struct f2fs_sb_info *sbi, block_t blkaddr)
 	return 0;
 }
 
+/*
+ * Return true, if pre_bio's bdev is same as its target device.
+ */
+static bool __same_bdev(struct f2fs_sb_info *sbi,
+				block_t blk_addr, struct bio *bio)
+{
+	struct block_device *b = f2fs_target_device(sbi, blk_addr, NULL);
+	return bio->bi_disk == b->bd_disk && bio->bi_partno == b->bd_partno;
+}
+
 static struct bio *__bio_alloc(struct f2fs_io_info *fio, int npages)
 {
 	struct f2fs_sb_info *sbi = fio->sbi;
 	struct bio *bio;
 
-	bio = bio_alloc_bioset(GFP_NOIO, npages, &f2fs_bioset);
+	bio = f2fs_bio_alloc(sbi, npages, true);
 
 	f2fs_target_device(sbi, fio->new_blkaddr, bio);
 	if (is_read_io(fio->op)) {
@@ -439,7 +499,7 @@ static inline void __submit_bio(struct f2fs_sb_info *sbi,
 		if (f2fs_lfs_mode(sbi) && current->plug)
 			blk_finish_plug(current->plug);
 
-		if (!F2FS_IO_ALIGNED(sbi))
+		if (F2FS_IO_ALIGNED(sbi))
 			goto submit_io;
 
 		start = bio->bi_iter.bi_size >> F2FS_BLKSIZE_BITS;
@@ -647,6 +707,7 @@ int f2fs_submit_page_bio(struct f2fs_io_info *fio)
 		return -EFSCORRUPTED;
 
 	trace_f2fs_submit_page_bio(page, fio);
+	f2fs_trace_ios(fio, 0);
 
 	/* Allocate a new bio */
 	bio = __bio_alloc(fio, 1);
@@ -680,7 +741,7 @@ static bool page_is_mergeable(struct f2fs_sb_info *sbi, struct bio *bio,
 		return false;
 	if (last_blkaddr + 1 != cur_blkaddr)
 		return false;
-	return bio->bi_bdev == f2fs_target_device(sbi, cur_blkaddr, NULL);
+	return __same_bdev(sbi, cur_blkaddr, bio);
 }
 
 static bool io_type_is_mergeable(struct f2fs_bio_info *io,
@@ -851,6 +912,7 @@ int f2fs_merge_page_bio(struct f2fs_io_info *fio)
 		return -EFSCORRUPTED;
 
 	trace_f2fs_submit_page_bio(page, fio);
+	f2fs_trace_ios(fio, 0);
 
 	if (bio && !page_is_mergeable(fio->sbi, bio, *fio->last_block,
 						fio->new_blkaddr))
@@ -947,6 +1009,7 @@ alloc_new:
 		wbc_account_cgroup_owner(fio->io_wbc, bio_page, PAGE_SIZE);
 
 	io->last_block_in_bio = fio->new_blkaddr;
+	f2fs_trace_ios(fio, 0);
 
 	trace_f2fs_submit_page_write(fio->page, fio);
 skip:
@@ -959,17 +1022,24 @@ out:
 	up_write(&io->io_rwsem);
 }
 
+static inline bool f2fs_need_verity(const struct inode *inode, pgoff_t idx)
+{
+	return fsverity_active(inode) &&
+	       idx < DIV_ROUND_UP(inode->i_size, PAGE_SIZE);
+}
+
 static struct bio *f2fs_grab_read_bio(struct inode *inode, block_t blkaddr,
 				      unsigned nr_pages, unsigned op_flag,
-				      pgoff_t first_idx, bool for_write)
+				      pgoff_t first_idx, bool for_write,
+				      bool for_verity)
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
 	struct bio *bio;
 	struct bio_post_read_ctx *ctx;
 	unsigned int post_read_steps = 0;
 
-	bio = bio_alloc_bioset(for_write ? GFP_NOIO : GFP_KERNEL,
-			       bio_max_segs(nr_pages), &f2fs_bioset);
+	bio = f2fs_bio_alloc(sbi, min_t(int, nr_pages, BIO_MAX_PAGES),
+								for_write);
 	if (!bio)
 		return ERR_PTR(-ENOMEM);
 
@@ -980,19 +1050,13 @@ static struct bio *f2fs_grab_read_bio(struct inode *inode, block_t blkaddr,
 	bio_set_op_attrs(bio, REQ_OP_READ, op_flag);
 
 	if (fscrypt_inode_uses_fs_layer_crypto(inode))
-		post_read_steps |= STEP_DECRYPT;
+		post_read_steps |= 1 << STEP_DECRYPT;
+	if (f2fs_compressed_file(inode))
+		post_read_steps |= 1 << STEP_DECOMPRESS_NOWQ;
+	if (for_verity && f2fs_need_verity(inode, first_idx))
+		post_read_steps |= 1 << STEP_VERITY;
 
-	if (f2fs_need_verity(inode, first_idx))
-		post_read_steps |= STEP_VERITY;
-
-	/*
-	 * STEP_DECOMPRESS is handled specially, since a compressed file might
-	 * contain both compressed and uncompressed clusters.  We'll allocate a
-	 * bio_post_read_ctx if the file is compressed, but the caller is
-	 * responsible for enabling STEP_DECOMPRESS if it's actually needed.
-	 */
-
-	if (post_read_steps || f2fs_compressed_file(inode)) {
+	if (post_read_steps) {
 		/* Due to the mempool, this never fails. */
 		ctx = mempool_alloc(bio_post_read_ctx_pool, GFP_NOFS);
 		ctx->bio = bio;
@@ -1004,6 +1068,13 @@ static struct bio *f2fs_grab_read_bio(struct inode *inode, block_t blkaddr,
 	return bio;
 }
 
+static void f2fs_release_read_bio(struct bio *bio)
+{
+	if (bio->bi_private)
+		mempool_free(bio->bi_private, bio_post_read_ctx_pool);
+	bio_put(bio);
+}
+
 /* This can handle encryption stuffs */
 static int f2fs_submit_page_read(struct inode *inode, struct page *page,
 				 block_t blkaddr, int op_flags, bool for_write)
@@ -1012,7 +1083,7 @@ static int f2fs_submit_page_read(struct inode *inode, struct page *page,
 	struct bio *bio;
 
 	bio = f2fs_grab_read_bio(inode, blkaddr, 1, op_flags,
-					page->index, for_write);
+					page->index, for_write, true);
 	if (IS_ERR(bio))
 		return PTR_ERR(bio);
 
@@ -1893,7 +1964,6 @@ next:
 	}
 
 	if (size) {
-		flags |= FIEMAP_EXTENT_MERGED;
 		if (IS_ENCRYPTED(inode))
 			flags |= FIEMAP_EXTENT_DATA_ENCRYPTED;
 
@@ -2051,7 +2121,7 @@ submit_and_realloc:
 	if (bio == NULL) {
 		bio = f2fs_grab_read_bio(inode, block_nr, nr_pages,
 				is_readahead ? REQ_RAHEAD : 0, page->index,
-				false);
+				false, true);
 		if (IS_ERR(bio)) {
 			ret = PTR_ERR(bio);
 			bio = NULL;
@@ -2097,6 +2167,8 @@ int f2fs_read_multi_pages(struct compress_ctx *cc, struct bio **bio_ret,
 	sector_t last_block_in_file;
 	const unsigned blocksize = blks_to_bytes(inode, 1);
 	struct decompress_io_ctx *dic = NULL;
+	struct bio_post_read_ctx *ctx;
+	bool for_verity = false;
 	int i;
 	int ret = 0;
 
@@ -2162,10 +2234,29 @@ int f2fs_read_multi_pages(struct compress_ctx *cc, struct bio **bio_ret,
 		goto out_put_dnode;
 	}
 
+	/*
+	 * It's possible to enable fsverity on the fly when handling a cluster,
+	 * which requires complicated error handling. Instead of adding more
+	 * complexity, let's give a rule where end_io post-processes fsverity
+	 * per cluster. In order to do that, we need to submit bio, if previous
+	 * bio sets a different post-process policy.
+	 */
+	if (fsverity_active(cc->inode)) {
+		atomic_set(&dic->verity_pages, cc->nr_cpages);
+		for_verity = true;
+
+		if (bio) {
+			ctx = bio->bi_private;
+			if (!(ctx->enabled_steps & (1 << STEP_VERITY))) {
+				__submit_bio(sbi, bio, DATA);
+				bio = NULL;
+			}
+		}
+	}
+
 	for (i = 0; i < dic->nr_cpages; i++) {
 		struct page *page = dic->cpages[i];
 		block_t blkaddr;
-		struct bio_post_read_ctx *ctx;
 
 		blkaddr = data_blkaddr(dn.inode, dn.node_page,
 						dn.ofs_in_node + i + 1);
@@ -2181,10 +2272,31 @@ submit_and_realloc:
 		if (!bio) {
 			bio = f2fs_grab_read_bio(inode, blkaddr, nr_pages,
 					is_readahead ? REQ_RAHEAD : 0,
-					page->index, for_write);
+					page->index, for_write, for_verity);
 			if (IS_ERR(bio)) {
+				unsigned int remained = dic->nr_cpages - i;
+				bool release = false;
+
 				ret = PTR_ERR(bio);
-				f2fs_decompress_end_io(dic, ret);
+				dic->failed = true;
+
+				if (for_verity) {
+					if (!atomic_sub_return(remained,
+						&dic->verity_pages))
+						release = true;
+				} else {
+					if (!atomic_sub_return(remained,
+						&dic->pending_pages))
+						release = true;
+				}
+
+				if (release) {
+					f2fs_decompress_end_io(dic->rpages,
+						cc->cluster_size, true,
+						false);
+					f2fs_free_dic(dic);
+				}
+
 				f2fs_put_dnode(&dn);
 				*bio_ret = NULL;
 				return ret;
@@ -2196,9 +2308,10 @@ submit_and_realloc:
 		if (bio_add_page(bio, page, blocksize, 0) < blocksize)
 			goto submit_and_realloc;
 
+		/* tag STEP_DECOMPRESS to handle IO in wq */
 		ctx = bio->bi_private;
-		ctx->enabled_steps |= STEP_DECOMPRESS;
-		refcount_inc(&dic->refcnt);
+		if (!(ctx->enabled_steps & (1 << STEP_DECOMPRESS)))
+			ctx->enabled_steps |= 1 << STEP_DECOMPRESS;
 
 		inc_page_count(sbi, F2FS_RD_DATA);
 		f2fs_update_iostat(sbi, FS_DATA_READ_IO, F2FS_BLKSIZE);
@@ -2215,13 +2328,7 @@ submit_and_realloc:
 out_put_dnode:
 	f2fs_put_dnode(&dn);
 out:
-	for (i = 0; i < cc->cluster_size; i++) {
-		if (cc->rpages[i]) {
-			ClearPageUptodate(cc->rpages[i]);
-			ClearPageError(cc->rpages[i]);
-			unlock_page(cc->rpages[i]);
-		}
-	}
+	f2fs_decompress_end_io(cc->rpages, cc->cluster_size, true, false);
 	*bio_ret = bio;
 	return ret;
 }
@@ -2230,6 +2337,11 @@ out:
 /*
  * This function was originally taken from fs/mpage.c, and customized for f2fs.
  * Major change was from block_size == page_size in f2fs by default.
+ *
+ * Note that the aops->readpages() function is ONLY used for read-ahead. If
+ * this function ever deviates from doing just read-ahead, it should either
+ * use ->readpage() or do the necessary surgery to decouple ->readpages()
+ * from read-ahead.
  */
 static int f2fs_mpage_readpages(struct inode *inode,
 		struct readahead_control *rac, struct page *page)
@@ -2252,6 +2364,7 @@ static int f2fs_mpage_readpages(struct inode *inode,
 	unsigned nr_pages = rac ? readahead_count(rac) : 1;
 	unsigned max_nr_pages = nr_pages;
 	int ret = 0;
+	bool drop_ra = false;
 
 	map.m_pblk = 0;
 	map.m_lblk = 0;
@@ -2262,10 +2375,26 @@ static int f2fs_mpage_readpages(struct inode *inode,
 	map.m_seg_type = NO_CHECK_TYPE;
 	map.m_may_create = false;
 
+	/*
+	 * Two readahead threads for same address range can cause race condition
+	 * which fragments sequential read IOs. So let's avoid each other.
+	 */
+	if (rac && readahead_count(rac)) {
+		if (READ_ONCE(F2FS_I(inode)->ra_offset) == readahead_index(rac))
+			drop_ra = true;
+		else
+			WRITE_ONCE(F2FS_I(inode)->ra_offset,
+						readahead_index(rac));
+	}
+
 	for (; nr_pages; nr_pages--) {
 		if (rac) {
 			page = readahead_page(rac);
 			prefetchw(&page->flags);
+			if (drop_ra) {
+				f2fs_put_page(page, 1);
+				continue;
+			}
 		}
 
 #ifdef CONFIG_F2FS_FS_COMPRESSION
@@ -2328,6 +2457,9 @@ next_page:
 	}
 	if (bio)
 		__submit_bio(F2FS_I_SB(inode), bio, DATA);
+
+	if (rac && readahead_count(rac) && !drop_ra)
+		WRITE_ONCE(F2FS_I(inode)->ra_offset, -1);
 	return ret;
 }
 
@@ -2611,8 +2743,7 @@ int f2fs_write_single_data_page(struct page *page, int *submitted,
 				sector_t *last_block,
 				struct writeback_control *wbc,
 				enum iostat_type io_type,
-				int compr_blocks,
-				bool allow_balance)
+				int compr_blocks)
 {
 	struct inode *inode = page->mapping->host;
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
@@ -2750,7 +2881,7 @@ out:
 	}
 	unlock_page(page);
 	if (!S_ISDIR(inode->i_mode) && !IS_NOQUOTA(inode) &&
-			!F2FS_I(inode)->cp_task && allow_balance)
+					!F2FS_I(inode)->cp_task)
 		f2fs_balance_fs(sbi, need_balance_fs);
 
 	if (unlikely(f2fs_cp_error(sbi))) {
@@ -2797,7 +2928,7 @@ out:
 #endif
 
 	return f2fs_write_single_data_page(page, NULL, NULL, NULL,
-						wbc, FS_DATA_IO, 0, true);
+						wbc, FS_DATA_IO, 0);
 }
 
 /*
@@ -2965,8 +3096,7 @@ continue_unlock:
 			}
 #endif
 			ret = f2fs_write_single_data_page(page, &submitted,
-					&bio, &last_block, wbc, io_type,
-					0, true);
+					&bio, &last_block, wbc, io_type, 0);
 			if (ret == AOP_WRITEPAGE_ACTIVATE)
 				unlock_page(page);
 #ifdef CONFIG_F2FS_FS_COMPRESSION
@@ -3701,7 +3831,7 @@ static sector_t f2fs_bmap(struct address_space *mapping, sector_t block)
 		filemap_write_and_wait(mapping);
 
 	/* Block number less than F2FS MAX BLOCKS */
-	if (unlikely(block >= max_file_blocks(inode)))
+	if (unlikely(block >= F2FS_I_SB(inode)->max_file_blocks))
 		goto out;
 
 	if (f2fs_compressed_file(inode)) {
@@ -3978,13 +4108,12 @@ static int f2fs_swap_activate(struct swap_info_struct *sis, struct file *file,
 	if (!f2fs_disable_compressed_file(inode))
 		return -EINVAL;
 
-	f2fs_precache_extents(inode);
-
 	ret = check_swap_activate(sis, file, span);
 	if (ret < 0)
 		return ret;
 
 	set_inode_flag(inode, FI_PIN_FILE);
+	f2fs_precache_extents(inode);
 	f2fs_update_time(F2FS_I_SB(inode), REQ_TIME);
 	return ret;
 }

@@ -2516,7 +2516,7 @@ fail:
 
 	dev_kfree_skb_any(skb);
 
-	return NETDEV_TX_OK;
+	return 0;
 
 }
 

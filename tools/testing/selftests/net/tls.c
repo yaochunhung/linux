@@ -133,10 +133,7 @@ FIXTURE_VARIANT_ADD(tls, 13_chacha)
 
 FIXTURE_SETUP(tls)
 {
-	union {
-		struct tls12_crypto_info_aes_gcm_128 aes128;
-		struct tls12_crypto_info_chacha20_poly1305 chacha20;
-	} tls12;
+	union tls_crypto_context tls12;
 	struct sockaddr_in addr;
 	socklen_t len;
 	int sfd, ret;
@@ -146,16 +143,14 @@ FIXTURE_SETUP(tls)
 	len = sizeof(addr);
 
 	memset(&tls12, 0, sizeof(tls12));
+	tls12.info.version = variant->tls_version;
+	tls12.info.cipher_type = variant->cipher_type;
 	switch (variant->cipher_type) {
 	case TLS_CIPHER_CHACHA20_POLY1305:
-		tls12_sz = sizeof(struct tls12_crypto_info_chacha20_poly1305);
-		tls12.chacha20.info.version = variant->tls_version;
-		tls12.chacha20.info.cipher_type = variant->cipher_type;
+		tls12_sz = sizeof(tls12_crypto_info_chacha20_poly1305);
 		break;
 	case TLS_CIPHER_AES_GCM_128:
-		tls12_sz = sizeof(struct tls12_crypto_info_aes_gcm_128);
-		tls12.aes128.info.version = variant->tls_version;
-		tls12.aes128.info.cipher_type = variant->cipher_type;
+		tls12_sz = sizeof(tls12_crypto_info_aes_gcm_128);
 		break;
 	default:
 		tls12_sz = 0;

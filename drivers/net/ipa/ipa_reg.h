@@ -408,18 +408,15 @@ enum ipa_cs_offload_en {
 static inline u32 ipa_header_size_encoded(enum ipa_version version,
 					  u32 header_size)
 {
-	u32 size = header_size & field_mask(HDR_LEN_FMASK);
 	u32 val;
 
-	val = u32_encode_bits(size, HDR_LEN_FMASK);
-	if (version < IPA_VERSION_4_5) {
-		/* ipa_assert(header_size == size); */
+	val = u32_encode_bits(header_size, HDR_LEN_FMASK);
+	if (version < IPA_VERSION_4_5)
 		return val;
-	}
 
 	/* IPA v4.5 adds a few more most-significant bits */
-	size = header_size >> hweight32(HDR_LEN_FMASK);
-	val |= u32_encode_bits(size, HDR_LEN_MSB_FMASK);
+	header_size >>= hweight32(HDR_LEN_FMASK);
+	val |= u32_encode_bits(header_size, HDR_LEN_MSB_FMASK);
 
 	return val;
 }
@@ -428,18 +425,15 @@ static inline u32 ipa_header_size_encoded(enum ipa_version version,
 static inline u32 ipa_metadata_offset_encoded(enum ipa_version version,
 					      u32 offset)
 {
-	u32 off = offset & field_mask(HDR_OFST_METADATA_FMASK);
 	u32 val;
 
-	val = u32_encode_bits(off, HDR_OFST_METADATA_FMASK);
-	if (version < IPA_VERSION_4_5) {
-		/* ipa_assert(offset == off); */
+	val = u32_encode_bits(offset, HDR_OFST_METADATA_FMASK);
+	if (version < IPA_VERSION_4_5)
 		return val;
-	}
 
 	/* IPA v4.5 adds a few more most-significant bits */
-	off = offset >> hweight32(HDR_OFST_METADATA_FMASK);
-	val |= u32_encode_bits(off, HDR_OFST_METADATA_MSB_FMASK);
+	offset >>= hweight32(HDR_OFST_METADATA_FMASK);
+	val |= u32_encode_bits(offset, HDR_OFST_METADATA_MSB_FMASK);
 
 	return val;
 }

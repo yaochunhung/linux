@@ -23,6 +23,8 @@ struct blk_trace {
 	u32 pid;
 	u32 dev;
 	struct dentry *dir;
+	struct dentry *dropped_file;
+	struct dentry *msg_file;
 	struct list_head running_list;
 	atomic_t dropped;
 };
@@ -117,7 +119,7 @@ struct compat_blk_user_trace_setup {
 
 #endif
 
-void blk_fill_rwbs(char *rwbs, unsigned int op);
+extern void blk_fill_rwbs(char *rwbs, unsigned int op, int bytes);
 
 static inline sector_t blk_rq_trace_sector(struct request *rq)
 {

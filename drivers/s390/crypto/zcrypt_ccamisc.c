@@ -662,10 +662,7 @@ int cca_sec2protkey(u16 cardnr, u16 domain,
 			  __func__,
 			  (int) prepcblk->ccp_rtcode,
 			  (int) prepcblk->ccp_rscode);
-		if (prepcblk->ccp_rtcode == 8 && prepcblk->ccp_rscode == 2290)
-			rc = -EAGAIN;
-		else
-			rc = -EIO;
+		rc = -EIO;
 		goto out;
 	}
 	if (prepcblk->ccp_rscode != 0) {
@@ -1278,10 +1275,7 @@ int cca_cipher2protkey(u16 cardnr, u16 domain, const u8 *ckey,
 			__func__,
 			(int) prepcblk->ccp_rtcode,
 			(int) prepcblk->ccp_rscode);
-		if (prepcblk->ccp_rtcode == 8 && prepcblk->ccp_rscode == 2290)
-			rc = -EAGAIN;
-		else
-			rc = -EIO;
+		rc = -EIO;
 		goto out;
 	}
 	if (prepcblk->ccp_rscode != 0) {
@@ -1447,10 +1441,7 @@ int cca_ecc2protkey(u16 cardnr, u16 domain, const u8 *key,
 			__func__,
 			(int) prepcblk->ccp_rtcode,
 			(int) prepcblk->ccp_rscode);
-		if (prepcblk->ccp_rtcode == 8 && prepcblk->ccp_rscode == 2290)
-			rc = -EAGAIN;
-		else
-			rc = -EIO;
+		rc = -EIO;
 		goto out;
 	}
 	if (prepcblk->ccp_rscode != 0) {

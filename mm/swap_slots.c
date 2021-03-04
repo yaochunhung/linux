@@ -193,7 +193,8 @@ static void drain_slots_cache_cpu(unsigned int cpu, unsigned int type,
 			cache->slots_ret = NULL;
 		}
 		spin_unlock_irq(&cache->free_lock);
-		kvfree(slots);
+		if (slots)
+			kvfree(slots);
 	}
 }
 

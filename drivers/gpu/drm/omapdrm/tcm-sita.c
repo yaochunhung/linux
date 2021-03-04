@@ -254,5 +254,6 @@ struct tcm *sita_init(u16 width, u16 height)
 	return tcm;
 
 error:
+	kfree(tcm);
 	return NULL;
 }

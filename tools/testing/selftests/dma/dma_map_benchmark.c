@@ -12,12 +12,9 @@
 #include <sys/mman.h>
 #include <linux/types.h>
 
-#define NSEC_PER_MSEC	1000000L
-
 #define DMA_MAP_BENCHMARK	_IOWR('d', 1, struct map_benchmark)
 #define DMA_MAP_MAX_THREADS	1024
 #define DMA_MAP_MAX_SECONDS     300
-#define DMA_MAP_MAX_TRANS_DELAY	(10 * NSEC_PER_MSEC)
 
 #define DMA_MAP_BIDIRECTIONAL	0
 #define DMA_MAP_TO_DEVICE	1
@@ -39,8 +36,7 @@ struct map_benchmark {
 	__s32 node; /* which numa node this benchmark will run on */
 	__u32 dma_bits; /* DMA addressing capability */
 	__u32 dma_dir; /* DMA data direction */
-	__u32 dma_trans_ns; /* time for DMA transmission in ns */
-	__u8 expansion[80];	/* For future use */
+	__u8 expansion[84];	/* For future use */
 };
 
 int main(int argc, char **argv)
@@ -50,12 +46,12 @@ int main(int argc, char **argv)
 	/* default single thread, run 20 seconds on NUMA_NO_NODE */
 	int threads = 1, seconds = 20, node = -1;
 	/* default dma mask 32bit, bidirectional DMA */
-	int bits = 32, xdelay = 0, dir = DMA_MAP_BIDIRECTIONAL;
+	int bits = 32, dir = DMA_MAP_BIDIRECTIONAL;
 
 	int cmd = DMA_MAP_BENCHMARK;
 	char *p;
 
-	while ((opt = getopt(argc, argv, "t:s:n:b:d:x:")) != -1) {
+	while ((opt = getopt(argc, argv, "t:s:n:b:d:")) != -1) {
 		switch (opt) {
 		case 't':
 			threads = atoi(optarg);
@@ -72,9 +68,6 @@ int main(int argc, char **argv)
 		case 'd':
 			dir = atoi(optarg);
 			break;
-		case 'x':
-			xdelay = atoi(optarg);
-			break;
 		default:
 			return -1;
 		}
@@ -89,12 +82,6 @@ int main(int argc, char **argv)
 	if (seconds <= 0 || seconds > DMA_MAP_MAX_SECONDS) {
 		fprintf(stderr, "invalid number of seconds, must be in 1-%d\n",
 			DMA_MAP_MAX_SECONDS);
-		exit(1);
-	}
-
-	if (xdelay < 0 || xdelay > DMA_MAP_MAX_TRANS_DELAY) {
-		fprintf(stderr, "invalid transmit delay, must be in 0-%ld\n",
-			DMA_MAP_MAX_TRANS_DELAY);
 		exit(1);
 	}
 
@@ -122,8 +109,6 @@ int main(int argc, char **argv)
 	map.node = node;
 	map.dma_bits = bits;
 	map.dma_dir = dir;
-	map.dma_trans_ns = xdelay;
-
 	if (ioctl(fd, cmd, &map)) {
 		perror("ioctl");
 		exit(1);

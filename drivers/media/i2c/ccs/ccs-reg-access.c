@@ -17,10 +17,11 @@
 #include "ccs.h"
 #include "ccs-limits.h"
 
-static u32 float_to_u32_mul_1000000(struct i2c_client *client, u32 phloat)
+static uint32_t float_to_u32_mul_1000000(struct i2c_client *client,
+					 uint32_t phloat)
 {
-	s32 exp;
-	u64 man;
+	int32_t exp;
+	uint64_t man;
 
 	if (phloat >= 0x80000000) {
 		dev_err(&client->dev, "this is a negative number\n");
@@ -136,11 +137,11 @@ static int ____ccs_read_addr_8only(struct ccs_sensor *sensor, u16 reg,
 unsigned int ccs_reg_width(u32 reg)
 {
 	if (reg & CCS_FL_16BIT)
-		return sizeof(u16);
+		return sizeof(uint16_t);
 	if (reg & CCS_FL_32BIT)
-		return sizeof(u32);
+		return sizeof(uint32_t);
 
-	return sizeof(u8);
+	return sizeof(uint8_t);
 }
 
 static u32 ireal32_to_u32_mul_1000000(struct i2c_client *client, u32 val)
@@ -204,7 +205,7 @@ static int __ccs_read_data(struct ccs_reg *regs, size_t num_regs,
 	size_t i;
 
 	for (i = 0; i < num_regs; i++, regs++) {
-		u8 *data;
+		uint8_t *data;
 
 		if (regs->addr + regs->len < CCS_REG_ADDR(reg) + width)
 			continue;
@@ -215,13 +216,13 @@ static int __ccs_read_data(struct ccs_reg *regs, size_t num_regs,
 		data = &regs->value[CCS_REG_ADDR(reg) - regs->addr];
 
 		switch (width) {
-		case sizeof(u8):
+		case sizeof(uint8_t):
 			*val = *data;
 			break;
-		case sizeof(u16):
+		case sizeof(uint16_t):
 			*val = get_unaligned_be16(data);
 			break;
-		case sizeof(u32):
+		case sizeof(uint32_t):
 			*val = get_unaligned_be32(data);
 			break;
 		default:
@@ -386,20 +387,12 @@ int ccs_write_data_regs(struct ccs_sensor *sensor, struct ccs_reg *regs,
 
 		for (j = 0; j < regs->len;
 		     j += msg.len - 2, regdata += msg.len - 2) {
-			char printbuf[(MAX_WRITE_LEN << 1) +
-				      1 /* \0 */] = { 0 };
 			int rval;
 
 			msg.len = min(regs->len - j, MAX_WRITE_LEN);
 
-			bin2hex(printbuf, regdata, msg.len);
-			dev_dbg(&client->dev,
-				"writing msr reg 0x%4.4x value 0x%s\n",
-				regs->addr + j, printbuf);
-
 			put_unaligned_be16(regs->addr + j, buf);
 			memcpy(buf + 2, regdata, msg.len);
-
 			msg.len += 2;
 
 			rval = ccs_write_retry(client, &msg);

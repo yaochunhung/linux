@@ -4,7 +4,6 @@
  */
 
 #include "gt/intel_gt.h"
-#include "gt/intel_lrc.h"
 #include "intel_guc_ads.h"
 #include "intel_uc.h"
 #include "i915_drv.h"

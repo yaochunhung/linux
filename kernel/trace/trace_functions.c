@@ -106,7 +106,8 @@ static int function_trace_init(struct trace_array *tr)
 
 	ftrace_init_array_ops(tr, func);
 
-	tr->array_buffer.cpu = raw_smp_processor_id();
+	tr->array_buffer.cpu = get_cpu();
+	put_cpu();
 
 	tracing_start_cmdline_record();
 	tracing_start_function_trace(tr);
@@ -131,9 +132,10 @@ function_trace_call(unsigned long ip, unsigned long parent_ip,
 {
 	struct trace_array *tr = op->private;
 	struct trace_array_cpu *data;
-	unsigned int trace_ctx;
+	unsigned long flags;
 	int bit;
 	int cpu;
+	int pc;
 
 	if (unlikely(!tr->function_enabled))
 		return;
@@ -142,14 +144,15 @@ function_trace_call(unsigned long ip, unsigned long parent_ip,
 	if (bit < 0)
 		return;
 
-	trace_ctx = tracing_gen_ctx();
+	pc = preempt_count();
 	preempt_disable_notrace();
 
 	cpu = smp_processor_id();
 	data = per_cpu_ptr(tr->array_buffer.data, cpu);
-	if (!atomic_read(&data->disabled))
-		trace_function(tr, ip, parent_ip, trace_ctx);
-
+	if (!atomic_read(&data->disabled)) {
+		local_save_flags(flags);
+		trace_function(tr, ip, parent_ip, flags, pc);
+	}
 	ftrace_test_recursion_unlock(bit);
 	preempt_enable_notrace();
 }
@@ -181,7 +184,7 @@ function_stack_trace_call(unsigned long ip, unsigned long parent_ip,
 	unsigned long flags;
 	long disabled;
 	int cpu;
-	unsigned int trace_ctx;
+	int pc;
 
 	if (unlikely(!tr->function_enabled))
 		return;
@@ -196,9 +199,9 @@ function_stack_trace_call(unsigned long ip, unsigned long parent_ip,
 	disabled = atomic_inc_return(&data->disabled);
 
 	if (likely(disabled == 1)) {
-		trace_ctx = tracing_gen_ctx_flags(flags);
-		trace_function(tr, ip, parent_ip, trace_ctx);
-		__trace_stack(tr, trace_ctx, STACK_SKIP);
+		pc = preempt_count();
+		trace_function(tr, ip, parent_ip, flags, pc);
+		__trace_stack(tr, flags, STACK_SKIP, pc);
 	}
 
 	atomic_dec(&data->disabled);
@@ -401,11 +404,13 @@ ftrace_traceoff(unsigned long ip, unsigned long parent_ip,
 
 static __always_inline void trace_stack(struct trace_array *tr)
 {
-	unsigned int trace_ctx;
+	unsigned long flags;
+	int pc;
 
-	trace_ctx = tracing_gen_ctx();
+	local_save_flags(flags);
+	pc = preempt_count();
 
-	__trace_stack(tr, trace_ctx, FTRACE_STACK_SKIP);
+	__trace_stack(tr, flags, FTRACE_STACK_SKIP, pc);
 }
 
 static void

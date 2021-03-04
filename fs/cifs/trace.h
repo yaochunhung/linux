@@ -851,21 +851,17 @@ DEFINE_SMB3_LEASE_ERR_EVENT(lease_err);
 
 DECLARE_EVENT_CLASS(smb3_reconnect_class,
 	TP_PROTO(__u64	currmid,
-		__u64 conn_id,
 		char *hostname),
-	TP_ARGS(currmid, conn_id, hostname),
+	TP_ARGS(currmid, hostname),
 	TP_STRUCT__entry(
 		__field(__u64, currmid)
-		__field(__u64, conn_id)
 		__field(char *, hostname)
 	),
 	TP_fast_assign(
 		__entry->currmid = currmid;
-		__entry->conn_id = conn_id;
 		__entry->hostname = hostname;
 	),
-	TP_printk("conn_id=0x%llx server=%s current_mid=%llu",
-		__entry->conn_id,
+	TP_printk("server=%s current_mid=0x%llx",
 		__entry->hostname,
 		__entry->currmid)
 )
@@ -873,56 +869,44 @@ DECLARE_EVENT_CLASS(smb3_reconnect_class,
 #define DEFINE_SMB3_RECONNECT_EVENT(name)        \
 DEFINE_EVENT(smb3_reconnect_class, smb3_##name,  \
 	TP_PROTO(__u64	currmid,		\
-		__u64 conn_id,			\
-		char *hostname),				\
-	TP_ARGS(currmid, conn_id, hostname))
+		char *hostname),		\
+	TP_ARGS(currmid, hostname))
 
 DEFINE_SMB3_RECONNECT_EVENT(reconnect);
 DEFINE_SMB3_RECONNECT_EVENT(partial_send_reconnect);
 
 DECLARE_EVENT_CLASS(smb3_credit_class,
 	TP_PROTO(__u64	currmid,
-		__u64 conn_id,
 		char *hostname,
 		int credits,
-		int credits_to_add,
-		int in_flight),
-	TP_ARGS(currmid, conn_id, hostname, credits, credits_to_add, in_flight),
+		int credits_to_add),
+	TP_ARGS(currmid, hostname, credits, credits_to_add),
 	TP_STRUCT__entry(
 		__field(__u64, currmid)
-		__field(__u64, conn_id)
 		__field(char *, hostname)
 		__field(int, credits)
 		__field(int, credits_to_add)
-		__field(int, in_flight)
 	),
 	TP_fast_assign(
 		__entry->currmid = currmid;
-		__entry->conn_id = conn_id;
 		__entry->hostname = hostname;
 		__entry->credits = credits;
 		__entry->credits_to_add = credits_to_add;
-		__entry->in_flight = in_flight;
 	),
-	TP_printk("conn_id=0x%llx server=%s current_mid=%llu "
-			"credits=%d credit_change=%d in_flight=%d",
-		__entry->conn_id,
+	TP_printk("server=%s current_mid=0x%llx credits=%d credits_to_add=%d",
 		__entry->hostname,
 		__entry->currmid,
 		__entry->credits,
-		__entry->credits_to_add,
-		__entry->in_flight)
+		__entry->credits_to_add)
 )
 
 #define DEFINE_SMB3_CREDIT_EVENT(name)        \
 DEFINE_EVENT(smb3_credit_class, smb3_##name,  \
 	TP_PROTO(__u64	currmid,		\
-		__u64 conn_id,			\
 		char *hostname,			\
 		int  credits,			\
-		int  credits_to_add,	\
-		int in_flight),			\
-	TP_ARGS(currmid, conn_id, hostname, credits, credits_to_add, in_flight))
+		int  credits_to_add),		\
+	TP_ARGS(currmid, hostname, credits, credits_to_add))
 
 DEFINE_SMB3_CREDIT_EVENT(reconnect_with_invalid_credits);
 DEFINE_SMB3_CREDIT_EVENT(reconnect_detected);

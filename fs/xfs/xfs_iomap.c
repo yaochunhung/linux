@@ -194,21 +194,25 @@ xfs_iomap_write_direct(
 	struct xfs_trans	*tp;
 	xfs_filblks_t		resaligned;
 	int			nimaps;
-	unsigned int		dblocks, rblocks;
-	bool			force = false;
+	int			quota_flag;
+	uint			qblocks, resblks;
+	unsigned int		resrtextents = 0;
 	int			error;
 	int			bmapi_flags = XFS_BMAPI_PREALLOC;
+	uint			tflags = 0;
 
 	ASSERT(count_fsb > 0);
 
 	resaligned = xfs_aligned_fsb_count(offset_fsb, count_fsb,
 					   xfs_get_extsz_hint(ip));
 	if (unlikely(XFS_IS_REALTIME_INODE(ip))) {
-		dblocks = XFS_DIOSTRAT_SPACE_RES(mp, 0);
-		rblocks = resaligned;
+		resrtextents = qblocks = resaligned;
+		resrtextents /= mp->m_sb.sb_rextsize;
+		resblks = XFS_DIOSTRAT_SPACE_RES(mp, 0);
+		quota_flag = XFS_QMOPT_RES_RTBLKS;
 	} else {
-		dblocks = XFS_DIOSTRAT_SPACE_RES(mp, resaligned);
-		rblocks = 0;
+		resblks = qblocks = XFS_DIOSTRAT_SPACE_RES(mp, resaligned);
+		quota_flag = XFS_QMOPT_RES_REGBLKS;
 	}
 
 	error = xfs_qm_dqattach(ip);
@@ -231,20 +235,22 @@ xfs_iomap_write_direct(
 	if (IS_DAX(VFS_I(ip))) {
 		bmapi_flags = XFS_BMAPI_CONVERT | XFS_BMAPI_ZERO;
 		if (imap->br_state == XFS_EXT_UNWRITTEN) {
-			force = true;
-			dblocks = XFS_DIOSTRAT_SPACE_RES(mp, 0) << 1;
+			tflags |= XFS_TRANS_RESERVE;
+			resblks = XFS_DIOSTRAT_SPACE_RES(mp, 0) << 1;
 		}
 	}
-
-	error = xfs_trans_alloc_inode(ip, &M_RES(mp)->tr_write, dblocks,
-			rblocks, force, &tp);
+	error = xfs_trans_alloc(mp, &M_RES(mp)->tr_write, resblks, resrtextents,
+			tflags, &tp);
 	if (error)
 		return error;
 
-	error = xfs_iext_count_may_overflow(ip, XFS_DATA_FORK,
-			XFS_IEXT_ADD_NOSPLIT_CNT);
+	xfs_ilock(ip, XFS_ILOCK_EXCL);
+
+	error = xfs_trans_reserve_quota_nblks(tp, ip, qblocks, 0, quota_flag);
 	if (error)
 		goto out_trans_cancel;
+
+	xfs_trans_ijoin(tp, ip, 0);
 
 	/*
 	 * From this point onwards we overwrite the imap pointer that the
@@ -254,7 +260,7 @@ xfs_iomap_write_direct(
 	error = xfs_bmapi_write(tp, ip, offset_fsb, count_fsb, bmapi_flags, 0,
 				imap, &nimaps);
 	if (error)
-		goto out_trans_cancel;
+		goto out_res_cancel;
 
 	/*
 	 * Complete the transaction
@@ -278,6 +284,8 @@ out_unlock:
 	xfs_iunlock(ip, XFS_ILOCK_EXCL);
 	return error;
 
+out_res_cancel:
+	xfs_trans_unreserve_quota_nblks(tp, ip, (long)qblocks, 0, quota_flag);
 out_trans_cancel:
 	xfs_trans_cancel(tp);
 	goto out_unlock;
@@ -540,13 +548,16 @@ xfs_iomap_write_unwritten(
 		 * here as we might be asked to write out the same inode that we
 		 * complete here and might deadlock on the iolock.
 		 */
-		error = xfs_trans_alloc_inode(ip, &M_RES(mp)->tr_write, resblks,
-				0, true, &tp);
+		error = xfs_trans_alloc(mp, &M_RES(mp)->tr_write, resblks, 0,
+				XFS_TRANS_RESERVE, &tp);
 		if (error)
 			return error;
 
-		error = xfs_iext_count_may_overflow(ip, XFS_DATA_FORK,
-				XFS_IEXT_WRITE_UNWRITTEN_CNT);
+		xfs_ilock(ip, XFS_ILOCK_EXCL);
+		xfs_trans_ijoin(tp, ip, 0);
+
+		error = xfs_trans_reserve_quota_nblks(tp, ip, resblks, 0,
+				XFS_QMOPT_RES_REGBLKS | XFS_QMOPT_FORCE_RES);
 		if (error)
 			goto error_on_bmapi_transaction;
 
@@ -773,28 +784,15 @@ xfs_direct_write_iomap_begin(
 		goto allocate_blocks;
 
 	/*
-	 * NOWAIT and OVERWRITE I/O needs to span the entire requested I/O with
-	 * a single map so that we avoid partial IO failures due to the rest of
-	 * the I/O range not covered by this map triggering an EAGAIN condition
-	 * when it is subsequently mapped and aborting the I/O.
+	 * NOWAIT IO needs to span the entire requested IO with a single map so
+	 * that we avoid partial IO failures due to the rest of the IO range not
+	 * covered by this map triggering an EAGAIN condition when it is
+	 * subsequently mapped and aborting the IO.
 	 */
-	if (flags & (IOMAP_NOWAIT | IOMAP_OVERWRITE_ONLY)) {
+	if ((flags & IOMAP_NOWAIT) &&
+	    !imap_spans_range(&imap, offset_fsb, end_fsb)) {
 		error = -EAGAIN;
-		if (!imap_spans_range(&imap, offset_fsb, end_fsb))
-			goto out_unlock;
-	}
-
-	/*
-	 * For overwrite only I/O, we cannot convert unwritten extents without
-	 * requiring sub-block zeroing.  This can only be done under an
-	 * exclusive IOLOCK, hence return -EAGAIN if this is not a written
-	 * extent to tell the caller to try again.
-	 */
-	if (flags & IOMAP_OVERWRITE_ONLY) {
-		error = -EAGAIN;
-		if (imap.br_state != XFS_EXT_NORM &&
-	            ((offset | length) & mp->m_blockmask))
-			goto out_unlock;
+		goto out_unlock;
 	}
 
 	xfs_iunlock(ip, lockmode);
@@ -803,7 +801,7 @@ xfs_direct_write_iomap_begin(
 
 allocate_blocks:
 	error = -EAGAIN;
-	if (flags & (IOMAP_NOWAIT | IOMAP_OVERWRITE_ONLY))
+	if (flags & IOMAP_NOWAIT)
 		goto out_unlock;
 
 	/*
@@ -844,8 +842,7 @@ out_found_cow:
 	return xfs_bmbt_to_iomap(ip, iomap, &cmap, IOMAP_F_SHARED);
 
 out_unlock:
-	if (lockmode)
-		xfs_iunlock(ip, lockmode);
+	xfs_iunlock(ip, lockmode);
 	return error;
 }
 
@@ -872,9 +869,6 @@ xfs_buffered_write_iomap_begin(
 	bool			eof = false, cow_eof = false, shared = false;
 	int			allocfork = XFS_DATA_FORK;
 	int			error = 0;
-
-	if (XFS_FORCED_SHUTDOWN(mp))
-		return -EIO;
 
 	/* we can't use delayed allocations when using extent size hints */
 	if (xfs_get_extsz_hint(ip))

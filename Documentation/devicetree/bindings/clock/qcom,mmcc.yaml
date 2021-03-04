@@ -24,8 +24,6 @@ properties:
       - qcom,mmcc-msm8974
       - qcom,mmcc-msm8996
       - qcom,mmcc-msm8998
-      - qcom,mmcc-sdm630
-      - qcom,mmcc-sdm660
 
   clocks:
     items:

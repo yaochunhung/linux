@@ -22,7 +22,6 @@
 #include <linux/delay.h>
 #include <linux/workqueue.h>
 
-#include <asm/interrupt.h>
 #include <asm/io.h>
 #include <asm/reg.h>
 #include <asm/nvram.h>
@@ -101,13 +100,16 @@ static void TAUupdate(int cpu)
  * with interrupts disabled
  */
 
-DEFINE_INTERRUPT_HANDLER_ASYNC(TAUException)
+void TAUException(struct pt_regs * regs)
 {
 	int cpu = smp_processor_id();
 
+	irq_enter();
 	tau[cpu].interrupts++;
 
 	TAUupdate(cpu);
+
+	irq_exit();
 }
 #endif /* CONFIG_TAU_INT */
 

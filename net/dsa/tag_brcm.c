@@ -5,7 +5,6 @@
  * Copyright (C) 2014 Broadcom Corporation
  */
 
-#include <linux/dsa/brcm.h>
 #include <linux/etherdevice.h>
 #include <linux/list.h>
 #include <linux/slab.h>

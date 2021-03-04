@@ -40,19 +40,20 @@ static void rmw_clear_fw(struct intel_uncore *uncore, i915_reg_t reg, u32 clr)
 	intel_uncore_rmw_fw(uncore, reg, clr, 0);
 }
 
-static void skip_context(struct i915_request *rq)
+static void engine_skip_context(struct i915_request *rq)
 {
+	struct intel_engine_cs *engine = rq->engine;
 	struct intel_context *hung_ctx = rq->context;
 
-	list_for_each_entry_from_rcu(rq, &hung_ctx->timeline->requests, link) {
-		if (!i915_request_is_active(rq))
-			return;
+	if (!i915_request_is_active(rq))
+		return;
 
+	lockdep_assert_held(&engine->active.lock);
+	list_for_each_entry_continue(rq, &engine->active.requests, sched.link)
 		if (rq->context == hung_ctx) {
 			i915_request_set_error_once(rq, -EIO);
 			__i915_request_skip(rq);
 		}
-	}
 }
 
 static void client_mark_guilty(struct i915_gem_context *ctx, bool banned)
@@ -151,14 +152,15 @@ static void mark_innocent(struct i915_request *rq)
 void __i915_request_reset(struct i915_request *rq, bool guilty)
 {
 	RQ_TRACE(rq, "guilty? %s\n", yesno(guilty));
-	GEM_BUG_ON(__i915_request_is_complete(rq));
+
+	GEM_BUG_ON(i915_request_completed(rq));
 
 	rcu_read_lock(); /* protect the GEM context */
 	if (guilty) {
 		i915_request_set_error_once(rq, -EIO);
 		__i915_request_skip(rq);
 		if (mark_guilty(rq))
-			skip_context(rq);
+			engine_skip_context(rq);
 	} else {
 		i915_request_set_error_once(rq, -EAGAIN);
 		mark_innocent(rq);
@@ -229,7 +231,7 @@ static int g4x_do_reset(struct intel_gt *gt,
 			      GRDOM_MEDIA | GRDOM_RESET_ENABLE);
 	ret =  wait_for_atomic(g4x_reset_complete(pdev), 50);
 	if (ret) {
-		GT_TRACE(gt, "Wait for media reset failed\n");
+		drm_dbg(&gt->i915->drm, "Wait for media reset failed\n");
 		goto out;
 	}
 
@@ -237,7 +239,7 @@ static int g4x_do_reset(struct intel_gt *gt,
 			      GRDOM_RENDER | GRDOM_RESET_ENABLE);
 	ret =  wait_for_atomic(g4x_reset_complete(pdev), 50);
 	if (ret) {
-		GT_TRACE(gt, "Wait for render reset failed\n");
+		drm_dbg(&gt->i915->drm, "Wait for render reset failed\n");
 		goto out;
 	}
 
@@ -263,7 +265,7 @@ static int ilk_do_reset(struct intel_gt *gt, intel_engine_mask_t engine_mask,
 					   5000, 0,
 					   NULL);
 	if (ret) {
-		GT_TRACE(gt, "Wait for render reset failed\n");
+		drm_dbg(&gt->i915->drm, "Wait for render reset failed\n");
 		goto out;
 	}
 
@@ -274,7 +276,7 @@ static int ilk_do_reset(struct intel_gt *gt, intel_engine_mask_t engine_mask,
 					   5000, 0,
 					   NULL);
 	if (ret) {
-		GT_TRACE(gt, "Wait for media reset failed\n");
+		drm_dbg(&gt->i915->drm, "Wait for media reset failed\n");
 		goto out;
 	}
 
@@ -303,9 +305,9 @@ static int gen6_hw_domain_reset(struct intel_gt *gt, u32 hw_domain_mask)
 					   500, 0,
 					   NULL);
 	if (err)
-		GT_TRACE(gt,
-			 "Wait for 0x%08x engines reset failed\n",
-			 hw_domain_mask);
+		drm_dbg(&gt->i915->drm,
+			"Wait for 0x%08x engines reset failed\n",
+			hw_domain_mask);
 
 	return err;
 }
@@ -405,7 +407,8 @@ static int gen11_lock_sfc(struct intel_engine_cs *engine, u32 *hw_mask)
 		return 0;
 
 	if (ret) {
-		ENGINE_TRACE(engine, "Wait for SFC forced lock ack failed\n");
+		drm_dbg(&engine->i915->drm,
+			"Wait for SFC forced lock ack failed\n");
 		return ret;
 	}
 
@@ -495,9 +498,6 @@ static int gen8_engine_reset_prepare(struct intel_engine_cs *engine)
 	const i915_reg_t reg = RING_RESET_CTL(engine->mmio_base);
 	u32 request, mask, ack;
 	int ret;
-
-	if (I915_SELFTEST_ONLY(should_fail(&engine->reset_timeout, 1)))
-		return -ETIMEDOUT;
 
 	ack = intel_uncore_read_fw(uncore, reg);
 	if (ack & RESET_CTL_CAT_ERROR) {
@@ -754,10 +754,8 @@ static int gt_reset(struct intel_gt *gt, intel_engine_mask_t stalled_mask)
 	if (err)
 		return err;
 
-	local_bh_disable();
 	for_each_engine(engine, gt, id)
 		__intel_engine_reset(engine, stalled_mask & engine->mask);
-	local_bh_enable();
 
 	intel_ggtt_restore_fences(gt->ggtt);
 
@@ -835,11 +833,9 @@ static void __intel_gt_set_wedged(struct intel_gt *gt)
 	set_bit(I915_WEDGED, &gt->reset.flags);
 
 	/* Mark all executing requests as skipped */
-	local_bh_disable();
 	for_each_engine(engine, gt, id)
 		if (engine->reset.cancel)
 			engine->reset.cancel(engine);
-	local_bh_enable();
 
 	reset_finish(gt, awake);
 
@@ -1109,12 +1105,25 @@ error:
 	goto finish;
 }
 
-static int intel_gt_reset_engine(struct intel_engine_cs *engine)
+static inline int intel_gt_reset_engine(struct intel_engine_cs *engine)
 {
 	return __intel_gt_reset(engine->gt, engine->mask);
 }
 
-int __intel_engine_reset_bh(struct intel_engine_cs *engine, const char *msg)
+/**
+ * intel_engine_reset - reset GPU engine to recover from a hang
+ * @engine: engine to reset
+ * @msg: reason for GPU reset; or NULL for no drm_notice()
+ *
+ * Reset a specific GPU engine. Useful if a hang is detected.
+ * Returns zero on successful reset or otherwise an error code.
+ *
+ * Procedure is:
+ *  - identifies the request that caused the hang and it is dropped
+ *  - reset engine (which will force the engine to idle)
+ *  - re-init/configure engine
+ */
+int intel_engine_reset(struct intel_engine_cs *engine, const char *msg)
 {
 	struct intel_gt *gt = engine->gt;
 	bool uses_guc = intel_engine_in_guc_submission_mode(engine);
@@ -1139,7 +1148,8 @@ int __intel_engine_reset_bh(struct intel_engine_cs *engine, const char *msg)
 		ret = intel_guc_reset_engine(&engine->gt->uc.guc, engine);
 	if (ret) {
 		/* If we fail here, we expect to fallback to a global reset */
-		ENGINE_TRACE(engine, "Failed to reset, err: %d\n", ret);
+		drm_dbg(&gt->i915->drm, "%sFailed to reset %s, ret=%d\n",
+			uses_guc ? "GuC " : "", engine->name, ret);
 		goto out;
 	}
 
@@ -1164,30 +1174,6 @@ out:
 	return ret;
 }
 
-/**
- * intel_engine_reset - reset GPU engine to recover from a hang
- * @engine: engine to reset
- * @msg: reason for GPU reset; or NULL for no drm_notice()
- *
- * Reset a specific GPU engine. Useful if a hang is detected.
- * Returns zero on successful reset or otherwise an error code.
- *
- * Procedure is:
- *  - identifies the request that caused the hang and it is dropped
- *  - reset engine (which will force the engine to idle)
- *  - re-init/configure engine
- */
-int intel_engine_reset(struct intel_engine_cs *engine, const char *msg)
-{
-	int err;
-
-	local_bh_disable();
-	err = __intel_engine_reset_bh(engine, msg);
-	local_bh_enable();
-
-	return err;
-}
-
 static void intel_gt_reset_global(struct intel_gt *gt,
 				  u32 engine_mask,
 				  const char *reason)
@@ -1200,7 +1186,7 @@ static void intel_gt_reset_global(struct intel_gt *gt,
 
 	kobject_uevent_env(kobj, KOBJ_CHANGE, error_event);
 
-	GT_TRACE(gt, "resetting chip, engines=%x\n", engine_mask);
+	drm_dbg(&gt->i915->drm, "resetting chip, engines=%x\n", engine_mask);
 	kobject_uevent_env(kobj, KOBJ_CHANGE, reset_event);
 
 	/* Use a watchdog to ensure that our reset completes */
@@ -1274,20 +1260,18 @@ void intel_gt_handle_error(struct intel_gt *gt,
 	 * single reset fails.
 	 */
 	if (intel_has_reset_engine(gt) && !intel_gt_is_wedged(gt)) {
-		local_bh_disable();
 		for_each_engine_masked(engine, gt, engine_mask, tmp) {
 			BUILD_BUG_ON(I915_RESET_MODESET >= I915_RESET_ENGINE);
 			if (test_and_set_bit(I915_RESET_ENGINE + engine->id,
 					     &gt->reset.flags))
 				continue;
 
-			if (__intel_engine_reset_bh(engine, msg) == 0)
+			if (intel_engine_reset(engine, msg) == 0)
 				engine_mask &= ~engine->mask;
 
 			clear_and_wake_up_bit(I915_RESET_ENGINE + engine->id,
 					      &gt->reset.flags);
 		}
-		local_bh_enable();
 	}
 
 	if (!engine_mask)
@@ -1395,17 +1379,6 @@ void intel_gt_init_reset(struct intel_gt *gt)
 	init_waitqueue_head(&gt->reset.queue);
 	mutex_init(&gt->reset.mutex);
 	init_srcu_struct(&gt->reset.backoff_srcu);
-
-	/*
-	 * While undesirable to wait inside the shrinker, complain anyway.
-	 *
-	 * If we have to wait during shrinking, we guarantee forward progress
-	 * by forcing the reset. Therefore during the reset we must not
-	 * re-enter the shrinker. By declaring that we take the reset mutex
-	 * within the shrinker, we forbid ourselves from performing any
-	 * fs-reclaim or taking related locks during reset.
-	 */
-	i915_gem_shrinker_taints_mutex(gt->i915, &gt->reset.mutex);
 
 	/* no GPU until we are ready! */
 	__set_bit(I915_WEDGED, &gt->reset.flags);

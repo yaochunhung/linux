@@ -184,9 +184,9 @@ kvm_page_track_register_notifier(struct kvm *kvm,
 
 	head = &kvm->arch.track_notifier_head;
 
-	write_lock(&kvm->mmu_lock);
+	spin_lock(&kvm->mmu_lock);
 	hlist_add_head_rcu(&n->node, &head->track_notifier_list);
-	write_unlock(&kvm->mmu_lock);
+	spin_unlock(&kvm->mmu_lock);
 }
 EXPORT_SYMBOL_GPL(kvm_page_track_register_notifier);
 
@@ -202,9 +202,9 @@ kvm_page_track_unregister_notifier(struct kvm *kvm,
 
 	head = &kvm->arch.track_notifier_head;
 
-	write_lock(&kvm->mmu_lock);
+	spin_lock(&kvm->mmu_lock);
 	hlist_del_rcu(&n->node);
-	write_unlock(&kvm->mmu_lock);
+	spin_unlock(&kvm->mmu_lock);
 	synchronize_srcu(&head->track_srcu);
 }
 EXPORT_SYMBOL_GPL(kvm_page_track_unregister_notifier);
