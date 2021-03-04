@@ -844,7 +844,11 @@ static int fuse_try_move_page(struct fuse_copy_state *cs, struct page **pagep)
 	if (WARN_ON(PageMlocked(oldpage)))
 		goto out_fallback_unlock;
 
-	replace_page_cache_page(oldpage, newpage);
+	err = replace_page_cache_page(oldpage, newpage, GFP_KERNEL);
+	if (err) {
+		unlock_page(newpage);
+		goto out_put_old;
+	}
 
 	get_page(newpage);
 

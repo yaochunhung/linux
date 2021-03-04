@@ -47,12 +47,10 @@
 #elif defined(__x86_64__)
 #define VDSO_VERSION		0
 #define VDSO_NAMES		1
-#elif defined(__riscv__) || defined(__riscv)
+#elif defined(__riscv__)
 #define VDSO_VERSION		5
 #define VDSO_NAMES		1
-#if __riscv_xlen == 32
 #define VDSO_32BIT		1
-#endif
 #else /* nds32 */
 #define VDSO_VERSION		4
 #define VDSO_NAMES		1

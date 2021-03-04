@@ -9,7 +9,6 @@
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
-#include <drm/drm_managed.h>
 #include <drm/drm_plane_helper.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_simple_kms_helper.h>
@@ -56,9 +55,8 @@ static const struct drm_encoder_funcs drm_simple_encoder_funcs_cleanup = {
  * stored in the device structure. Free the encoder's memory as part of
  * the device release function.
  *
- * Note: consider using drmm_simple_encoder_alloc() instead of
- * drm_simple_encoder_init() to let the DRM managed resource infrastructure
- * take care of cleanup and deallocation.
+ * FIXME: Later improvements to DRM's resource management may allow for
+ *        an automated kfree() of the encoder's memory.
  *
  * Returns:
  * Zero on success, error code on failure.
@@ -72,14 +70,6 @@ int drm_simple_encoder_init(struct drm_device *dev,
 				encoder_type, NULL);
 }
 EXPORT_SYMBOL(drm_simple_encoder_init);
-
-void *__drmm_simple_encoder_alloc(struct drm_device *dev, size_t size,
-				  size_t offset, int encoder_type)
-{
-	return __drmm_encoder_alloc(dev, size, offset, NULL, encoder_type,
-				    NULL);
-}
-EXPORT_SYMBOL(__drmm_simple_encoder_alloc);
 
 static enum drm_mode_status
 drm_simple_kms_crtc_mode_valid(struct drm_crtc *crtc,

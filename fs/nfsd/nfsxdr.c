@@ -23,31 +23,24 @@ static u32	nfs_ftypes[] = {
 
 
 /*
- * Basic NFSv2 data types (RFC 1094 Section 2.3)
+ * XDR functions for basic NFS types
  */
-
-/**
- * svcxdr_decode_fhandle - Decode an NFSv2 file handle
- * @xdr: XDR stream positioned at an encoded NFSv2 FH
- * @fhp: OUT: filled-in server file handle
- *
- * Return values:
- *  %false: The encoded file handle was not valid
- *  %true: @fhp has been initialized
- */
-bool
-svcxdr_decode_fhandle(struct xdr_stream *xdr, struct svc_fh *fhp)
+static __be32 *
+decode_fh(__be32 *p, struct svc_fh *fhp)
 {
-	__be32 *p;
-
-	p = xdr_inline_decode(xdr, NFS_FHSIZE);
-	if (!p)
-		return false;
 	fh_init(fhp, NFS_FHSIZE);
 	memcpy(&fhp->fh_handle.fh_base, p, NFS_FHSIZE);
 	fhp->fh_handle.fh_size = NFS_FHSIZE;
 
-	return true;
+	/* FIXME: Look up export pointer here and verify
+	 * Sun Secure RPC if requested */
+	return p + (NFS_FHSIZE >> 2);
+}
+
+/* Helper function for NFSv2 ACL code */
+__be32 *nfs2svc_decode_fh(__be32 *p, struct svc_fh *fhp)
+{
+	return decode_fh(p, fhp);
 }
 
 static __be32 *
@@ -57,95 +50,66 @@ encode_fh(__be32 *p, struct svc_fh *fhp)
 	return p + (NFS_FHSIZE>> 2);
 }
 
-static bool
-svcxdr_decode_filename(struct xdr_stream *xdr, char **name, unsigned int *len)
+/*
+ * Decode a file name and make sure that the path contains
+ * no slashes or null bytes.
+ */
+static __be32 *
+decode_filename(__be32 *p, char **namp, unsigned int *lenp)
 {
-	u32 size, i;
-	__be32 *p;
-	char *c;
+	char		*name;
+	unsigned int	i;
 
-	if (xdr_stream_decode_u32(xdr, &size) < 0)
-		return false;
-	if (size == 0 || size > NFS_MAXNAMLEN)
-		return false;
-	p = xdr_inline_decode(xdr, size);
-	if (!p)
-		return false;
+	if ((p = xdr_decode_string_inplace(p, namp, lenp, NFS_MAXNAMLEN)) != NULL) {
+		for (i = 0, name = *namp; i < *lenp; i++, name++) {
+			if (*name == '\0' || *name == '/')
+				return NULL;
+		}
+	}
 
-	*len = size;
-	*name = (char *)p;
-	for (i = 0, c = *name; i < size; i++, c++)
-		if (*c == '\0' || *c == '/')
-			return false;
-
-	return true;
+	return p;
 }
 
-static bool
-svcxdr_decode_diropargs(struct xdr_stream *xdr, struct svc_fh *fhp,
-			char **name, unsigned int *len)
+static __be32 *
+decode_sattr(__be32 *p, struct iattr *iap, struct user_namespace *userns)
 {
-	return svcxdr_decode_fhandle(xdr, fhp) &&
-		svcxdr_decode_filename(xdr, name, len);
-}
-
-static bool
-svcxdr_decode_sattr(struct svc_rqst *rqstp, struct xdr_stream *xdr,
-		    struct iattr *iap)
-{
-	u32 tmp1, tmp2;
-	__be32 *p;
-
-	p = xdr_inline_decode(xdr, XDR_UNIT * 8);
-	if (!p)
-		return false;
+	u32	tmp, tmp1;
 
 	iap->ia_valid = 0;
 
-	/*
-	 * Some Sun clients put 0xffff in the mode field when they
-	 * mean 0xffffffff.
+	/* Sun client bug compatibility check: some sun clients seem to
+	 * put 0xffff in the mode field when they mean 0xffffffff.
+	 * Quoting the 4.4BSD nfs server code: Nah nah nah nah na nah.
 	 */
-	tmp1 = be32_to_cpup(p++);
-	if (tmp1 != (u32)-1 && tmp1 != 0xffff) {
+	if ((tmp = ntohl(*p++)) != (u32)-1 && tmp != 0xffff) {
 		iap->ia_valid |= ATTR_MODE;
-		iap->ia_mode = tmp1;
+		iap->ia_mode = tmp;
 	}
-
-	tmp1 = be32_to_cpup(p++);
-	if (tmp1 != (u32)-1) {
-		iap->ia_uid = make_kuid(nfsd_user_namespace(rqstp), tmp1);
+	if ((tmp = ntohl(*p++)) != (u32)-1) {
+		iap->ia_uid = make_kuid(userns, tmp);
 		if (uid_valid(iap->ia_uid))
 			iap->ia_valid |= ATTR_UID;
 	}
-
-	tmp1 = be32_to_cpup(p++);
-	if (tmp1 != (u32)-1) {
-		iap->ia_gid = make_kgid(nfsd_user_namespace(rqstp), tmp1);
+	if ((tmp = ntohl(*p++)) != (u32)-1) {
+		iap->ia_gid = make_kgid(userns, tmp);
 		if (gid_valid(iap->ia_gid))
 			iap->ia_valid |= ATTR_GID;
 	}
-
-	tmp1 = be32_to_cpup(p++);
-	if (tmp1 != (u32)-1) {
+	if ((tmp = ntohl(*p++)) != (u32)-1) {
 		iap->ia_valid |= ATTR_SIZE;
-		iap->ia_size = tmp1;
+		iap->ia_size = tmp;
 	}
-
-	tmp1 = be32_to_cpup(p++);
-	tmp2 = be32_to_cpup(p++);
-	if (tmp1 != (u32)-1 && tmp2 != (u32)-1) {
+	tmp  = ntohl(*p++); tmp1 = ntohl(*p++);
+	if (tmp != (u32)-1 && tmp1 != (u32)-1) {
 		iap->ia_valid |= ATTR_ATIME | ATTR_ATIME_SET;
-		iap->ia_atime.tv_sec = tmp1;
-		iap->ia_atime.tv_nsec = tmp2 * NSEC_PER_USEC;
+		iap->ia_atime.tv_sec = tmp;
+		iap->ia_atime.tv_nsec = tmp1 * 1000; 
 	}
-
-	tmp1 = be32_to_cpup(p++);
-	tmp2 = be32_to_cpup(p++);
-	if (tmp1 != (u32)-1 && tmp2 != (u32)-1) {
+	tmp  = ntohl(*p++); tmp1 = ntohl(*p++);
+	if (tmp != (u32)-1 && tmp1 != (u32)-1) {
 		iap->ia_valid |= ATTR_MTIME | ATTR_MTIME_SET;
-		iap->ia_mtime.tv_sec = tmp1;
-		iap->ia_mtime.tv_nsec = tmp2 * NSEC_PER_USEC;
+		iap->ia_mtime.tv_sec = tmp;
+		iap->ia_mtime.tv_nsec = tmp1 * 1000; 
 		/*
 		 * Passing the invalid value useconds=1000000 for mtime
 		 * is a Sun convention for "set both mtime and atime to
@@ -155,11 +119,10 @@ svcxdr_decode_sattr(struct svc_rqst *rqstp, struct xdr_stream *xdr,
 		 * sattr in section 6.1 of "NFS Illustrated" by
 		 * Brent Callaghan, Addison-Wesley, ISBN 0-201-32750-5
 		 */
-		if (tmp2 == 1000000)
+		if (tmp1 == 1000000)
 			iap->ia_valid &= ~(ATTR_ATIME_SET|ATTR_MTIME_SET);
 	}
-
-	return true;
+	return p;
 }
 
 static __be32 *
@@ -231,158 +194,225 @@ __be32 *nfs2svc_encode_fattr(struct svc_rqst *rqstp, __be32 *p, struct svc_fh *f
  */
 
 int
-nfssvc_decode_fhandleargs(struct svc_rqst *rqstp, __be32 *p)
+nfssvc_decode_fhandle(struct svc_rqst *rqstp, __be32 *p)
 {
-	struct xdr_stream *xdr = &rqstp->rq_arg_stream;
 	struct nfsd_fhandle *args = rqstp->rq_argp;
 
-	return svcxdr_decode_fhandle(xdr, &args->fh);
+	p = decode_fh(p, &args->fh);
+	if (!p)
+		return 0;
+	return xdr_argsize_check(rqstp, p);
 }
 
 int
 nfssvc_decode_sattrargs(struct svc_rqst *rqstp, __be32 *p)
 {
-	struct xdr_stream *xdr = &rqstp->rq_arg_stream;
 	struct nfsd_sattrargs *args = rqstp->rq_argp;
 
-	return svcxdr_decode_fhandle(xdr, &args->fh) &&
-		svcxdr_decode_sattr(rqstp, xdr, &args->attrs);
+	p = decode_fh(p, &args->fh);
+	if (!p)
+		return 0;
+	p = decode_sattr(p, &args->attrs, nfsd_user_namespace(rqstp));
+
+	return xdr_argsize_check(rqstp, p);
 }
 
 int
 nfssvc_decode_diropargs(struct svc_rqst *rqstp, __be32 *p)
 {
-	struct xdr_stream *xdr = &rqstp->rq_arg_stream;
 	struct nfsd_diropargs *args = rqstp->rq_argp;
 
-	return svcxdr_decode_diropargs(xdr, &args->fh, &args->name, &args->len);
+	if (!(p = decode_fh(p, &args->fh))
+	 || !(p = decode_filename(p, &args->name, &args->len)))
+		return 0;
+
+	return xdr_argsize_check(rqstp, p);
 }
 
 int
 nfssvc_decode_readargs(struct svc_rqst *rqstp, __be32 *p)
 {
-	struct xdr_stream *xdr = &rqstp->rq_arg_stream;
 	struct nfsd_readargs *args = rqstp->rq_argp;
-	u32 totalcount;
-
-	if (!svcxdr_decode_fhandle(xdr, &args->fh))
-		return 0;
-	if (xdr_stream_decode_u32(xdr, &args->offset) < 0)
-		return 0;
-	if (xdr_stream_decode_u32(xdr, &args->count) < 0)
-		return 0;
-	/* totalcount is ignored */
-	if (xdr_stream_decode_u32(xdr, &totalcount) < 0)
+	unsigned int len;
+	int v;
+	p = decode_fh(p, &args->fh);
+	if (!p)
 		return 0;
 
-	return 1;
+	args->offset    = ntohl(*p++);
+	len = args->count     = ntohl(*p++);
+	p++; /* totalcount - unused */
+
+	len = min_t(unsigned int, len, NFSSVC_MAXBLKSIZE_V2);
+
+	/* set up somewhere to store response.
+	 * We take pages, put them on reslist and include in iovec
+	 */
+	v=0;
+	while (len > 0) {
+		struct page *p = *(rqstp->rq_next_page++);
+
+		rqstp->rq_vec[v].iov_base = page_address(p);
+		rqstp->rq_vec[v].iov_len = min_t(unsigned int, len, PAGE_SIZE);
+		len -= rqstp->rq_vec[v].iov_len;
+		v++;
+	}
+	args->vlen = v;
+	return xdr_argsize_check(rqstp, p);
 }
 
 int
 nfssvc_decode_writeargs(struct svc_rqst *rqstp, __be32 *p)
 {
-	struct xdr_stream *xdr = &rqstp->rq_arg_stream;
 	struct nfsd_writeargs *args = rqstp->rq_argp;
+	unsigned int len, hdr, dlen;
 	struct kvec *head = rqstp->rq_arg.head;
-	struct kvec *tail = rqstp->rq_arg.tail;
-	u32 beginoffset, totalcount;
-	size_t remaining;
 
-	if (!svcxdr_decode_fhandle(xdr, &args->fh))
-		return 0;
-	/* beginoffset is ignored */
-	if (xdr_stream_decode_u32(xdr, &beginoffset) < 0)
-		return 0;
-	if (xdr_stream_decode_u32(xdr, &args->offset) < 0)
-		return 0;
-	/* totalcount is ignored */
-	if (xdr_stream_decode_u32(xdr, &totalcount) < 0)
+	p = decode_fh(p, &args->fh);
+	if (!p)
 		return 0;
 
-	/* opaque data */
-	if (xdr_stream_decode_u32(xdr, &args->len) < 0)
+	p++;				/* beginoffset */
+	args->offset = ntohl(*p++);	/* offset */
+	p++;				/* totalcount */
+	len = args->len = ntohl(*p++);
+	/*
+	 * The protocol specifies a maximum of 8192 bytes.
+	 */
+	if (len > NFSSVC_MAXBLKSIZE_V2)
 		return 0;
-	if (args->len > NFSSVC_MAXBLKSIZE_V2)
-		return 0;
-	remaining = head->iov_len + rqstp->rq_arg.page_len + tail->iov_len;
-	remaining -= xdr_stream_pos(xdr);
-	if (remaining < xdr_align_size(args->len))
-		return 0;
-	args->first.iov_base = xdr->p;
-	args->first.iov_len = head->iov_len - xdr_stream_pos(xdr);
 
+	/*
+	 * Check to make sure that we got the right number of
+	 * bytes.
+	 */
+	hdr = (void*)p - head->iov_base;
+	if (hdr > head->iov_len)
+		return 0;
+	dlen = head->iov_len + rqstp->rq_arg.page_len - hdr;
+
+	/*
+	 * Round the length of the data which was specified up to
+	 * the next multiple of XDR units and then compare that
+	 * against the length which was actually received.
+	 * Note that when RPCSEC/GSS (for example) is used, the
+	 * data buffer can be padded so dlen might be larger
+	 * than required.  It must never be smaller.
+	 */
+	if (dlen < XDR_QUADLEN(len)*4)
+		return 0;
+
+	args->first.iov_base = (void *)p;
+	args->first.iov_len = head->iov_len - hdr;
 	return 1;
 }
 
 int
 nfssvc_decode_createargs(struct svc_rqst *rqstp, __be32 *p)
 {
-	struct xdr_stream *xdr = &rqstp->rq_arg_stream;
 	struct nfsd_createargs *args = rqstp->rq_argp;
 
-	return svcxdr_decode_diropargs(xdr, &args->fh,
-				       &args->name, &args->len) &&
-		svcxdr_decode_sattr(rqstp, xdr, &args->attrs);
+	if (   !(p = decode_fh(p, &args->fh))
+	    || !(p = decode_filename(p, &args->name, &args->len)))
+		return 0;
+	p = decode_sattr(p, &args->attrs, nfsd_user_namespace(rqstp));
+
+	return xdr_argsize_check(rqstp, p);
 }
 
 int
 nfssvc_decode_renameargs(struct svc_rqst *rqstp, __be32 *p)
 {
-	struct xdr_stream *xdr = &rqstp->rq_arg_stream;
 	struct nfsd_renameargs *args = rqstp->rq_argp;
 
-	return svcxdr_decode_diropargs(xdr, &args->ffh,
-				       &args->fname, &args->flen) &&
-		svcxdr_decode_diropargs(xdr, &args->tfh,
-					&args->tname, &args->tlen);
+	if (!(p = decode_fh(p, &args->ffh))
+	 || !(p = decode_filename(p, &args->fname, &args->flen))
+	 || !(p = decode_fh(p, &args->tfh))
+	 || !(p = decode_filename(p, &args->tname, &args->tlen)))
+		return 0;
+
+	return xdr_argsize_check(rqstp, p);
+}
+
+int
+nfssvc_decode_readlinkargs(struct svc_rqst *rqstp, __be32 *p)
+{
+	struct nfsd_readlinkargs *args = rqstp->rq_argp;
+
+	p = decode_fh(p, &args->fh);
+	if (!p)
+		return 0;
+	args->buffer = page_address(*(rqstp->rq_next_page++));
+
+	return xdr_argsize_check(rqstp, p);
 }
 
 int
 nfssvc_decode_linkargs(struct svc_rqst *rqstp, __be32 *p)
 {
-	struct xdr_stream *xdr = &rqstp->rq_arg_stream;
 	struct nfsd_linkargs *args = rqstp->rq_argp;
 
-	return svcxdr_decode_fhandle(xdr, &args->ffh) &&
-		svcxdr_decode_diropargs(xdr, &args->tfh,
-					&args->tname, &args->tlen);
+	if (!(p = decode_fh(p, &args->ffh))
+	 || !(p = decode_fh(p, &args->tfh))
+	 || !(p = decode_filename(p, &args->tname, &args->tlen)))
+		return 0;
+
+	return xdr_argsize_check(rqstp, p);
 }
 
 int
 nfssvc_decode_symlinkargs(struct svc_rqst *rqstp, __be32 *p)
 {
-	struct xdr_stream *xdr = &rqstp->rq_arg_stream;
 	struct nfsd_symlinkargs *args = rqstp->rq_argp;
-	struct kvec *head = rqstp->rq_arg.head;
+	char *base = (char *)p;
+	size_t xdrlen;
 
-	if (!svcxdr_decode_diropargs(xdr, &args->ffh, &args->fname, &args->flen))
+	if (   !(p = decode_fh(p, &args->ffh))
+	    || !(p = decode_filename(p, &args->fname, &args->flen)))
 		return 0;
-	if (xdr_stream_decode_u32(xdr, &args->tlen) < 0)
-		return 0;
+
+	args->tlen = ntohl(*p++);
 	if (args->tlen == 0)
 		return 0;
 
-	args->first.iov_len = head->iov_len - xdr_stream_pos(xdr);
-	args->first.iov_base = xdr_inline_decode(xdr, args->tlen);
-	if (!args->first.iov_base)
-		return 0;
-	return svcxdr_decode_sattr(rqstp, xdr, &args->attrs);
+	args->first.iov_base = p;
+	args->first.iov_len = rqstp->rq_arg.head[0].iov_len;
+	args->first.iov_len -= (char *)p - base;
+
+	/* This request is never larger than a page. Therefore,
+	 * transport will deliver either:
+	 * 1. pathname in the pagelist -> sattr is in the tail.
+	 * 2. everything in the head buffer -> sattr is in the head.
+	 */
+	if (rqstp->rq_arg.page_len) {
+		if (args->tlen != rqstp->rq_arg.page_len)
+			return 0;
+		p = rqstp->rq_arg.tail[0].iov_base;
+	} else {
+		xdrlen = XDR_QUADLEN(args->tlen);
+		if (xdrlen > args->first.iov_len - (8 * sizeof(__be32)))
+			return 0;
+		p += xdrlen;
+	}
+	decode_sattr(p, &args->attrs, nfsd_user_namespace(rqstp));
+
+	return 1;
 }
 
 int
 nfssvc_decode_readdirargs(struct svc_rqst *rqstp, __be32 *p)
 {
-	struct xdr_stream *xdr = &rqstp->rq_arg_stream;
 	struct nfsd_readdirargs *args = rqstp->rq_argp;
 
-	if (!svcxdr_decode_fhandle(xdr, &args->fh))
+	p = decode_fh(p, &args->fh);
+	if (!p)
 		return 0;
-	if (xdr_stream_decode_u32(xdr, &args->cookie) < 0)
-		return 0;
-	if (xdr_stream_decode_u32(xdr, &args->count) < 0)
-		return 0;
+	args->cookie = ntohl(*p++);
+	args->count  = ntohl(*p++);
+	args->count  = min_t(u32, args->count, PAGE_SIZE);
+	args->buffer = page_address(*(rqstp->rq_next_page++));
 
-	return 1;
+	return xdr_argsize_check(rqstp, p);
 }
 
 /*

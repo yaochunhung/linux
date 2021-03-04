@@ -115,7 +115,10 @@ static int chnl_recv_cb(struct cflayer *layr, struct cfpkt *pkt)
 	else
 		skb->ip_summed = CHECKSUM_NONE;
 
-	netif_rx_any_context(skb);
+	if (in_interrupt())
+		netif_rx(skb);
+	else
+		netif_rx_ni(skb);
 
 	/* Update statistics. */
 	priv->netdev->stats.rx_packets++;

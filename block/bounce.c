@@ -214,7 +214,8 @@ static void bounce_end_io_read_isa(struct bio *bio)
 	__bounce_end_io_read(bio, &isa_page_pool);
 }
 
-static struct bio *bounce_clone_bio(struct bio *bio_src)
+static struct bio *bounce_clone_bio(struct bio *bio_src, gfp_t gfp_mask,
+		struct bio_set *bs)
 {
 	struct bvec_iter iter;
 	struct bio_vec bv;
@@ -241,15 +242,11 @@ static struct bio *bounce_clone_bio(struct bio *bio_src)
 	 *    asking for trouble and would force extra work on
 	 *    __bio_clone_fast() anyways.
 	 */
-	if (bio_is_passthrough(bio_src))
-		bio = bio_kmalloc(GFP_NOIO | __GFP_NOFAIL,
-				  bio_segments(bio_src));
-	else
-		bio = bio_alloc_bioset(GFP_NOIO, bio_segments(bio_src),
-				       &bounce_bio_set);
-	bio->bi_bdev		= bio_src->bi_bdev;
-	if (bio_flagged(bio_src, BIO_REMAPPED))
-		bio_set_flag(bio, BIO_REMAPPED);
+
+	bio = bio_alloc_bioset(gfp_mask, bio_segments(bio_src), bs);
+	if (!bio)
+		return NULL;
+	bio->bi_disk		= bio_src->bi_disk;
 	bio->bi_opf		= bio_src->bi_opf;
 	bio->bi_ioprio		= bio_src->bi_ioprio;
 	bio->bi_write_hint	= bio_src->bi_write_hint;
@@ -270,11 +267,11 @@ static struct bio *bounce_clone_bio(struct bio *bio_src)
 		break;
 	}
 
-	if (bio_crypt_clone(bio, bio_src, GFP_NOIO) < 0)
+	if (bio_crypt_clone(bio, bio_src, gfp_mask) < 0)
 		goto err_put;
 
 	if (bio_integrity(bio_src) &&
-	    bio_integrity_clone(bio, bio_src, GFP_NOIO) < 0)
+	    bio_integrity_clone(bio, bio_src, gfp_mask) < 0)
 		goto err_put;
 
 	bio_clone_blkg_association(bio, bio_src);
@@ -297,6 +294,7 @@ static void __blk_queue_bounce(struct request_queue *q, struct bio **bio_orig,
 	unsigned i = 0;
 	bool bounce = false;
 	int sectors = 0;
+	bool passthrough = bio_is_passthrough(*bio_orig);
 
 	bio_for_each_segment(from, *bio_orig, iter) {
 		if (i++ < BIO_MAX_PAGES)
@@ -307,14 +305,14 @@ static void __blk_queue_bounce(struct request_queue *q, struct bio **bio_orig,
 	if (!bounce)
 		return;
 
-	if (!bio_is_passthrough(*bio_orig) &&
-	    sectors < bio_sectors(*bio_orig)) {
+	if (!passthrough && sectors < bio_sectors(*bio_orig)) {
 		bio = bio_split(*bio_orig, sectors, GFP_NOIO, &bounce_bio_split);
 		bio_chain(bio, *bio_orig);
 		submit_bio_noacct(*bio_orig);
 		*bio_orig = bio;
 	}
-	bio = bounce_clone_bio(*bio_orig);
+	bio = bounce_clone_bio(*bio_orig, GFP_NOIO, passthrough ? NULL :
+			&bounce_bio_set);
 
 	/*
 	 * Bvec table can't be updated by bio_for_each_segment_all(),

@@ -220,7 +220,7 @@ int r600_fmt_get_nblocksx(u32 format, u32 w)
 	if (bw == 0)
 		return 0;
 
-	return DIV_ROUND_UP(w, bw);
+	return (w + bw - 1) / bw;
 }
 
 int r600_fmt_get_nblocksy(u32 format, u32 h)
@@ -234,7 +234,7 @@ int r600_fmt_get_nblocksy(u32 format, u32 h)
 	if (bh == 0)
 		return 0;
 
-	return DIV_ROUND_UP(h, bh);
+	return (h + bh - 1) / bh;
 }
 
 struct array_mode_checker {

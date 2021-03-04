@@ -153,8 +153,7 @@ static void pcie_portdrv_remove(struct pci_dev *dev)
 static pci_ers_result_t pcie_portdrv_error_detected(struct pci_dev *dev,
 					pci_channel_state_t error)
 {
-	if (error == pci_channel_io_frozen)
-		return PCI_ERS_RESULT_NEED_RESET;
+	/* Root Port has no impact. Always recovers. */
 	return PCI_ERS_RESULT_CAN_RECOVER;
 }
 
@@ -256,6 +255,7 @@ static void __init pcie_init_services(void)
 	pcie_pme_init();
 	pcie_dpc_init();
 	pcie_hp_init();
+	pcie_bandwidth_notification_init();
 }
 
 static int __init pcie_portdrv_init(void)

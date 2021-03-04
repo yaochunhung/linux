@@ -333,7 +333,6 @@ struct pipe_ctx {
 	union pipe_update_flags update_flags;
 	struct dwbc *dwbc;
 	struct mcif_wb *mcif_wb;
-	bool vtp_locked;
 };
 
 struct resource_context {

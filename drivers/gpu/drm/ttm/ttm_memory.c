@@ -29,6 +29,7 @@
 #define pr_fmt(fmt) "[TTM] " fmt
 
 #include <drm/ttm/ttm_memory.h>
+#include <drm/ttm/ttm_module.h>
 #include <linux/spinlock.h>
 #include <linux/sched.h>
 #include <linux/wait.h>
@@ -37,8 +38,6 @@
 #include <linux/slab.h>
 #include <linux/swap.h>
 #include <drm/ttm/ttm_pool.h>
-
-#include "ttm_module.h"
 
 #define TTM_MEMORY_ALLOC_RETRIES 4
 

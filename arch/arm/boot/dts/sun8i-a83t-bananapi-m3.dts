@@ -74,12 +74,12 @@
 	leds {
 		compatible = "gpio-leds";
 
-		led-0 {
+		blue {
 			label = "bananapi-m3:blue:usr";
 			gpios = <&axp_gpio 1 GPIO_ACTIVE_HIGH>;
 		};
 
-		led-1 {
+		green {
 			label = "bananapi-m3:green:usr";
 			gpios = <&axp_gpio 0 GPIO_ACTIVE_HIGH>;
 		};

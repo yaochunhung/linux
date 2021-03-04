@@ -324,7 +324,7 @@ static void amdgpu_xgmi_sysfs_rem_dev_info(struct amdgpu_device *adev,
 
 struct amdgpu_hive_info *amdgpu_get_xgmi_hive(struct amdgpu_device *adev)
 {
-	struct amdgpu_hive_info *hive = NULL;
+	struct amdgpu_hive_info *hive = NULL, *tmp = NULL;
 	int ret;
 
 	if (!adev->gmc.xgmi.hive_id)
@@ -337,9 +337,11 @@ struct amdgpu_hive_info *amdgpu_get_xgmi_hive(struct amdgpu_device *adev)
 
 	mutex_lock(&xgmi_mutex);
 
-	list_for_each_entry(hive, &xgmi_hive_list, node)  {
-		if (hive->hive_id == adev->gmc.xgmi.hive_id)
-			goto pro_end;
+	if (!list_empty(&xgmi_hive_list)) {
+		list_for_each_entry_safe(hive, tmp, &xgmi_hive_list, node)  {
+			if (hive->hive_id == adev->gmc.xgmi.hive_id)
+				goto pro_end;
+		}
 	}
 
 	hive = kzalloc(sizeof(*hive), GFP_KERNEL);

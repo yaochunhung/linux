@@ -69,11 +69,8 @@ struct ipa_status {
 };
 
 /* Field masks for struct ipa_status structure fields */
-#define IPA_STATUS_MASK_TAG_VALID_FMASK		GENMASK(4, 4)
-#define IPA_STATUS_SRC_IDX_FMASK		GENMASK(4, 0)
 #define IPA_STATUS_DST_IDX_FMASK		GENMASK(4, 0)
 #define IPA_STATUS_FLAGS1_RT_RULE_ID_FMASK	GENMASK(31, 22)
-#define IPA_STATUS_FLAGS2_TAG_FMASK		GENMASK_ULL(63, 16)
 
 #ifdef IPA_VALIDATE
 
@@ -173,6 +170,9 @@ static bool ipa_endpoint_data_valid(struct ipa *ipa, u32 count,
 	struct device *dev = &ipa->pdev->dev;
 	enum ipa_endpoint_name name;
 	u32 limit;
+
+	/* Not sure where this constraint come from... */
+	BUILD_BUG_ON(sizeof(struct ipa_status) % 4);
 
 	if (count > IPA_ENDPOINT_COUNT) {
 		dev_err(dev, "too many endpoints specified (%u > %u)\n",
@@ -399,7 +399,7 @@ int ipa_endpoint_modem_exception_reset_all(struct ipa *ipa)
 	 * That won't happen, and we could be more precise, but this is fine
 	 * for now.  We need to end the transaction with a "tag process."
 	 */
-	count = hweight32(initialized) + ipa_cmd_pipeline_clear_count();
+	count = hweight32(initialized) + ipa_cmd_tag_process_count();
 	trans = ipa_cmd_trans_alloc(ipa, count);
 	if (!trans) {
 		dev_err(&ipa->pdev->dev,
@@ -428,12 +428,10 @@ int ipa_endpoint_modem_exception_reset_all(struct ipa *ipa)
 		ipa_cmd_register_write_add(trans, offset, 0, ~0, false);
 	}
 
-	ipa_cmd_pipeline_clear_add(trans);
+	ipa_cmd_tag_process_add(trans);
 
 	/* XXX This should have a 1 second timeout */
 	gsi_trans_commit_wait(trans);
-
-	ipa_cmd_pipeline_clear_wait(ipa);
 
 	return 0;
 }
@@ -1017,34 +1015,31 @@ err_free_pages:
 }
 
 /**
- * ipa_endpoint_replenish() - Replenish endpoint receive buffers
+ * ipa_endpoint_replenish() - Replenish the Rx packets cache.
  * @endpoint:	Endpoint to be replenished
- * @add_one:	Whether this is replacing a just-consumed buffer
+ * @count:	Number of buffers to send to hardware
  *
- * The IPA hardware can hold a fixed number of receive buffers for an RX
- * endpoint, based on the number of entries in the underlying channel ring
- * buffer.  If an endpoint's "backlog" is non-zero, it indicates how many
- * more receive buffers can be supplied to the hardware.  Replenishing for
- * an endpoint can be disabled, in which case requests to replenish a
- * buffer are "saved", and transferred to the backlog once it is re-enabled
- * again.
+ * Allocate RX packet wrapper structures with maximal socket buffers
+ * for an endpoint.  These are supplied to the hardware, which fills
+ * them with incoming data.
  */
-static void ipa_endpoint_replenish(struct ipa_endpoint *endpoint, bool add_one)
+static void ipa_endpoint_replenish(struct ipa_endpoint *endpoint, u32 count)
 {
 	struct gsi *gsi;
 	u32 backlog;
 
 	if (!endpoint->replenish_enabled) {
-		if (add_one)
-			atomic_inc(&endpoint->replenish_saved);
+		if (count)
+			atomic_add(count, &endpoint->replenish_saved);
 		return;
 	}
+
 
 	while (atomic_dec_not_zero(&endpoint->replenish_backlog))
 		if (ipa_endpoint_replenish_one(endpoint))
 			goto try_again_later;
-	if (add_one)
-		atomic_inc(&endpoint->replenish_backlog);
+	if (count)
+		atomic_add(count, &endpoint->replenish_backlog);
 
 	return;
 
@@ -1052,8 +1047,8 @@ try_again_later:
 	/* The last one didn't succeed, so fix the backlog */
 	backlog = atomic_inc_return(&endpoint->replenish_backlog);
 
-	if (add_one)
-		atomic_inc(&endpoint->replenish_backlog);
+	if (count)
+		atomic_add(count, &endpoint->replenish_backlog);
 
 	/* Whenever a receive buffer transaction completes we'll try to
 	 * replenish again.  It's unlikely, but if we fail to supply even
@@ -1080,7 +1075,7 @@ static void ipa_endpoint_replenish_enable(struct ipa_endpoint *endpoint)
 	/* Start replenishing if hardware currently has no buffers */
 	max_backlog = gsi_channel_tre_max(gsi, endpoint->channel_id);
 	if (atomic_read(&endpoint->replenish_backlog) == max_backlog)
-		ipa_endpoint_replenish(endpoint, false);
+		ipa_endpoint_replenish(endpoint, 0);
 }
 
 static void ipa_endpoint_replenish_disable(struct ipa_endpoint *endpoint)
@@ -1099,7 +1094,7 @@ static void ipa_endpoint_replenish_work(struct work_struct *work)
 
 	endpoint = container_of(dwork, struct ipa_endpoint, replenish_work);
 
-	ipa_endpoint_replenish(endpoint, false);
+	ipa_endpoint_replenish(endpoint, 0);
 }
 
 static void ipa_endpoint_skb_copy(struct ipa_endpoint *endpoint,
@@ -1177,44 +1172,10 @@ static bool ipa_endpoint_status_skip(struct ipa_endpoint *endpoint,
 	return false;	/* Don't skip this packet, process it */
 }
 
-static bool ipa_endpoint_status_tag(struct ipa_endpoint *endpoint,
-				    const struct ipa_status *status)
-{
-	struct ipa_endpoint *command_endpoint;
-	struct ipa *ipa = endpoint->ipa;
-	u32 endpoint_id;
-
-	if (!le16_get_bits(status->mask, IPA_STATUS_MASK_TAG_VALID_FMASK))
-		return false;	/* No valid tag */
-
-	/* The status contains a valid tag.  We know the packet was sent to
-	 * this endpoint (already verified by ipa_endpoint_status_skip()).
-	 * If the packet came from the AP->command TX endpoint we know
-	 * this packet was sent as part of the pipeline clear process.
-	 */
-	endpoint_id = u8_get_bits(status->endp_src_idx,
-				  IPA_STATUS_SRC_IDX_FMASK);
-	command_endpoint = ipa->name_map[IPA_ENDPOINT_AP_COMMAND_TX];
-	if (endpoint_id == command_endpoint->endpoint_id) {
-		complete(&ipa->completion);
-	} else {
-		dev_err(&ipa->pdev->dev,
-			"unexpected tagged packet from endpoint %u\n",
-			endpoint_id);
-	}
-
-	return true;
-}
-
 /* Return whether the status indicates the packet should be dropped */
-static bool ipa_endpoint_status_drop(struct ipa_endpoint *endpoint,
-				     const struct ipa_status *status)
+static bool ipa_status_drop_packet(const struct ipa_status *status)
 {
 	u32 val;
-
-	/* If the status indicates a tagged transfer, we'll drop the packet */
-	if (ipa_endpoint_status_tag(endpoint, status))
-		return true;
 
 	/* Deaggregation exceptions we drop; all other types we consume */
 	if (status->exception)
@@ -1252,11 +1213,12 @@ static void ipa_endpoint_status_parse(struct ipa_endpoint *endpoint,
 			continue;
 		}
 
-		/* Compute the amount of buffer space consumed by the packet,
-		 * including the status element.  If the hardware is configured
-		 * to pad packet data to an aligned boundary, account for that.
-		 * And if checksum offload is enabled a trailer containing
-		 * computed checksum information will be appended.
+		/* Compute the amount of buffer space consumed by the
+		 * packet, including the status element.  If the hardware
+		 * is configured to pad packet data to an aligned boundary,
+		 * account for that.  And if checksum offload is is enabled
+		 * a trailer containing computed checksum information will
+		 * be appended.
 		 */
 		align = endpoint->data->rx.pad_align ? : 1;
 		len = le16_to_cpu(status->pkt_len);
@@ -1264,21 +1226,16 @@ static void ipa_endpoint_status_parse(struct ipa_endpoint *endpoint,
 		if (endpoint->data->checksum)
 			len += sizeof(struct rmnet_map_dl_csum_trailer);
 
-		if (!ipa_endpoint_status_drop(endpoint, status)) {
-			void *data2;
-			u32 extra;
-			u32 len2;
+		/* Charge the new packet with a proportional fraction of
+		 * the unused space in the original receive buffer.
+		 * XXX Charge a proportion of the *whole* receive buffer?
+		 */
+		if (!ipa_status_drop_packet(status)) {
+			u32 extra = unused * len / total_len;
+			void *data2 = data + sizeof(*status);
+			u32 len2 = le16_to_cpu(status->pkt_len);
 
 			/* Client receives only packet data (no status) */
-			data2 = data + sizeof(*status);
-			len2 = le16_to_cpu(status->pkt_len);
-
-			/* Have the true size reflect the extra unused space in
-			 * the original receive buffer.  Distribute the "cost"
-			 * proportionately across all aggregated packets in the
-			 * buffer.
-			 */
-			extra = DIV_ROUND_CLOSEST(unused * len, total_len);
 			ipa_endpoint_skb_copy(endpoint, data2, len2, extra);
 		}
 
@@ -1300,7 +1257,7 @@ static void ipa_endpoint_rx_complete(struct ipa_endpoint *endpoint,
 {
 	struct page *page;
 
-	ipa_endpoint_replenish(endpoint, true);
+	ipa_endpoint_replenish(endpoint, 1);
 
 	if (trans->cancelled)
 		return;
@@ -1421,7 +1378,7 @@ static int ipa_endpoint_reset_rx_aggr(struct ipa_endpoint *endpoint)
 	do {
 		if (!ipa_endpoint_aggr_active(endpoint))
 			break;
-		usleep_range(USEC_PER_MSEC, 2 * USEC_PER_MSEC);
+		msleep(1);
 	} while (retries--);
 
 	/* Check one last time */
@@ -1442,7 +1399,7 @@ static int ipa_endpoint_reset_rx_aggr(struct ipa_endpoint *endpoint)
 	 */
 	gsi_channel_reset(gsi, endpoint->channel_id, true);
 
-	usleep_range(USEC_PER_MSEC, 2 * USEC_PER_MSEC);
+	msleep(1);
 
 	goto out_suspend_again;
 
@@ -1607,7 +1564,7 @@ void ipa_endpoint_suspend(struct ipa *ipa)
 	if (ipa->modem_netdev)
 		ipa_modem_suspend(ipa->modem_netdev);
 
-	ipa_cmd_pipeline_clear(ipa);
+	ipa_cmd_tag_process(ipa);
 
 	ipa_endpoint_suspend_one(ipa->name_map[IPA_ENDPOINT_AP_LAN_RX]);
 	ipa_endpoint_suspend_one(ipa->name_map[IPA_ENDPOINT_AP_COMMAND_TX]);

@@ -271,10 +271,10 @@ static const struct dma_buf_ops cma_heap_buf_ops = {
 	.release = cma_heap_dma_buf_release,
 };
 
-static struct dma_buf *cma_heap_allocate(struct dma_heap *heap,
-					 unsigned long len,
-					 unsigned long fd_flags,
-					 unsigned long heap_flags)
+static int cma_heap_allocate(struct dma_heap *heap,
+				  unsigned long len,
+				  unsigned long fd_flags,
+				  unsigned long heap_flags)
 {
 	struct cma_heap *cma_heap = dma_heap_get_drvdata(heap);
 	struct cma_heap_buffer *buffer;
@@ -289,7 +289,7 @@ static struct dma_buf *cma_heap_allocate(struct dma_heap *heap,
 
 	buffer = kzalloc(sizeof(*buffer), GFP_KERNEL);
 	if (!buffer)
-		return ERR_PTR(-ENOMEM);
+		return -ENOMEM;
 
 	INIT_LIST_HEAD(&buffer->attachments);
 	mutex_init(&buffer->lock);
@@ -348,7 +348,15 @@ static struct dma_buf *cma_heap_allocate(struct dma_heap *heap,
 		ret = PTR_ERR(dmabuf);
 		goto free_pages;
 	}
-	return dmabuf;
+
+	ret = dma_buf_fd(dmabuf, fd_flags);
+	if (ret < 0) {
+		dma_buf_put(dmabuf);
+		/* just return, as put will call release and that will free */
+		return ret;
+	}
+
+	return ret;
 
 free_pages:
 	kfree(buffer->pages);
@@ -357,7 +365,7 @@ free_cma:
 free_buffer:
 	kfree(buffer);
 
-	return ERR_PTR(ret);
+	return ret;
 }
 
 static const struct dma_heap_ops cma_heap_ops = {

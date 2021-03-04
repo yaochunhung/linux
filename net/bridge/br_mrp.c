@@ -557,22 +557,19 @@ int br_mrp_del(struct net_bridge *br, struct br_mrp_instance *instance)
 int br_mrp_set_port_state(struct net_bridge_port *p,
 			  enum br_mrp_port_state_type state)
 {
-	u32 port_state;
-
 	if (!p || !(p->flags & BR_MRP_AWARE))
 		return -EINVAL;
 
 	spin_lock_bh(&p->br->lock);
 
 	if (state == BR_MRP_PORT_STATE_FORWARDING)
-		port_state = BR_STATE_FORWARDING;
+		p->state = BR_STATE_FORWARDING;
 	else
-		port_state = BR_STATE_BLOCKING;
+		p->state = BR_STATE_BLOCKING;
 
-	p->state = port_state;
 	spin_unlock_bh(&p->br->lock);
 
-	br_mrp_port_switchdev_set_state(p, port_state);
+	br_mrp_port_switchdev_set_state(p, state);
 
 	return 0;
 }
@@ -639,7 +636,7 @@ int br_mrp_set_ring_role(struct net_bridge *br,
 			 struct br_mrp_ring_role *role)
 {
 	struct br_mrp *mrp = br_mrp_find_id(br, role->ring_id);
-	enum br_mrp_hw_support support;
+	int err;
 
 	if (!mrp)
 		return -EINVAL;
@@ -647,9 +644,9 @@ int br_mrp_set_ring_role(struct net_bridge *br,
 	mrp->ring_role = role->ring_role;
 
 	/* If there is an error just bailed out */
-	support = br_mrp_switchdev_set_ring_role(br, mrp, role->ring_role);
-	if (support == BR_MRP_NONE)
-		return -EOPNOTSUPP;
+	err = br_mrp_switchdev_set_ring_role(br, mrp, role->ring_role);
+	if (err && err != -EOPNOTSUPP)
+		return err;
 
 	/* Now detect if the HW actually applied the role or not. If the HW
 	 * applied the role it means that the SW will not to do those operations
@@ -657,7 +654,7 @@ int br_mrp_set_ring_role(struct net_bridge *br,
 	 * SW when ring is open, but if the is not pushed to the HW the SW will
 	 * need to detect when the ring is open
 	 */
-	mrp->ring_role_offloaded = support == BR_MRP_SW ? 0 : 1;
+	mrp->ring_role_offloaded = err == -EOPNOTSUPP ? 0 : 1;
 
 	return 0;
 }
@@ -670,7 +667,6 @@ int br_mrp_start_test(struct net_bridge *br,
 		      struct br_mrp_start_test *test)
 {
 	struct br_mrp *mrp = br_mrp_find_id(br, test->ring_id);
-	enum br_mrp_hw_support support;
 
 	if (!mrp)
 		return -EINVAL;
@@ -678,13 +674,9 @@ int br_mrp_start_test(struct net_bridge *br,
 	/* Try to push it to the HW and if it fails then continue with SW
 	 * implementation and if that also fails then return error.
 	 */
-	support = br_mrp_switchdev_send_ring_test(br, mrp, test->interval,
-						  test->max_miss, test->period,
-						  test->monitor);
-	if (support == BR_MRP_NONE)
-		return -EOPNOTSUPP;
-
-	if (support == BR_MRP_HW)
+	if (!br_mrp_switchdev_send_ring_test(br, mrp, test->interval,
+					     test->max_miss, test->period,
+					     test->monitor))
 		return 0;
 
 	mrp->test_interval = test->interval;
@@ -726,8 +718,8 @@ int br_mrp_set_in_state(struct net_bridge *br, struct br_mrp_in_state *state)
 int br_mrp_set_in_role(struct net_bridge *br, struct br_mrp_in_role *role)
 {
 	struct br_mrp *mrp = br_mrp_find_id(br, role->ring_id);
-	enum br_mrp_hw_support support;
 	struct net_bridge_port *p;
+	int err;
 
 	if (!mrp)
 		return -EINVAL;
@@ -785,10 +777,10 @@ int br_mrp_set_in_role(struct net_bridge *br, struct br_mrp_in_role *role)
 	mrp->in_id = role->in_id;
 
 	/* If there is an error just bailed out */
-	support = br_mrp_switchdev_set_in_role(br, mrp, role->in_id,
-					       role->ring_id, role->in_role);
-	if (support == BR_MRP_NONE)
-		return -EOPNOTSUPP;
+	err = br_mrp_switchdev_set_in_role(br, mrp, role->in_id,
+					   role->ring_id, role->in_role);
+	if (err && err != -EOPNOTSUPP)
+		return err;
 
 	/* Now detect if the HW actually applied the role or not. If the HW
 	 * applied the role it means that the SW will not to do those operations
@@ -796,7 +788,7 @@ int br_mrp_set_in_role(struct net_bridge *br, struct br_mrp_in_role *role)
 	 * SW when interconnect ring is open, but if the is not pushed to the HW
 	 * the SW will need to detect when the interconnect ring is open.
 	 */
-	mrp->in_role_offloaded = support == BR_MRP_SW ? 0 : 1;
+	mrp->in_role_offloaded = err == -EOPNOTSUPP ? 0 : 1;
 
 	return 0;
 }
@@ -809,7 +801,6 @@ int br_mrp_start_in_test(struct net_bridge *br,
 			 struct br_mrp_start_in_test *in_test)
 {
 	struct br_mrp *mrp = br_mrp_find_in_id(br, in_test->in_id);
-	enum br_mrp_hw_support support;
 
 	if (!mrp)
 		return -EINVAL;
@@ -820,13 +811,8 @@ int br_mrp_start_in_test(struct net_bridge *br,
 	/* Try to push it to the HW and if it fails then continue with SW
 	 * implementation and if that also fails then return error.
 	 */
-	support =  br_mrp_switchdev_send_in_test(br, mrp, in_test->interval,
-						 in_test->max_miss,
-						 in_test->period);
-	if (support == BR_MRP_NONE)
-		return -EOPNOTSUPP;
-
-	if (support == BR_MRP_HW)
+	if (!br_mrp_switchdev_send_in_test(br, mrp, in_test->interval,
+					   in_test->max_miss, in_test->period))
 		return 0;
 
 	mrp->in_test_interval = in_test->interval;
@@ -839,7 +825,7 @@ int br_mrp_start_in_test(struct net_bridge *br,
 	return 0;
 }
 
-/* Determine if the frame type is a ring frame */
+/* Determin if the frame type is a ring frame */
 static bool br_mrp_ring_frame(struct sk_buff *skb)
 {
 	const struct br_mrp_tlv_hdr *hdr;
@@ -859,7 +845,7 @@ static bool br_mrp_ring_frame(struct sk_buff *skb)
 	return false;
 }
 
-/* Determine if the frame type is an interconnect frame */
+/* Determin if the frame type is an interconnect frame */
 static bool br_mrp_in_frame(struct sk_buff *skb)
 {
 	const struct br_mrp_tlv_hdr *hdr;
@@ -908,7 +894,7 @@ static void br_mrp_mrm_process(struct br_mrp *mrp, struct net_bridge_port *port,
 		br_mrp_ring_port_open(port->dev, false);
 }
 
-/* Determine if the test hdr has a better priority than the node */
+/* Determin if the test hdr has a better priority than the node */
 static bool br_mrp_test_better_than_own(struct br_mrp *mrp,
 					struct net_bridge *br,
 					const struct br_mrp_ring_test_hdr *hdr)

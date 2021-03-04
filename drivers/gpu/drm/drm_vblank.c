@@ -74,7 +74,7 @@
  *                |↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓|   updates the
  *                |                                        |   frame as it
  *                |                                        |   travels down
- *                |                                        |   ("scan out")
+ *                |                                        |   ("sacn out")
  *                |               Old frame                |
  *                |                                        |
  *                |                                        |
@@ -1006,14 +1006,7 @@ static void send_vblank_event(struct drm_device *dev,
 		break;
 	}
 	trace_drm_vblank_event_delivered(e->base.file_priv, e->pipe, seq);
-	/*
-	 * Use the same timestamp for any associated fence signal to avoid
-	 * mismatch in timestamps for vsync & fence events triggered by the
-	 * same HW event. Frameworks like SurfaceFlinger in Android expects the
-	 * retire-fence timestamp to match exactly with HW vsync as it uses it
-	 * for its software vsync modeling.
-	 */
-	drm_send_event_timestamp_locked(dev, &e->base, now);
+	drm_send_event_locked(dev, &e->base);
 }
 
 /**

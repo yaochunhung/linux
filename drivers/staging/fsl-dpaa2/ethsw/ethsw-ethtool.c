@@ -38,19 +38,19 @@ static void dpaa2_switch_get_drvinfo(struct net_device *netdev,
 	u16 version_major, version_minor;
 	int err;
 
-	strscpy(drvinfo->driver, KBUILD_MODNAME, sizeof(drvinfo->driver));
+	strlcpy(drvinfo->driver, KBUILD_MODNAME, sizeof(drvinfo->driver));
 
 	err = dpsw_get_api_version(port_priv->ethsw_data->mc_io, 0,
 				   &version_major,
 				   &version_minor);
 	if (err)
-		strscpy(drvinfo->fw_version, "N/A",
+		strlcpy(drvinfo->fw_version, "N/A",
 			sizeof(drvinfo->fw_version));
 	else
 		snprintf(drvinfo->fw_version, sizeof(drvinfo->fw_version),
 			 "%u.%u", version_major, version_minor);
 
-	strscpy(drvinfo->bus_info, dev_name(netdev->dev.parent->parent),
+	strlcpy(drvinfo->bus_info, dev_name(netdev->dev.parent->parent),
 		sizeof(drvinfo->bus_info));
 }
 

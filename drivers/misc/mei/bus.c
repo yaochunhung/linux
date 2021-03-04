@@ -44,8 +44,7 @@ ssize_t __mei_cl_send(struct mei_cl *cl, u8 *buf, size_t length, u8 vtag,
 	bus = cl->dev;
 
 	mutex_lock(&bus->device_lock);
-	if (bus->dev_state != MEI_DEV_ENABLED &&
-	    bus->dev_state != MEI_DEV_POWERING_DOWN) {
+	if (bus->dev_state != MEI_DEV_ENABLED) {
 		rets = -ENODEV;
 		goto out;
 	}
@@ -59,13 +58,6 @@ ssize_t __mei_cl_send(struct mei_cl *cl, u8 *buf, size_t length, u8 vtag,
 	if (!mei_me_cl_is_active(cl->me_cl)) {
 		rets = -ENOTTY;
 		goto out;
-	}
-
-	if (vtag) {
-		/* Check if vtag is supported by client */
-		rets = mei_cl_vt_support_check(cl);
-		if (rets)
-			goto out;
 	}
 
 	if (length > mei_cl_mtu(cl)) {
@@ -136,8 +128,7 @@ ssize_t __mei_cl_recv(struct mei_cl *cl, u8 *buf, size_t length, u8 *vtag,
 	bus = cl->dev;
 
 	mutex_lock(&bus->device_lock);
-	if (bus->dev_state != MEI_DEV_ENABLED &&
-	    bus->dev_state != MEI_DEV_POWERING_DOWN) {
+	if (bus->dev_state != MEI_DEV_ENABLED) {
 		rets = -ENODEV;
 		goto out;
 	}
@@ -887,17 +878,22 @@ static int mei_cl_device_probe(struct device *dev)
 static int mei_cl_device_remove(struct device *dev)
 {
 	struct mei_cl_device *cldev = to_mei_cl_device(dev);
-	struct mei_cl_driver *cldrv = to_mei_cl_driver(dev->driver);
+	struct mei_cl_driver *cldrv;
+	int ret = 0;
 
+	if (!cldev || !dev->driver)
+		return 0;
+
+	cldrv = to_mei_cl_driver(dev->driver);
 	if (cldrv->remove)
-		cldrv->remove(cldev);
+		ret = cldrv->remove(cldev);
 
 	mei_cldev_unregister_callbacks(cldev);
 
 	mei_cl_bus_module_put(cldev);
 	module_put(THIS_MODULE);
 
-	return 0;
+	return ret;
 }
 
 static ssize_t name_show(struct device *dev, struct device_attribute *a,

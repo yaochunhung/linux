@@ -10,7 +10,6 @@
 #endif
 
 #ifdef CONFIG_PPC_SPLPAR
-#include <linux/smp.h>
 #include <asm/kvm_guest.h>
 #include <asm/cputhreads.h>
 

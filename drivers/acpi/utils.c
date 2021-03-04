@@ -6,8 +6,6 @@
  *  Copyright (C) 2001, 2002 Paul Diefenbaugh <paul.s.diefenbaugh@intel.com>
  */
 
-#define pr_fmt(fmt) "ACPI: utils: " fmt
-
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/slab.h>
@@ -20,12 +18,24 @@
 #include "internal.h"
 #include "sleep.h"
 
+#define _COMPONENT		ACPI_BUS_COMPONENT
+ACPI_MODULE_NAME("utils");
+
 /* --------------------------------------------------------------------------
                             Object Evaluation Helpers
    -------------------------------------------------------------------------- */
-static void acpi_util_eval_error(acpi_handle h, acpi_string p, acpi_status s)
+static void
+acpi_util_eval_error(acpi_handle h, acpi_string p, acpi_status s)
 {
-	acpi_handle_debug(h, "Evaluate [%s]: %s\n", p, acpi_format_exception(s));
+#ifdef ACPI_DEBUG_OUTPUT
+	char prefix[80] = {'\0'};
+	struct acpi_buffer buffer = {sizeof(prefix), prefix};
+	acpi_get_name(h, ACPI_FULL_PATHNAME, &buffer);
+	ACPI_DEBUG_PRINT((ACPI_DB_INFO, "Evaluate [%s.%s]: %s\n",
+		(char *) prefix, p, acpi_format_exception(s)));
+#else
+	return;
+#endif
 }
 
 acpi_status
@@ -43,24 +53,25 @@ acpi_extract_package(union acpi_object *package,
 
 	if (!package || (package->type != ACPI_TYPE_PACKAGE)
 	    || (package->package.count < 1)) {
-		pr_debug("Invalid package argument\n");
+		printk(KERN_WARNING PREFIX "Invalid package argument\n");
 		return AE_BAD_PARAMETER;
 	}
 
 	if (!format || !format->pointer || (format->length < 1)) {
-		pr_debug("Invalid format argument\n");
+		printk(KERN_WARNING PREFIX "Invalid format argument\n");
 		return AE_BAD_PARAMETER;
 	}
 
 	if (!buffer) {
-		pr_debug("Invalid buffer argument\n");
+		printk(KERN_WARNING PREFIX "Invalid buffer argument\n");
 		return AE_BAD_PARAMETER;
 	}
 
 	format_count = (format->length / sizeof(char)) - 1;
 	if (format_count > package->package.count) {
-		pr_debug("Format specifies more objects [%d] than present [%d]\n",
-			 format_count, package->package.count);
+		printk(KERN_WARNING PREFIX "Format specifies more objects [%d]"
+			      " than exist in package [%d].\n",
+			      format_count, package->package.count);
 		return AE_BAD_DATA;
 	}
 
@@ -88,8 +99,10 @@ acpi_extract_package(union acpi_object *package,
 				tail_offset += sizeof(char *);
 				break;
 			default:
-				pr_debug("Invalid package element [%d]: got number, expected [%c]\n",
-					 i, format_string[i]);
+				printk(KERN_WARNING PREFIX "Invalid package element"
+					      " [%d]: got number, expecting"
+					      " [%c]\n",
+					      i, format_string[i]);
 				return AE_BAD_DATA;
 			}
 			break;
@@ -110,8 +123,10 @@ acpi_extract_package(union acpi_object *package,
 				tail_offset += sizeof(u8 *);
 				break;
 			default:
-				pr_debug("Invalid package element [%d] got string/buffer, expected [%c]\n",
-					 i, format_string[i]);
+				printk(KERN_WARNING PREFIX "Invalid package element"
+					      " [%d] got string/buffer,"
+					      " expecting [%c]\n",
+					      i, format_string[i]);
 				return AE_BAD_DATA;
 			}
 			break;
@@ -122,15 +137,19 @@ acpi_extract_package(union acpi_object *package,
 				tail_offset += sizeof(void *);
 				break;
 			default:
-				pr_debug("Invalid package element [%d] got reference, expected [%c]\n",
-					 i, format_string[i]);
+				printk(KERN_WARNING PREFIX "Invalid package element"
+					      " [%d] got reference,"
+					      " expecting [%c]\n",
+					      i, format_string[i]);
 				return AE_BAD_DATA;
 			}
 			break;
 
 		case ACPI_TYPE_PACKAGE:
 		default:
-			pr_debug("Unsupported element at index=%d\n", i);
+			ACPI_DEBUG_PRINT((ACPI_DB_INFO,
+					  "Found unsupported element at index=%d\n",
+					  i));
 			/* TBD: handle nested packages... */
 			return AE_SUPPORT;
 		}
@@ -270,7 +289,7 @@ acpi_evaluate_integer(acpi_handle handle,
 
 	*data = element.integer.value;
 
-	acpi_handle_debug(handle, "Return value [%llu]\n", *data);
+	ACPI_DEBUG_PRINT((ACPI_DB_INFO, "Return value [%llu]\n", *data));
 
 	return AE_OK;
 }
@@ -344,7 +363,8 @@ acpi_evaluate_reference(acpi_handle handle,
 		/* Get the  acpi_handle. */
 
 		list->handles[i] = element->reference.handle;
-		acpi_handle_debug(list->handles[i], "Found in reference list\n");
+		ACPI_DEBUG_PRINT((ACPI_DB_INFO, "Found reference [%p]\n",
+				  list->handles[i]));
 	}
 
       end:
@@ -823,36 +843,6 @@ bool acpi_dev_present(const char *hid, const char *uid, s64 hrv)
 EXPORT_SYMBOL(acpi_dev_present);
 
 /**
- * acpi_dev_get_next_match_dev - Return the next match of ACPI device
- * @adev: Pointer to the previous acpi_device matching this @hid, @uid and @hrv
- * @hid: Hardware ID of the device.
- * @uid: Unique ID of the device, pass NULL to not check _UID
- * @hrv: Hardware Revision of the device, pass -1 to not check _HRV
- *
- * Return the next match of ACPI device if another matching device was present
- * at the moment of invocation, or NULL otherwise.
- *
- * The caller is responsible to call put_device() on the returned device.
- *
- * See additional information in acpi_dev_present() as well.
- */
-struct acpi_device *
-acpi_dev_get_next_match_dev(struct acpi_device *adev, const char *hid, const char *uid, s64 hrv)
-{
-	struct device *start = adev ? &adev->dev : NULL;
-	struct acpi_dev_match_info match = {};
-	struct device *dev;
-
-	strlcpy(match.hid[0].id, hid, sizeof(match.hid[0].id));
-	match.uid = uid;
-	match.hrv = hrv;
-
-	dev = bus_find_device(&acpi_bus_type, start, &match, acpi_dev_match_cb);
-	return dev ? to_acpi_device(dev) : NULL;
-}
-EXPORT_SYMBOL(acpi_dev_get_next_match_dev);
-
-/**
  * acpi_dev_get_first_match_dev - Return the first match of ACPI device
  * @hid: Hardware ID of the device.
  * @uid: Unique ID of the device, pass NULL to not check _UID
@@ -868,7 +858,15 @@ EXPORT_SYMBOL(acpi_dev_get_next_match_dev);
 struct acpi_device *
 acpi_dev_get_first_match_dev(const char *hid, const char *uid, s64 hrv)
 {
-	return acpi_dev_get_next_match_dev(NULL, hid, uid, hrv);
+	struct acpi_dev_match_info match = {};
+	struct device *dev;
+
+	strlcpy(match.hid[0].id, hid, sizeof(match.hid[0].id));
+	match.uid = uid;
+	match.hrv = hrv;
+
+	dev = bus_find_device(&acpi_bus_type, NULL, &match, acpi_dev_match_cb);
+	return dev ? to_acpi_device(dev) : NULL;
 }
 EXPORT_SYMBOL(acpi_dev_get_first_match_dev);
 

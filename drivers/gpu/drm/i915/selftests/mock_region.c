@@ -15,16 +15,21 @@ static const struct drm_i915_gem_object_ops mock_region_obj_ops = {
 	.release = i915_gem_object_release_memory_region,
 };
 
-static int mock_object_init(struct intel_memory_region *mem,
-			    struct drm_i915_gem_object *obj,
-			    resource_size_t size,
-			    unsigned int flags)
+static struct drm_i915_gem_object *
+mock_object_create(struct intel_memory_region *mem,
+		   resource_size_t size,
+		   unsigned int flags)
 {
 	static struct lock_class_key lock_class;
 	struct drm_i915_private *i915 = mem->i915;
+	struct drm_i915_gem_object *obj;
 
 	if (size > mem->mm.size)
-		return -E2BIG;
+		return ERR_PTR(-E2BIG);
+
+	obj = i915_gem_object_alloc();
+	if (!obj)
+		return ERR_PTR(-ENOMEM);
 
 	drm_gem_private_object_init(&i915->drm, &obj->base, size);
 	i915_gem_object_init(obj, &mock_region_obj_ops, &lock_class);
@@ -35,13 +40,13 @@ static int mock_object_init(struct intel_memory_region *mem,
 
 	i915_gem_object_init_memory_region(obj, mem, flags);
 
-	return 0;
+	return obj;
 }
 
 static const struct intel_memory_region_ops mock_region_ops = {
 	.init = intel_memory_region_init_buddy,
 	.release = intel_memory_region_release_buddy,
-	.init_object = mock_object_init,
+	.create_object = mock_object_create,
 };
 
 struct intel_memory_region *

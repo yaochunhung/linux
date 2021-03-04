@@ -85,13 +85,12 @@ static int jfs_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-int jfs_setattr(struct user_namespace *mnt_userns, struct dentry *dentry,
-		struct iattr *iattr)
+int jfs_setattr(struct dentry *dentry, struct iattr *iattr)
 {
 	struct inode *inode = d_inode(dentry);
 	int rc;
 
-	rc = setattr_prepare(&init_user_ns, dentry, iattr);
+	rc = setattr_prepare(dentry, iattr);
 	if (rc)
 		return rc;
 
@@ -119,11 +118,11 @@ int jfs_setattr(struct user_namespace *mnt_userns, struct dentry *dentry,
 		jfs_truncate(inode);
 	}
 
-	setattr_copy(&init_user_ns, inode, iattr);
+	setattr_copy(inode, iattr);
 	mark_inode_dirty(inode);
 
 	if (iattr->ia_valid & ATTR_MODE)
-		rc = posix_acl_chmod(&init_user_ns, inode, inode->i_mode);
+		rc = posix_acl_chmod(inode, inode->i_mode);
 	return rc;
 }
 

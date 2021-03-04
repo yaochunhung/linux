@@ -12,12 +12,13 @@ static   int                        g_connected;
 static   int                        g_num_deferred_callbacks;
 static   VCHIQ_CONNECTED_CALLBACK_T g_deferred_callback[MAX_CALLBACKS];
 static   int                        g_once_init;
-static   DEFINE_MUTEX(g_connected_mutex);
+static   struct mutex               g_connected_mutex;
 
 /* Function to initialize our lock */
 static void connected_init(void)
 {
 	if (!g_once_init) {
+		mutex_init(&g_connected_mutex);
 		g_once_init = 1;
 	}
 }

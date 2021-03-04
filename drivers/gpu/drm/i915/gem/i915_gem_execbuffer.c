@@ -15,7 +15,6 @@
 
 #include "gem/i915_gem_ioctls.h"
 #include "gt/intel_context.h"
-#include "gt/intel_gpu_commands.h"
 #include "gt/intel_gt.h"
 #include "gt/intel_gt_buffer_pool.h"
 #include "gt/intel_gt_pm.h"
@@ -534,6 +533,8 @@ eb_add_vma(struct i915_execbuffer *eb,
 {
 	struct drm_i915_gem_exec_object2 *entry = &eb->exec[i];
 	struct eb_vma *ev = &eb->vma[i];
+
+	GEM_BUG_ON(i915_vma_is_closed(vma));
 
 	ev->vma = vma;
 	ev->exec = entry;
@@ -1276,10 +1277,7 @@ static int __reloc_gpu_alloc(struct i915_execbuffer *eb,
 	int err;
 
 	if (!pool) {
-		pool = intel_gt_get_buffer_pool(engine->gt, PAGE_SIZE,
-						cache->has_llc ?
-						I915_MAP_WB :
-						I915_MAP_WC);
+		pool = intel_gt_get_buffer_pool(engine->gt, PAGE_SIZE);
 		if (IS_ERR(pool))
 			return PTR_ERR(pool);
 	}
@@ -1289,7 +1287,10 @@ static int __reloc_gpu_alloc(struct i915_execbuffer *eb,
 	if (err)
 		goto err_pool;
 
-	cmd = i915_gem_object_pin_map(pool->obj, pool->type);
+	cmd = i915_gem_object_pin_map(pool->obj,
+				      cache->has_llc ?
+				      I915_MAP_FORCE_WB :
+				      I915_MAP_FORCE_WC);
 	if (IS_ERR(cmd)) {
 		err = PTR_ERR(cmd);
 		goto err_pool;
@@ -2458,8 +2459,7 @@ static int eb_parse(struct i915_execbuffer *eb)
 		return -EINVAL;
 
 	if (!pool) {
-		pool = intel_gt_get_buffer_pool(eb->engine->gt, len,
-						I915_MAP_WB);
+		pool = intel_gt_get_buffer_pool(eb->engine->gt, len);
 		if (IS_ERR(pool))
 			return PTR_ERR(pool);
 		eb->batch_pool = pool;
@@ -2535,9 +2535,6 @@ static int eb_submit(struct i915_execbuffer *eb, struct i915_vma *batch)
 {
 	int err;
 
-	if (intel_context_nopreempt(eb->context))
-		__set_bit(I915_FENCE_FLAG_NOPREEMPT, &eb->request->fence.flags);
-
 	err = eb_move_to_gpu(eb);
 	if (err)
 		return err;
@@ -2578,12 +2575,15 @@ static int eb_submit(struct i915_execbuffer *eb, struct i915_vma *batch)
 			return err;
 	}
 
+	if (intel_context_nopreempt(eb->context))
+		__set_bit(I915_FENCE_FLAG_NOPREEMPT, &eb->request->fence.flags);
+
 	return 0;
 }
 
 static int num_vcs_engines(const struct drm_i915_private *i915)
 {
-	return hweight_long(VDBOX_MASK(&i915->gt));
+	return hweight64(VDBOX_MASK(&i915->gt));
 }
 
 /*

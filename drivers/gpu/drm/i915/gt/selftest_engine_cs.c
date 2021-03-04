@@ -6,7 +6,6 @@
 
 #include <linux/sort.h>
 
-#include "intel_gpu_commands.h"
 #include "intel_gt_pm.h"
 #include "intel_rps.h"
 

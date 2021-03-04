@@ -388,6 +388,12 @@ static enum aux_channel_operation_result get_channel_status(
 	}
 }
 
+enum i2caux_engine_type get_engine_type(
+		const struct dce_aux *engine)
+{
+	return I2CAUX_ENGINE_TYPE_AUX;
+}
+
 static bool acquire(
 	struct dce_aux *engine,
 	struct ddc *ddc)
@@ -576,7 +582,7 @@ int dce_aux_transfer_raw(struct ddc_service *ddc,
 	*operation_result = get_channel_status(aux_engine, &returned_bytes);
 
 	if (*operation_result == AUX_CHANNEL_OPERATION_SUCCEEDED) {
-		int __maybe_unused bytes_replied = 0;
+		int bytes_replied = 0;
 		bytes_replied = read_channel_reply(aux_engine, payload->length,
 					 payload->data, payload->reply,
 					 &status);

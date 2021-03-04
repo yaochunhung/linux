@@ -193,16 +193,15 @@ static bool amdgpu_gfx_is_multipipe_capable(struct amdgpu_device *adev)
 }
 
 bool amdgpu_gfx_is_high_priority_compute_queue(struct amdgpu_device *adev,
-					       struct amdgpu_ring *ring)
+					       int pipe, int queue)
 {
-	/* Policy: use 1st queue as high priority compute queue if we
-	 * have more than one compute queue.
-	 */
-	if (adev->gfx.num_compute_rings > 1 &&
-	    ring == &adev->gfx.compute_ring[0])
-		return true;
+	bool multipipe_policy = amdgpu_gfx_is_multipipe_capable(adev);
+	int cond;
+	/* Policy: alternate between normal and high priority */
+	cond = multipipe_policy ? pipe : queue;
 
-	return false;
+	return ((cond % 2) != 0);
+
 }
 
 void amdgpu_gfx_compute_queue_acquire(struct amdgpu_device *adev)

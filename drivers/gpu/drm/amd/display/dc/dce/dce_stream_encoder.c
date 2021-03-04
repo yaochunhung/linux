@@ -67,6 +67,7 @@ static void dce110_update_generic_info_packet(
 	uint32_t packet_index,
 	const struct dc_info_packet *info_packet)
 {
+	uint32_t regval;
 	/* TODOFPGA Figure out a proper number for max_retries polling for lock
 	 * use 50 for now.
 	 */
@@ -98,7 +99,7 @@ static void dce110_update_generic_info_packet(
 	}
 	/* choose which generic packet to use */
 	{
-		REG_READ(AFMT_VBI_PACKET_CONTROL);
+		regval = REG_READ(AFMT_VBI_PACKET_CONTROL);
 		REG_UPDATE(AFMT_VBI_PACKET_CONTROL,
 				AFMT_GENERIC_INDEX, packet_index);
 	}
@@ -563,7 +564,6 @@ static void dce110_stream_encoder_hdmi_set_stream_attribute(
 	cntl.enable_dp_audio = enable_audio;
 	cntl.pixel_clock = actual_pix_clk_khz;
 	cntl.lanes_number = LANE_COUNT_FOUR;
-	cntl.color_depth = crtc_timing->display_color_depth;
 
 	if (enc110->base.bp->funcs->encoder_control(
 			enc110->base.bp, &cntl) != BP_RESULT_OK)

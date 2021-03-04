@@ -340,26 +340,16 @@ Rendered as:
 Cross-referencing
 -----------------
 
-Cross-referencing from one documentation page to another can be done simply by
-writing the path to the document file, no special syntax required. The path can
-be either absolute or relative. For absolute paths, start it with
-"Documentation/". For example, to cross-reference to this page, all the
-following are valid options, depending on the current document's directory (note
-that the ``.rst`` extension is required)::
+Cross-referencing from one documentation page to another can be done by passing
+the path to the file starting from the Documentation folder.
+For example, to cross-reference to this page (the .rst extension is optional)::
 
-    See Documentation/doc-guide/sphinx.rst. This always works.
-    Take a look at sphinx.rst, which is at this same directory.
-    Read ../sphinx.rst, which is one directory above.
+    See Documentation/doc-guide/sphinx.rst.
 
-If you want the link to have a different rendered text other than the document's
-title, you need to use Sphinx's ``doc`` role. For example::
+If you want to use a relative path, you need to use Sphinx's ``doc`` directive.
+For example, referencing this page from the same directory would be done as::
 
-    See :doc:`my custom link text for document sphinx <sphinx>`.
-
-For most use cases, the former is preferred, as it is cleaner and more suited
-for people reading the source files. If you come across a ``:doc:`` usage that
-isn't adding any value, please feel free to convert it to just the document
-path.
+    See :doc:`sphinx`.
 
 For information on cross-referencing to kernel-doc functions or types, see
 Documentation/doc-guide/kernel-doc.rst.

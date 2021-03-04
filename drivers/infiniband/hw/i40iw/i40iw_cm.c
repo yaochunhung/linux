@@ -70,7 +70,7 @@ static void i40iw_disconnect_worker(struct work_struct *work);
 /**
  * i40iw_free_sqbuf - put back puda buffer if refcount = 0
  * @vsi: pointer to vsi structure
- * @bufp: puda buffer to free
+ * @buf: puda buffer to free
  */
 void i40iw_free_sqbuf(struct i40iw_sc_vsi *vsi, void *bufp)
 {
@@ -729,7 +729,6 @@ static int i40iw_handle_tcp_options(struct i40iw_cm_node *cm_node,
 /**
  * i40iw_build_mpa_v1 - build a MPA V1 frame
  * @cm_node: connection's node
- * @start_addr: MPA frame start address
  * @mpa_key: to do read0 or write0
  */
 static void i40iw_build_mpa_v1(struct i40iw_cm_node *cm_node,
@@ -1041,7 +1040,7 @@ negotiate_done:
 
 /**
  * i40iw_schedule_cm_timer
- * @cm_node: connection's node
+ * @@cm_node: connection's node
  * @sqbuf: buffer to send
  * @type: if it is send or close
  * @send_retrans: if rexmits to be done
@@ -1206,7 +1205,7 @@ static void i40iw_build_timer_list(struct list_head *timer_list,
 
 /**
  * i40iw_cm_timer_tick - system's timer expired callback
- * @t: Timer instance to fetch the cm_core pointer from
+ * @pass: Pointing to cm_core
  */
 static void i40iw_cm_timer_tick(struct timer_list *t)
 {
@@ -1464,7 +1463,6 @@ struct i40iw_cm_node *i40iw_find_node(struct i40iw_cm_core *cm_core,
  * @cm_core: cm's core
  * @dst_port: listener tcp port num
  * @dst_addr: listener ip addr
- * @vlan_id: vlan id for the given address
  * @listener_state: state to match with listen node's
  */
 static struct i40iw_cm_listener *i40iw_find_listener(
@@ -1523,7 +1521,7 @@ static void i40iw_add_hte_node(struct i40iw_cm_core *cm_core,
 /**
  * i40iw_find_port - find port that matches reference port
  * @hte: ptr to accelerated or non-accelerated list
- * @port: port number to locate
+ * @accelerated_list: flag for accelerated vs non-accelerated list
  */
 static bool i40iw_find_port(struct list_head *hte, u16 port)
 {
@@ -1836,7 +1834,6 @@ exit:
 /**
  * i40iw_dec_refcnt_listen - delete listener and associated cm nodes
  * @cm_core: cm's core
- * @listener: passive connection's listener
  * @free_hanging_nodes: to free associated cm_nodes
  * @apbvt_del: flag to delete the apbvt
  */
@@ -2032,7 +2029,7 @@ static int i40iw_addr_resolve_neigh(struct i40iw_device *iwdev,
 	return rc;
 }
 
-/*
+/**
  * i40iw_get_dst_ipv6
  */
 static struct dst_entry *i40iw_get_dst_ipv6(struct sockaddr_in6 *src_addr,
@@ -2054,8 +2051,7 @@ static struct dst_entry *i40iw_get_dst_ipv6(struct sockaddr_in6 *src_addr,
 /**
  * i40iw_addr_resolve_neigh_ipv6 - resolve neighbor ipv6 address
  * @iwdev: iwarp device structure
- * @src: source ip address
- * @dest: remote ip address
+ * @dst_ip: remote ip address
  * @arpindex: if there is an arp entry
  */
 static int i40iw_addr_resolve_neigh_ipv6(struct i40iw_device *iwdev,
@@ -3008,7 +3004,7 @@ static struct i40iw_cm_node *i40iw_create_cm_node(
 /**
  * i40iw_cm_reject - reject and teardown a connection
  * @cm_node: connection's node
- * @pdata: ptr to private data for reject
+ * @pdate: ptr to private data for reject
  * @plen: size of private data
  */
 static int i40iw_cm_reject(struct i40iw_cm_node *cm_node, const void *pdata, u8 plen)
@@ -4306,7 +4302,7 @@ set_qhash:
  * i40iw_cm_teardown_connections - teardown QPs
  * @iwdev: device pointer
  * @ipaddr: Pointer to IPv4 or IPv6 address
- * @nfo: cm info node
+ * @ipv4: flag indicating IPv4 when true
  * @disconnect_all: flag indicating disconnect all QPs
  * teardown QPs where source or destination addr matches ip addr
  */
@@ -4362,7 +4358,6 @@ void i40iw_cm_teardown_connections(struct i40iw_device *iwdev, u32 *ipaddr,
 /**
  * i40iw_ifdown_notify - process an ifdown on an interface
  * @iwdev: device pointer
- * @netdev: network interface device structure
  * @ipaddr: Pointer to IPv4 or IPv6 address
  * @ipv4: flag indicating IPv4 when true
  * @ifup: flag indicating interface up when true

@@ -144,6 +144,12 @@
 #define VER_MINOR 0
 #define VER_PATCH 6
 
+#ifndef ABORT_TAG
+#define ABORT_TAG 0xd
+#else
+#error "Yippee!  ABORT TAG is now defined!  Remove this error!"
+#endif
+
 #ifdef USE_DMAC
 /*
  * DMAC setup parameters
@@ -1484,8 +1490,8 @@ void acornscsi_message(AS_Host *host)
     }
 
     switch (message[0]) {
-    case ABORT_TASK_SET:
-    case ABORT_TASK:
+    case ABORT:
+    case ABORT_TAG:
     case COMMAND_COMPLETE:
 	if (host->scsi.phase != PHASE_STATUSIN) {
 	    printk(KERN_ERR "scsi%d.%c: command complete following non-status in phase?\n",
@@ -1588,6 +1594,10 @@ void acornscsi_message(AS_Host *host)
 	default:
 	    break;
 	}
+	break;
+
+    case QUEUE_FULL:
+	/* TODO: target queue is full */
 	break;
 
     case SIMPLE_QUEUE_TAG:

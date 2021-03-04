@@ -452,7 +452,7 @@ int ip_fib_check_default(__be32 gw, struct net_device *dev)
 	return -1;
 }
 
-size_t fib_nlmsg_size(struct fib_info *fi)
+static inline size_t fib_nlmsg_size(struct fib_info *fi)
 {
 	size_t payload = NLMSG_ALIGN(sizeof(struct rtmsg))
 			 + nla_total_size(4) /* RTA_TABLE */
@@ -521,7 +521,6 @@ void rtmsg_fib(int event, __be32 key, struct fib_alias *fa,
 	fri.type = fa->fa_type;
 	fri.offload = fa->offload;
 	fri.trap = fa->trap;
-	fri.offload_failed = fa->offload_failed;
 	err = fib_dump_info(skb, info->portid, seq, event, &fri, nlm_flags);
 	if (err < 0) {
 		/* -EMSGSIZE implies BUG in fib_nlmsg_size() */
@@ -1734,7 +1733,7 @@ static int fib_add_multipath(struct sk_buff *skb, struct fib_info *fi)
 #endif
 
 int fib_dump_info(struct sk_buff *skb, u32 portid, u32 seq, int event,
-		  const struct fib_rt_info *fri, unsigned int flags)
+		  struct fib_rt_info *fri, unsigned int flags)
 {
 	unsigned int nhs = fib_info_num_path(fri->fi);
 	struct fib_info *fi = fri->fi;
@@ -1812,8 +1811,6 @@ offload:
 		rtm->rtm_flags |= RTM_F_OFFLOAD;
 	if (fri->trap)
 		rtm->rtm_flags |= RTM_F_TRAP;
-	if (fri->offload_failed)
-		rtm->rtm_flags |= RTM_F_OFFLOAD_FAILED;
 
 	nlmsg_end(skb, nlh);
 	return 0;

@@ -413,10 +413,16 @@ static struct z3fold_header *init_z3fold_page(struct page *page, bool headless,
 	if (!slots)
 		return NULL;
 
-	memset(zhdr, 0, sizeof(*zhdr));
 	spin_lock_init(&zhdr->page_lock);
 	kref_init(&zhdr->refcount);
+	zhdr->first_chunks = 0;
+	zhdr->middle_chunks = 0;
+	zhdr->last_chunks = 0;
+	zhdr->first_num = 0;
+	zhdr->start_middle = 0;
 	zhdr->cpu = -1;
+	zhdr->foreign_handles = 0;
+	zhdr->mapped_count = 0;
 	zhdr->slots = slots;
 	zhdr->pool = pool;
 	INIT_LIST_HEAD(&zhdr->buddy);
@@ -535,7 +541,8 @@ static void __release_z3fold_page(struct z3fold_header *zhdr, bool locked)
 	spin_unlock(&pool->stale_lock);
 }
 
-static void release_z3fold_page(struct kref *ref)
+static void __attribute__((__unused__))
+			release_z3fold_page(struct kref *ref)
 {
 	struct z3fold_header *zhdr = container_of(ref, struct z3fold_header,
 						refcount);
@@ -1771,7 +1778,6 @@ static u64 z3fold_zpool_total_size(void *pool)
 
 static struct zpool_driver z3fold_zpool_driver = {
 	.type =		"z3fold",
-	.sleep_mapped = true,
 	.owner =	THIS_MODULE,
 	.create =	z3fold_zpool_create,
 	.destroy =	z3fold_zpool_destroy,

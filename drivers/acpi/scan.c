@@ -19,6 +19,8 @@
 
 #include "internal.h"
 
+#define _COMPONENT		ACPI_BUS_COMPONENT
+ACPI_MODULE_NAME("scan");
 extern struct acpi_device *acpi_root;
 
 #define ACPI_BUS_CLASS			"system_bus"
@@ -263,7 +265,8 @@ static int acpi_scan_hot_remove(struct acpi_device *device)
 			return error;
 	}
 
-	acpi_handle_debug(handle, "Ejecting\n");
+	ACPI_DEBUG_PRINT((ACPI_DB_INFO,
+		"Hot-removing device %s...\n", dev_name(&device->dev)));
 
 	acpi_bus_trim(device);
 
@@ -575,31 +578,29 @@ static void acpi_scan_drop_device(acpi_handle handle, void *context)
 	mutex_unlock(&acpi_device_del_lock);
 }
 
-static struct acpi_device *handle_to_device(acpi_handle handle,
-					    void (*callback)(void *))
+static int acpi_get_device_data(acpi_handle handle, struct acpi_device **device,
+				void (*callback)(void *))
 {
-	struct acpi_device *adev = NULL;
 	acpi_status status;
 
+	if (!device)
+		return -EINVAL;
+
+	*device = NULL;
+
 	status = acpi_get_data_full(handle, acpi_scan_drop_device,
-				    (void **)&adev, callback);
-	if (ACPI_FAILURE(status) || !adev) {
-		acpi_handle_debug(handle, "No context!\n");
-		return NULL;
+				    (void **)device, callback);
+	if (ACPI_FAILURE(status) || !*device) {
+		ACPI_DEBUG_PRINT((ACPI_DB_INFO, "No context for object [%p]\n",
+				  handle));
+		return -ENODEV;
 	}
-	return adev;
+	return 0;
 }
 
 int acpi_bus_get_device(acpi_handle handle, struct acpi_device **device)
 {
-	if (!device)
-		return -EINVAL;
-
-	*device = handle_to_device(handle, NULL);
-	if (!*device)
-		return -ENODEV;
-
-	return 0;
+	return acpi_get_device_data(handle, device, NULL);
 }
 EXPORT_SYMBOL(acpi_bus_get_device);
 
@@ -611,7 +612,10 @@ static void get_acpi_device(void *dev)
 
 struct acpi_device *acpi_bus_get_acpi_device(acpi_handle handle)
 {
-	return handle_to_device(handle, get_acpi_device);
+	struct acpi_device *adev = NULL;
+
+	acpi_get_device_data(handle, &adev, get_acpi_device);
+	return adev;
 }
 
 void acpi_bus_put_acpi_device(struct acpi_device *adev)
@@ -619,23 +623,12 @@ void acpi_bus_put_acpi_device(struct acpi_device *adev)
 	put_device(&adev->dev);
 }
 
-static struct acpi_device_bus_id *acpi_device_bus_id_match(const char *dev_id)
-{
-	struct acpi_device_bus_id *acpi_device_bus_id;
-
-	/* Find suitable bus_id and instance number in acpi_bus_id_list. */
-	list_for_each_entry(acpi_device_bus_id, &acpi_bus_id_list, node) {
-		if (!strcmp(acpi_device_bus_id->bus_id, dev_id))
-			return acpi_device_bus_id;
-	}
-	return NULL;
-}
-
 int acpi_device_add(struct acpi_device *device,
 		    void (*release)(struct device *))
 {
-	struct acpi_device_bus_id *acpi_device_bus_id;
 	int result;
+	struct acpi_device_bus_id *acpi_device_bus_id, *new_bus_id;
+	int found = 0;
 
 	if (device->handle) {
 		acpi_status status;
@@ -661,26 +654,38 @@ int acpi_device_add(struct acpi_device *device,
 	INIT_LIST_HEAD(&device->del_list);
 	mutex_init(&device->physical_node_lock);
 
-	mutex_lock(&acpi_device_lock);
+	new_bus_id = kzalloc(sizeof(struct acpi_device_bus_id), GFP_KERNEL);
+	if (!new_bus_id) {
+		pr_err(PREFIX "Memory allocation error\n");
+		result = -ENOMEM;
+		goto err_detach;
+	}
 
-	acpi_device_bus_id = acpi_device_bus_id_match(acpi_device_hid(device));
-	if (acpi_device_bus_id) {
-		acpi_device_bus_id->instance_no++;
-	} else {
-		acpi_device_bus_id = kzalloc(sizeof(*acpi_device_bus_id),
-					     GFP_KERNEL);
-		if (!acpi_device_bus_id) {
-			result = -ENOMEM;
-			goto err_unlock;
+	mutex_lock(&acpi_device_lock);
+	/*
+	 * Find suitable bus_id and instance number in acpi_bus_id_list
+	 * If failed, create one and link it into acpi_bus_id_list
+	 */
+	list_for_each_entry(acpi_device_bus_id, &acpi_bus_id_list, node) {
+		if (!strcmp(acpi_device_bus_id->bus_id,
+			    acpi_device_hid(device))) {
+			acpi_device_bus_id->instance_no++;
+			found = 1;
+			kfree(new_bus_id);
+			break;
 		}
+	}
+	if (!found) {
+		acpi_device_bus_id = new_bus_id;
 		acpi_device_bus_id->bus_id =
 			kstrdup_const(acpi_device_hid(device), GFP_KERNEL);
 		if (!acpi_device_bus_id->bus_id) {
-			kfree(acpi_device_bus_id);
+			pr_err(PREFIX "Memory allocation error for bus id\n");
 			result = -ENOMEM;
-			goto err_unlock;
+			goto err_free_new_bus_id;
 		}
 
+		acpi_device_bus_id->instance_no = 0;
 		list_add_tail(&acpi_device_bus_id->node, &acpi_bus_id_list);
 	}
 	dev_set_name(&device->dev, "%s:%02x", acpi_device_bus_id->bus_id, acpi_device_bus_id->instance_no);
@@ -690,12 +695,10 @@ int acpi_device_add(struct acpi_device *device,
 
 	if (device->wakeup.flags.valid)
 		list_add_tail(&device->wakeup_list, &acpi_wakeup_device_list);
-
 	mutex_unlock(&acpi_device_lock);
 
 	if (device->parent)
 		device->dev.parent = &device->parent->dev;
-
 	device->dev.bus = &acpi_bus_type;
 	device->dev.release = release;
 	result = device_add(&device->dev);
@@ -711,19 +714,20 @@ int acpi_device_add(struct acpi_device *device,
 
 	return 0;
 
-err:
+ err:
 	mutex_lock(&acpi_device_lock);
-
 	if (device->parent)
 		list_del(&device->node);
-
 	list_del(&device->wakeup_list);
 
-err_unlock:
+ err_free_new_bus_id:
+	if (!found)
+		kfree(new_bus_id);
+
 	mutex_unlock(&acpi_device_lock);
 
+ err_detach:
 	acpi_detach_data(device->handle, acpi_scan_drop_device);
-
 	return result;
 }
 
@@ -826,8 +830,7 @@ static int acpi_bus_extract_wakeup_device_power_package(struct acpi_device *dev)
 	/* _PRW */
 	status = acpi_evaluate_object(handle, "_PRW", NULL, &buffer);
 	if (ACPI_FAILURE(status)) {
-		acpi_handle_info(handle, "_PRW evaluation failed: %s\n",
-				 acpi_format_exception(status));
+		ACPI_EXCEPTION((AE_INFO, status, "Evaluating _PRW"));
 		return err;
 	}
 
@@ -932,7 +935,7 @@ static void acpi_bus_get_wakeup_device_flags(struct acpi_device *device)
 
 	err = acpi_bus_extract_wakeup_device_power_package(device);
 	if (err) {
-		dev_err(&device->dev, "Unable to extract wakeup power resources");
+		dev_err(&device->dev, "_PRW evaluation error: %d\n", err);
 		return;
 	}
 
@@ -1168,7 +1171,8 @@ acpi_backlight_cap_match(acpi_handle handle, u32 level, void *context,
 
 	if (acpi_has_method(handle, "_BCM") &&
 	    acpi_has_method(handle, "_BCL")) {
-		acpi_handle_debug(handle, "Found generic backlight support\n");
+		ACPI_DEBUG_PRINT((ACPI_DB_INFO, "Found generic backlight "
+				  "support\n"));
 		*cap |= ACPI_VIDEO_BACKLIGHT;
 		/* We have backlight support, no need to scan further */
 		return AE_CTRL_TERMINATE;
@@ -1659,15 +1663,17 @@ static int acpi_add_single_object(struct acpi_device **child,
 				  acpi_handle handle, int type,
 				  unsigned long long sta)
 {
-	struct acpi_device_info *info = NULL;
-	struct acpi_device *device;
 	int result;
+	struct acpi_device *device;
+	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };
+	struct acpi_device_info *info = NULL;
 
 	if (handle != ACPI_ROOT_OBJECT && type == ACPI_BUS_TYPE_DEVICE)
 		acpi_get_object_info(handle, &info);
 
 	device = kzalloc(sizeof(struct acpi_device), GFP_KERNEL);
 	if (!device) {
+		printk(KERN_ERR PREFIX "Memory allocation error\n");
 		kfree(info);
 		return -ENOMEM;
 	}
@@ -1694,11 +1700,11 @@ static int acpi_add_single_object(struct acpi_device **child,
 
 	acpi_power_add_remove_device(device, true);
 	acpi_device_add_finalize(device);
-
-	acpi_handle_debug(handle, "Added as %s, parent %s\n",
-			  dev_name(&device->dev), device->parent ?
-				dev_name(&device->parent->dev) : "(null)");
-
+	acpi_get_name(handle, ACPI_FULL_PATHNAME, &buffer);
+	ACPI_DEBUG_PRINT((ACPI_DB_INFO, "Added %s [%s] parent %s\n",
+		dev_name(&device->dev), (char *) buffer.pointer,
+		device->parent ? dev_name(&device->parent->dev) : "(null)"));
+	kfree(buffer.pointer);
 	*child = device;
 	return 0;
 }

@@ -204,7 +204,9 @@ rpcrdma_alloc_sparse_pages(struct xdr_buf *buf)
 	return 0;
 }
 
-/* Convert @vec to a single SGL element.
+/* Split @vec on page boundaries into SGEs. FMR registers pages, not
+ * a byte range. Other modes coalesce these SGEs into a single MR
+ * when they can.
  *
  * Returns pointer to next available SGE, and bumps the total number
  * of SGEs consumed.
@@ -213,11 +215,22 @@ static struct rpcrdma_mr_seg *
 rpcrdma_convert_kvec(struct kvec *vec, struct rpcrdma_mr_seg *seg,
 		     unsigned int *n)
 {
-	seg->mr_page = virt_to_page(vec->iov_base);
-	seg->mr_offset = offset_in_page(vec->iov_base);
-	seg->mr_len = vec->iov_len;
-	++seg;
-	++(*n);
+	u32 remaining, page_offset;
+	char *base;
+
+	base = vec->iov_base;
+	page_offset = offset_in_page(base);
+	remaining = vec->iov_len;
+	while (remaining) {
+		seg->mr_page = NULL;
+		seg->mr_offset = base;
+		seg->mr_len = min_t(u32, PAGE_SIZE - page_offset, remaining);
+		remaining -= seg->mr_len;
+		base += seg->mr_len;
+		++seg;
+		++(*n);
+		page_offset = 0;
+	}
 	return seg;
 }
 
@@ -246,7 +259,7 @@ rpcrdma_convert_iovs(struct rpcrdma_xprt *r_xprt, struct xdr_buf *xdrbuf,
 	page_base = offset_in_page(xdrbuf->page_base);
 	while (len) {
 		seg->mr_page = *ppages;
-		seg->mr_offset = page_base;
+		seg->mr_offset = (char *)page_base;
 		seg->mr_len = min_t(u32, PAGE_SIZE - page_base, len);
 		len -= seg->mr_len;
 		++ppages;
@@ -255,7 +268,10 @@ rpcrdma_convert_iovs(struct rpcrdma_xprt *r_xprt, struct xdr_buf *xdrbuf,
 		page_base = 0;
 	}
 
-	if (type == rpcrdma_readch)
+	/* When encoding a Read chunk, the tail iovec contains an
+	 * XDR pad and may be omitted.
+	 */
+	if (type == rpcrdma_readch && r_xprt->rx_ep->re_implicit_roundup)
 		goto out;
 
 	/* When encoding a Write chunk, some servers need to see an
@@ -267,7 +283,7 @@ rpcrdma_convert_iovs(struct rpcrdma_xprt *r_xprt, struct xdr_buf *xdrbuf,
 		goto out;
 
 	if (xdrbuf->tail[0].iov_len)
-		rpcrdma_convert_kvec(&xdrbuf->tail[0], seg, &n);
+		seg = rpcrdma_convert_kvec(&xdrbuf->tail[0], seg, &n);
 
 out:
 	if (unlikely(n > RPCRDMA_MAX_SEGS))
@@ -628,8 +644,9 @@ out_mapping_err:
 	return false;
 }
 
-/* The tail iovec might not reside in the same page as the
- * head iovec.
+/* The tail iovec may include an XDR pad for the page list,
+ * as well as additional content, and may not reside in the
+ * same page as the head iovec.
  */
 static bool rpcrdma_prepare_tail_iov(struct rpcrdma_req *req,
 				     struct xdr_buf *xdr,
@@ -747,19 +764,27 @@ static bool rpcrdma_prepare_readch(struct rpcrdma_xprt *r_xprt,
 				   struct rpcrdma_req *req,
 				   struct xdr_buf *xdr)
 {
-	struct kvec *tail = &xdr->tail[0];
-
 	if (!rpcrdma_prepare_head_iov(r_xprt, req, xdr->head[0].iov_len))
 		return false;
 
-	/* If there is a Read chunk, the page list is handled
+	/* If there is a Read chunk, the page list is being handled
 	 * via explicit RDMA, and thus is skipped here.
 	 */
 
-	if (tail->iov_len) {
-		if (!rpcrdma_prepare_tail_iov(req, xdr,
-					      offset_in_page(tail->iov_base),
-					      tail->iov_len))
+	/* Do not include the tail if it is only an XDR pad */
+	if (xdr->tail[0].iov_len > 3) {
+		unsigned int page_base, len;
+
+		/* If the content in the page list is an odd length,
+		 * xdr_write_pages() adds a pad at the beginning of
+		 * the tail iovec. Force the tail's non-pad content to
+		 * land at the next XDR position in the Send message.
+		 */
+		page_base = offset_in_page(xdr->tail[0].iov_base);
+		len = xdr->tail[0].iov_len;
+		page_base += len & 3;
+		len -= len & 3;
+		if (!rpcrdma_prepare_tail_iov(req, xdr, page_base, len))
 			return false;
 		kref_get(&req->rl_kref);
 	}
@@ -1139,9 +1164,13 @@ rpcrdma_is_bcall(struct rpcrdma_xprt *r_xprt, struct rpcrdma_rep *rep)
 	 */
 	p = xdr_inline_decode(xdr, 3 * sizeof(*p));
 	if (unlikely(!p))
-		return true;
+		goto out_short;
 
 	rpcrdma_bc_receive_call(r_xprt, rep);
+	return true;
+
+out_short:
+	pr_warn("RPC/RDMA short backward direction call\n");
 	return true;
 }
 #else	/* CONFIG_SUNRPC_BACKCHANNEL */

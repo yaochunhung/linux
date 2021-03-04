@@ -59,9 +59,7 @@
 #include "dce/dce_11_2_sh_mask.h"
 
 #include "dce100/dce100_resource.h"
-#include "dce112_resource.h"
-
-#define DC_LOGGER				\
+#define DC_LOGGER \
 		dc->ctx->logger
 
 #ifndef mmDP_DPHY_INTERNAL_CTRL
@@ -619,7 +617,7 @@ static const struct encoder_feature_support link_enc_feature = {
 		.flags.bits.IS_TPS4_CAPABLE = true
 };
 
-static struct link_encoder *dce112_link_encoder_create(
+struct link_encoder *dce112_link_encoder_create(
 	const struct encoder_init_data *enc_init_data)
 {
 	struct dce110_link_encoder *enc110 =
@@ -673,7 +671,7 @@ static struct input_pixel_processor *dce112_ipp_create(
 	return &ipp->base;
 }
 
-static struct output_pixel_processor *dce112_opp_create(
+struct output_pixel_processor *dce112_opp_create(
 	struct dc_context *ctx,
 	uint32_t inst)
 {
@@ -688,7 +686,7 @@ static struct output_pixel_processor *dce112_opp_create(
 	return &opp->base;
 }
 
-static struct dce_aux *dce112_aux_engine_create(
+struct dce_aux *dce112_aux_engine_create(
 	struct dc_context *ctx,
 	uint32_t inst)
 {
@@ -726,7 +724,7 @@ static const struct dce_i2c_mask i2c_masks = {
 		I2C_COMMON_MASK_SH_LIST_DCE110(_MASK)
 };
 
-static struct dce_i2c_hw *dce112_i2c_hw_create(
+struct dce_i2c_hw *dce112_i2c_hw_create(
 	struct dc_context *ctx,
 	uint32_t inst)
 {
@@ -741,7 +739,7 @@ static struct dce_i2c_hw *dce112_i2c_hw_create(
 
 	return dce_i2c_hw;
 }
-static struct clock_source *dce112_clock_source_create(
+struct clock_source *dce112_clock_source_create(
 	struct dc_context *ctx,
 	struct dc_bios *bios,
 	enum clock_source_id id,
@@ -765,7 +763,7 @@ static struct clock_source *dce112_clock_source_create(
 	return NULL;
 }
 
-static void dce112_clock_source_destroy(struct clock_source **clk_src)
+void dce112_clock_source_destroy(struct clock_source **clk_src)
 {
 	kfree(TO_DCE110_CLK_SRC(*clk_src));
 	*clk_src = NULL;
@@ -1026,7 +1024,7 @@ enum dc_status dce112_add_stream_to_ctx(
 	return result;
 }
 
-static enum dc_status dce112_validate_global(
+enum dc_status dce112_validate_global(
 		struct dc *dc,
 		struct dc_state *context)
 {
@@ -1204,7 +1202,7 @@ static void bw_calcs_data_update_from_pplib(struct dc *dc)
 	dm_pp_notify_wm_clock_changes(dc->ctx, &clk_ranges);
 }
 
-static const struct resource_caps *dce112_resource_cap(
+const struct resource_caps *dce112_resource_cap(
 	struct hw_asic_id *asic_id)
 {
 	if (ASIC_REV_IS_POLARIS11_M(asic_id->hw_internal_rev) ||

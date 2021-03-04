@@ -60,8 +60,6 @@
 #include "dce/dce_i2c.h"
 /* TODO remove this include */
 
-#include "dce60_resource.h"
-
 #ifndef mmMC_HUB_RDREQ_DMIF_LIMIT
 #include "gmc/gmc_6_0_d.h"
 #include "gmc/gmc_6_0_sh_mask.h"
@@ -521,7 +519,7 @@ static struct output_pixel_processor *dce60_opp_create(
 	return &opp->base;
 }
 
-static struct dce_aux *dce60_aux_engine_create(
+struct dce_aux *dce60_aux_engine_create(
 	struct dc_context *ctx,
 	uint32_t inst)
 {
@@ -559,7 +557,7 @@ static const struct dce_i2c_mask i2c_masks = {
 		I2C_COMMON_MASK_SH_LIST_DCE_COMMON_BASE(_MASK)
 };
 
-static struct dce_i2c_hw *dce60_i2c_hw_create(
+struct dce_i2c_hw *dce60_i2c_hw_create(
 	struct dc_context *ctx,
 	uint32_t inst)
 {
@@ -575,7 +573,7 @@ static struct dce_i2c_hw *dce60_i2c_hw_create(
 	return dce_i2c_hw;
 }
 
-static struct dce_i2c_sw *dce60_i2c_sw_create(
+struct dce_i2c_sw *dce60_i2c_sw_create(
 	struct dc_context *ctx)
 {
 	struct dce_i2c_sw *dce_i2c_sw =
@@ -709,7 +707,7 @@ static const struct encoder_feature_support link_enc_feature = {
 		.flags.bits.IS_TPS3_CAPABLE = true
 };
 
-static struct link_encoder *dce60_link_encoder_create(
+struct link_encoder *dce60_link_encoder_create(
 	const struct encoder_init_data *enc_init_data)
 {
 	struct dce110_link_encoder *enc110 =
@@ -748,7 +746,7 @@ static struct panel_cntl *dce60_panel_cntl_create(const struct panel_cntl_init_d
 	return &panel_cntl->base;
 }
 
-static struct clock_source *dce60_clock_source_create(
+struct clock_source *dce60_clock_source_create(
 	struct dc_context *ctx,
 	struct dc_bios *bios,
 	enum clock_source_id id,
@@ -772,7 +770,7 @@ static struct clock_source *dce60_clock_source_create(
 	return NULL;
 }
 
-static void dce60_clock_source_destroy(struct clock_source **clk_src)
+void dce60_clock_source_destroy(struct clock_source **clk_src)
 {
 	kfree(TO_DCE110_CLK_SRC(*clk_src));
 	*clk_src = NULL;
@@ -862,7 +860,7 @@ static void dce60_resource_destruct(struct dce110_resource_pool *pool)
 	}
 }
 
-static bool dce60_validate_bandwidth(
+bool dce60_validate_bandwidth(
 	struct dc *dc,
 	struct dc_state *context,
 	bool fast_validate)
@@ -907,7 +905,7 @@ static bool dce60_validate_surface_sets(
 	return true;
 }
 
-static enum dc_status dce60_validate_global(
+enum dc_status dce60_validate_global(
 		struct dc *dc,
 		struct dc_state *context)
 {

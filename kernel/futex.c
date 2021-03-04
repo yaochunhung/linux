@@ -3012,7 +3012,7 @@ retry:
 		 * Success, we're done! No tricky corner cases.
 		 */
 		if (!ret)
-			return ret;
+			goto out_putkey;
 		/*
 		 * The atomic access to the futex value generated a
 		 * pagefault, so retry the user-access and the wakeup:
@@ -3029,7 +3029,7 @@ retry:
 		 * wake_futex_pi has detected invalid state. Tell user
 		 * space.
 		 */
-		return ret;
+		goto out_putkey;
 	}
 
 	/*
@@ -3050,7 +3050,7 @@ retry:
 
 		default:
 			WARN_ON_ONCE(1);
-			return ret;
+			goto out_putkey;
 		}
 	}
 
@@ -3061,6 +3061,7 @@ retry:
 
 out_unlock:
 	spin_unlock(&hb->lock);
+out_putkey:
 	return ret;
 
 pi_retry:
@@ -3762,8 +3763,8 @@ long do_futex(u32 __user *uaddr, int op, u32 val, ktime_t *timeout,
 
 
 SYSCALL_DEFINE6(futex, u32 __user *, uaddr, int, op, u32, val,
-		const struct __kernel_timespec __user *, utime,
-		u32 __user *, uaddr2, u32, val3)
+		struct __kernel_timespec __user *, utime, u32 __user *, uaddr2,
+		u32, val3)
 {
 	struct timespec64 ts;
 	ktime_t t, *tp = NULL;
@@ -3958,7 +3959,7 @@ err_unlock:
 
 #ifdef CONFIG_COMPAT_32BIT_TIME
 SYSCALL_DEFINE6(futex_time32, u32 __user *, uaddr, int, op, u32, val,
-		const struct old_timespec32 __user *, utime, u32 __user *, uaddr2,
+		struct old_timespec32 __user *, utime, u32 __user *, uaddr2,
 		u32, val3)
 {
 	struct timespec64 ts;

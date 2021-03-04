@@ -14,7 +14,6 @@
 
 #include <asm/asm-prototypes.h>
 #include <asm/firmware.h>
-#include <asm/interrupt.h>
 #include <asm/machdep.h>
 #include <asm/opal.h>
 #include <asm/cputhreads.h>

@@ -66,10 +66,9 @@ SECTIONS
 		KPROBES_TEXT
 		IRQENTRY_TEXT
 		SOFTIRQENTRY_TEXT
+		*(.text.*)
 		*(.fixup)
 		*(.gnu.warning)
-		. = ALIGN(16);
-		*(.got)	/* Global offset table */
 	} :text = 0
 	_etext = .;	/* End of text section */
 
@@ -91,7 +90,6 @@ SECTIONS
 
 		INIT_TASK_DATA(THREAD_SIZE)
 		NOSAVE_DATA
-		PAGE_ALIGNED_DATA(PAGE_SIZE)
 		CACHELINE_ALIGNED_DATA(1 << CONFIG_MIPS_L1_CACHE_SHIFT)
 		READ_MOSTLY_DATA(1 << CONFIG_MIPS_L1_CACHE_SHIFT)
 		DATA_DATA
@@ -138,11 +136,6 @@ SECTIONS
 #ifdef CONFIG_SMP
 	PERCPU_SECTION(1 << CONFIG_MIPS_L1_CACHE_SHIFT)
 #endif
-
-	.rel.dyn : ALIGN(8) {
-		*(.rel)
-		*(.rel*)
-	}
 
 #ifdef CONFIG_MIPS_ELF_APPENDED_DTB
 	.appended_dtb : AT(ADDR(.appended_dtb) - LOAD_OFFSET) {
@@ -227,9 +220,9 @@ SECTIONS
 		/* ABI crap starts here */
 		*(.MIPS.abiflags)
 		*(.MIPS.options)
-		*(.gnu.attributes)
 		*(.options)
 		*(.pdr)
 		*(.reginfo)
+		*(.eh_frame)
 	}
 }

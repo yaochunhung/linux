@@ -1187,10 +1187,8 @@ static int debuginfo__find_probe_location(struct debuginfo *dbg,
 	while (!dwarf_nextcu(dbg->dbg, off, &noff, &cuhl, NULL, NULL, NULL)) {
 		/* Get the DIE(Debugging Information Entry) of this CU */
 		diep = dwarf_offdie(dbg->dbg, off + cuhl, &pf->cu_die);
-		if (!diep) {
-			off = noff;
+		if (!diep)
 			continue;
-		}
 
 		/* Check if target file is included. */
 		if (pp->file)
@@ -1951,10 +1949,8 @@ int debuginfo__find_line_range(struct debuginfo *dbg, struct line_range *lr)
 
 		/* Get the DIE(Debugging Information Entry) of this CU */
 		diep = dwarf_offdie(dbg->dbg, off + cuhl, &lf.cu_die);
-		if (!diep) {
-			off = noff;
+		if (!diep)
 			continue;
-		}
 
 		/* Check if target file is included. */
 		if (lr->file)

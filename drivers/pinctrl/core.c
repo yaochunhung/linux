@@ -2117,6 +2117,7 @@ struct pinctrl_dev *pinctrl_register(struct pinctrl_desc *pctldesc,
 		return ERR_PTR(error);
 
 	return pctldev;
+
 }
 EXPORT_SYMBOL_GPL(pinctrl_register);
 

@@ -34,7 +34,6 @@
 #include <linux/uaccess.h>
 
 #include <asm/firmware.h>
-#include <asm/interrupt.h>
 #include <asm/page.h>
 #include <asm/mmu.h>
 #include <asm/mmu_context.h>
@@ -378,16 +377,18 @@ static void sanity_check_fault(bool is_write, bool is_user,
 
 /*
  * For 600- and 800-family processors, the error_code parameter is DSISR
- * for a data fault, SRR1 for an instruction fault.
- * For 400-family processors the error_code parameter is ESR for a data fault,
- * 0 for an instruction fault.
- * For 64-bit processors, the error_code parameter is DSISR for a data access
- * fault, SRR1 & 0x08000000 for an instruction access fault.
+ * for a data fault, SRR1 for an instruction fault. For 400-family processors
+ * the error_code parameter is ESR for a data fault, 0 for an instruction
+ * fault.
+ * For 64-bit processors, the error_code parameter is
+ *  - DSISR for a non-SLB data access fault,
+ *  - SRR1 & 0x08000000 for a non-SLB instruction access fault
+ *  - 0 any SLB fault.
  *
  * The return value is 0 if the fault was handled, or the signal
  * number if this is a kernel fault that can't be handled here.
  */
-static int ___do_page_fault(struct pt_regs *regs, unsigned long address,
+static int __do_page_fault(struct pt_regs *regs, unsigned long address,
 			   unsigned long error_code)
 {
 	struct vm_area_struct * vma;
@@ -434,7 +435,9 @@ static int ___do_page_fault(struct pt_regs *regs, unsigned long address,
 		return bad_area_nosemaphore(regs, address);
 	}
 
-	interrupt_cond_local_irq_enable(regs);
+	/* We restore the interrupt state now */
+	if (!arch_irq_disabled_regs(regs))
+		local_irq_enable();
 
 	perf_sw_event(PERF_COUNT_SW_PAGE_FAULTS, 1, regs, address);
 
@@ -537,51 +540,34 @@ retry:
 
 	return 0;
 }
-NOKPROBE_SYMBOL(___do_page_fault);
-
-static long __do_page_fault(struct pt_regs *regs)
-{
-	const struct exception_table_entry *entry;
-	long err;
-
-	err = ___do_page_fault(regs, regs->dar, regs->dsisr);
-	if (likely(!err))
-		return err;
-
-	entry = search_exception_tables(regs->nip);
-	if (likely(entry)) {
-		instruction_pointer_set(regs, extable_fixup(entry));
-		return 0;
-	} else if (IS_ENABLED(CONFIG_PPC_BOOK3S_64)) {
-		__bad_page_fault(regs, err);
-		return 0;
-	} else {
-		/* 32 and 64e handle the bad page fault in asm */
-		return err;
-	}
-}
 NOKPROBE_SYMBOL(__do_page_fault);
 
-DEFINE_INTERRUPT_HANDLER_RET(do_page_fault)
+int do_page_fault(struct pt_regs *regs, unsigned long address,
+		  unsigned long error_code)
 {
-	return __do_page_fault(regs);
-}
+	const struct exception_table_entry *entry;
+	enum ctx_state prev_state = exception_enter();
+	int rc = __do_page_fault(regs, address, error_code);
+	exception_exit(prev_state);
+	if (likely(!rc))
+		return 0;
 
-#ifdef CONFIG_PPC_BOOK3S_64
-/* Same as do_page_fault but interrupt entry has already run in do_hash_fault */
-long hash__do_page_fault(struct pt_regs *regs)
-{
-	return __do_page_fault(regs);
+	entry = search_exception_tables(regs->nip);
+	if (unlikely(!entry))
+		return rc;
+
+	instruction_pointer_set(regs, extable_fixup(entry));
+
+	return 0;
 }
-NOKPROBE_SYMBOL(hash__do_page_fault);
-#endif
+NOKPROBE_SYMBOL(do_page_fault);
 
 /*
  * bad_page_fault is called when we have a bad access from the kernel.
  * It is called from the DSI and ISI handlers in head.S and from some
  * of the procedures in traps.c.
  */
-void __bad_page_fault(struct pt_regs *regs, int sig)
+void __bad_page_fault(struct pt_regs *regs, unsigned long address, int sig)
 {
 	int is_write = page_fault_is_write(regs->dsisr);
 
@@ -619,7 +605,7 @@ void __bad_page_fault(struct pt_regs *regs, int sig)
 	die("Kernel access of bad area", regs, sig);
 }
 
-void bad_page_fault(struct pt_regs *regs, int sig)
+void bad_page_fault(struct pt_regs *regs, unsigned long address, int sig)
 {
 	const struct exception_table_entry *entry;
 
@@ -628,12 +614,5 @@ void bad_page_fault(struct pt_regs *regs, int sig)
 	if (entry)
 		instruction_pointer_set(regs, extable_fixup(entry));
 	else
-		__bad_page_fault(regs, sig);
+		__bad_page_fault(regs, address, sig);
 }
-
-#ifdef CONFIG_PPC_BOOK3S_64
-DEFINE_INTERRUPT_HANDLER(do_bad_page_fault_segv)
-{
-	bad_page_fault(regs, SIGSEGV);
-}
-#endif

@@ -318,10 +318,8 @@ static int ebu_dma_start(struct ebu_nand_controller *ebu_host, u32 dir,
 	}
 
 	tx = dmaengine_prep_slave_single(chan, buf_dma, len, dir, flags);
-	if (!tx) {
-		ret = -ENXIO;
-		goto err_unmap;
-	}
+	if (!tx)
+		return -ENXIO;
 
 	tx->callback = callback;
 	tx->callback_param = ebu_host;

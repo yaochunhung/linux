@@ -131,9 +131,6 @@ static const unsigned char max_vals[] = {
 
 static const int NR_TYPES = ARRAY_SIZE(max_vals);
 
-static void kbd_bh(struct tasklet_struct *unused);
-static DECLARE_TASKLET_DISABLED(keyboard_tasklet, kbd_bh);
-
 static struct input_handler kbd_handler;
 static DEFINE_SPINLOCK(kbd_event_lock);
 static DEFINE_SPINLOCK(led_lock);
@@ -375,12 +372,6 @@ static void to_utf8(struct vc_data *vc, uint c)
 	}
 }
 
-/* FIXME: review locking for vt.c callers */
-static void set_leds(void)
-{
-	tasklet_schedule(&keyboard_tasklet);
-}
-
 /*
  * Called after returning from RAW mode or when changing consoles - recompute
  * shift_down[] and shift_state from key_down[] maybe called when keymap is
@@ -410,12 +401,9 @@ static void do_compute_shiftstate(void)
 }
 
 /* We still have to export this method to vt.c */
-void vt_set_leds_compute_shiftstate(void)
+void compute_shiftstate(void)
 {
 	unsigned long flags;
-
-	set_leds();
-
 	spin_lock_irqsave(&kbd_event_lock, flags);
 	do_compute_shiftstate();
 	spin_unlock_irqrestore(&kbd_event_lock, flags);
@@ -1245,7 +1233,7 @@ void vt_kbd_con_stop(int console)
  * handle the scenario when keyboard handler is not registered yet
  * but we already getting updates from the VT to update led state.
  */
-static void kbd_bh(struct tasklet_struct *unused)
+static void kbd_bh(unsigned long dummy)
 {
 	unsigned int leds;
 	unsigned long flags;
@@ -1260,6 +1248,8 @@ static void kbd_bh(struct tasklet_struct *unused)
 		ledstate = leds;
 	}
 }
+
+DECLARE_TASKLET_DISABLED_OLD(keyboard_tasklet, kbd_bh);
 
 #if defined(CONFIG_X86) || defined(CONFIG_IA64) || defined(CONFIG_ALPHA) ||\
     defined(CONFIG_MIPS) || defined(CONFIG_PPC) || defined(CONFIG_SPARC) ||\

@@ -340,14 +340,13 @@ static void psb_gtt_alloc(struct drm_device *dev)
 void psb_gtt_takedown(struct drm_device *dev)
 {
 	struct drm_psb_private *dev_priv = dev->dev_private;
-	struct pci_dev *pdev = to_pci_dev(dev->dev);
 
 	if (dev_priv->gtt_map) {
 		iounmap(dev_priv->gtt_map);
 		dev_priv->gtt_map = NULL;
 	}
 	if (dev_priv->gtt_initialized) {
-		pci_write_config_word(pdev, PSB_GMCH_CTRL,
+		pci_write_config_word(dev->pdev, PSB_GMCH_CTRL,
 				      dev_priv->gmch_ctrl);
 		PSB_WVDC32(dev_priv->pge_ctl, PSB_PGETBL_CTL);
 		(void) PSB_RVDC32(PSB_PGETBL_CTL);
@@ -359,7 +358,6 @@ void psb_gtt_takedown(struct drm_device *dev)
 int psb_gtt_init(struct drm_device *dev, int resume)
 {
 	struct drm_psb_private *dev_priv = dev->dev_private;
-	struct pci_dev *pdev = to_pci_dev(dev->dev);
 	unsigned gtt_pages;
 	unsigned long stolen_size, vram_stolen_size;
 	unsigned i, num_pages;
@@ -378,8 +376,8 @@ int psb_gtt_init(struct drm_device *dev, int resume)
 	pg = &dev_priv->gtt;
 
 	/* Enable the GTT */
-	pci_read_config_word(pdev, PSB_GMCH_CTRL, &dev_priv->gmch_ctrl);
-	pci_write_config_word(pdev, PSB_GMCH_CTRL,
+	pci_read_config_word(dev->pdev, PSB_GMCH_CTRL, &dev_priv->gmch_ctrl);
+	pci_write_config_word(dev->pdev, PSB_GMCH_CTRL,
 			      dev_priv->gmch_ctrl | _PSB_GMCH_ENABLED);
 
 	dev_priv->pge_ctl = PSB_RVDC32(PSB_PGETBL_CTL);
@@ -399,8 +397,8 @@ int psb_gtt_init(struct drm_device *dev, int resume)
 	 */
 	pg->mmu_gatt_start = 0xE0000000;
 
-	pg->gtt_start = pci_resource_start(pdev, PSB_GTT_RESOURCE);
-	gtt_pages = pci_resource_len(pdev, PSB_GTT_RESOURCE)
+	pg->gtt_start = pci_resource_start(dev->pdev, PSB_GTT_RESOURCE);
+	gtt_pages = pci_resource_len(dev->pdev, PSB_GTT_RESOURCE)
 								>> PAGE_SHIFT;
 	/* CDV doesn't report this. In which case the system has 64 gtt pages */
 	if (pg->gtt_start == 0 || gtt_pages == 0) {
@@ -409,10 +407,10 @@ int psb_gtt_init(struct drm_device *dev, int resume)
 		pg->gtt_start = dev_priv->pge_ctl;
 	}
 
-	pg->gatt_start = pci_resource_start(pdev, PSB_GATT_RESOURCE);
-	pg->gatt_pages = pci_resource_len(pdev, PSB_GATT_RESOURCE)
+	pg->gatt_start = pci_resource_start(dev->pdev, PSB_GATT_RESOURCE);
+	pg->gatt_pages = pci_resource_len(dev->pdev, PSB_GATT_RESOURCE)
 								>> PAGE_SHIFT;
-	dev_priv->gtt_mem = &pdev->resource[PSB_GATT_RESOURCE];
+	dev_priv->gtt_mem = &dev->pdev->resource[PSB_GATT_RESOURCE];
 
 	if (pg->gatt_pages == 0 || pg->gatt_start == 0) {
 		static struct resource fudge;	/* Preferably peppermint */
@@ -433,7 +431,7 @@ int psb_gtt_init(struct drm_device *dev, int resume)
 		dev_priv->gtt_mem = &fudge;
 	}
 
-	pci_read_config_dword(pdev, PSB_BSM, &dev_priv->stolen_base);
+	pci_read_config_dword(dev->pdev, PSB_BSM, &dev_priv->stolen_base);
 	vram_stolen_size = pg->gtt_phys_start - dev_priv->stolen_base
 								- PAGE_SIZE;
 

@@ -1295,9 +1295,12 @@ qca8k_port_fdb_dump(struct dsa_switch *ds, int port,
 
 static int
 qca8k_port_vlan_filtering(struct dsa_switch *ds, int port, bool vlan_filtering,
-			  struct netlink_ext_ack *extack)
+			  struct switchdev_trans *trans)
 {
 	struct qca8k_priv *priv = ds->priv;
+
+	if (switchdev_trans_ph_prepare(trans))
+		return 0;
 
 	if (vlan_filtering) {
 		qca8k_rmw(priv, QCA8K_PORT_LOOKUP_CTRL(port),
@@ -1313,32 +1316,38 @@ qca8k_port_vlan_filtering(struct dsa_switch *ds, int port, bool vlan_filtering,
 }
 
 static int
+qca8k_port_vlan_prepare(struct dsa_switch *ds, int port,
+			const struct switchdev_obj_port_vlan *vlan)
+{
+	return 0;
+}
+
+static void
 qca8k_port_vlan_add(struct dsa_switch *ds, int port,
-		    const struct switchdev_obj_port_vlan *vlan,
-		    struct netlink_ext_ack *extack)
+		    const struct switchdev_obj_port_vlan *vlan)
 {
 	bool untagged = vlan->flags & BRIDGE_VLAN_INFO_UNTAGGED;
 	bool pvid = vlan->flags & BRIDGE_VLAN_INFO_PVID;
 	struct qca8k_priv *priv = ds->priv;
 	int ret = 0;
+	u16 vid;
 
-	ret = qca8k_vlan_add(priv, port, vlan->vid, untagged);
-	if (ret) {
+	for (vid = vlan->vid_begin; vid <= vlan->vid_end && !ret; ++vid)
+		ret = qca8k_vlan_add(priv, port, vid, untagged);
+
+	if (ret)
 		dev_err(priv->dev, "Failed to add VLAN to port %d (%d)", port, ret);
-		return ret;
-	}
 
 	if (pvid) {
 		int shift = 16 * (port % 2);
 
 		qca8k_rmw(priv, QCA8K_EGRESS_VLAN(port),
-			  0xfff << shift, vlan->vid << shift);
+			  0xfff << shift,
+			  vlan->vid_end << shift);
 		qca8k_write(priv, QCA8K_REG_PORT_VLAN_CTRL0(port),
-			    QCA8K_PORT_VLAN_CVID(vlan->vid) |
-			    QCA8K_PORT_VLAN_SVID(vlan->vid));
+			    QCA8K_PORT_VLAN_CVID(vlan->vid_end) |
+			    QCA8K_PORT_VLAN_SVID(vlan->vid_end));
 	}
-
-	return 0;
 }
 
 static int
@@ -1347,8 +1356,11 @@ qca8k_port_vlan_del(struct dsa_switch *ds, int port,
 {
 	struct qca8k_priv *priv = ds->priv;
 	int ret = 0;
+	u16 vid;
 
-	ret = qca8k_vlan_del(priv, port, vlan->vid);
+	for (vid = vlan->vid_begin; vid <= vlan->vid_end && !ret; ++vid)
+		ret = qca8k_vlan_del(priv, port, vid);
+
 	if (ret)
 		dev_err(priv->dev, "Failed to delete VLAN from port %d (%d)", port, ret);
 
@@ -1381,6 +1393,7 @@ static const struct dsa_switch_ops qca8k_switch_ops = {
 	.port_fdb_del		= qca8k_port_fdb_del,
 	.port_fdb_dump		= qca8k_port_fdb_dump,
 	.port_vlan_filtering	= qca8k_port_vlan_filtering,
+	.port_vlan_prepare	= qca8k_port_vlan_prepare,
 	.port_vlan_add		= qca8k_port_vlan_add,
 	.port_vlan_del		= qca8k_port_vlan_del,
 	.phylink_validate	= qca8k_phylink_validate,
@@ -1433,6 +1446,7 @@ qca8k_sw_probe(struct mdio_device *mdiodev)
 
 	priv->ds->dev = &mdiodev->dev;
 	priv->ds->num_ports = QCA8K_NUM_PORTS;
+	priv->ds->configure_vlan_while_not_filtering = true;
 	priv->ds->priv = priv;
 	priv->ops = qca8k_switch_ops;
 	priv->ds->ops = &priv->ops;

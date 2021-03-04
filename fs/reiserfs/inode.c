@@ -3282,14 +3282,13 @@ static ssize_t reiserfs_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 	return ret;
 }
 
-int reiserfs_setattr(struct user_namespace *mnt_userns, struct dentry *dentry,
-		     struct iattr *attr)
+int reiserfs_setattr(struct dentry *dentry, struct iattr *attr)
 {
 	struct inode *inode = d_inode(dentry);
 	unsigned int ia_valid;
 	int error;
 
-	error = setattr_prepare(&init_user_ns, dentry, attr);
+	error = setattr_prepare(dentry, attr);
 	if (error)
 		return error;
 
@@ -3414,7 +3413,7 @@ int reiserfs_setattr(struct user_namespace *mnt_userns, struct dentry *dentry,
 	}
 
 	if (!error) {
-		setattr_copy(&init_user_ns, inode, attr);
+		setattr_copy(inode, attr);
 		mark_inode_dirty(inode);
 	}
 

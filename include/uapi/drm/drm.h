@@ -1,10 +1,11 @@
-/*
+/**
+ * \file drm.h
  * Header for the Direct Rendering Manager
  *
- * Author: Rickard E. (Rik) Faith <faith@valinux.com>
+ * \author Rickard E. (Rik) Faith <faith@valinux.com>
  *
- * Acknowledgments:
- * Dec 1999, Richard Henderson <rth@twiddle.net>, move to generic cmpxchg.
+ * \par Acknowledgments:
+ * Dec 1999, Richard Henderson <rth@twiddle.net>, move to generic \c cmpxchg.
  */
 
 /*
@@ -84,7 +85,7 @@ typedef unsigned int drm_context_t;
 typedef unsigned int drm_drawable_t;
 typedef unsigned int drm_magic_t;
 
-/*
+/**
  * Cliprect.
  *
  * \warning: If you change this structure, make sure you change
@@ -100,7 +101,7 @@ struct drm_clip_rect {
 	unsigned short y2;
 };
 
-/*
+/**
  * Drawable information.
  */
 struct drm_drawable_info {
@@ -108,7 +109,7 @@ struct drm_drawable_info {
 	struct drm_clip_rect *rects;
 };
 
-/*
+/**
  * Texture region,
  */
 struct drm_tex_region {
@@ -119,7 +120,7 @@ struct drm_tex_region {
 	unsigned int age;
 };
 
-/*
+/**
  * Hardware lock.
  *
  * The lock structure is a simple cache-line aligned integer.  To avoid
@@ -131,7 +132,7 @@ struct drm_hw_lock {
 	char padding[60];			/**< Pad to cache line */
 };
 
-/*
+/**
  * DRM_IOCTL_VERSION ioctl argument type.
  *
  * \sa drmGetVersion().
@@ -148,7 +149,7 @@ struct drm_version {
 	char __user *desc;	  /**< User-space buffer to hold desc */
 };
 
-/*
+/**
  * DRM_IOCTL_GET_UNIQUE ioctl argument type.
  *
  * \sa drmGetBusid() and drmSetBusId().
@@ -167,7 +168,7 @@ struct drm_block {
 	int unused;
 };
 
-/*
+/**
  * DRM_IOCTL_CONTROL ioctl argument type.
  *
  * \sa drmCtlInstHandler() and drmCtlUninstHandler().
@@ -182,7 +183,7 @@ struct drm_control {
 	int irq;
 };
 
-/*
+/**
  * Type of memory to map.
  */
 enum drm_map_type {
@@ -194,7 +195,7 @@ enum drm_map_type {
 	_DRM_CONSISTENT = 5	  /**< Consistent memory for PCI DMA */
 };
 
-/*
+/**
  * Memory mapping flags.
  */
 enum drm_map_flags {
@@ -213,7 +214,7 @@ struct drm_ctx_priv_map {
 	void *handle;		 /**< Handle of map */
 };
 
-/*
+/**
  * DRM_IOCTL_GET_MAP, DRM_IOCTL_ADD_MAP and DRM_IOCTL_RM_MAP ioctls
  * argument type.
  *
@@ -230,7 +231,7 @@ struct drm_map {
 	/*   Private data */
 };
 
-/*
+/**
  * DRM_IOCTL_GET_CLIENT ioctl argument type.
  */
 struct drm_client {
@@ -262,7 +263,7 @@ enum drm_stat_type {
 	    /* Add to the *END* of the list */
 };
 
-/*
+/**
  * DRM_IOCTL_GET_STATS ioctl argument type.
  */
 struct drm_stats {
@@ -273,7 +274,7 @@ struct drm_stats {
 	} data[15];
 };
 
-/*
+/**
  * Hardware locking flags.
  */
 enum drm_lock_flags {
@@ -288,7 +289,7 @@ enum drm_lock_flags {
 	_DRM_HALT_CUR_QUEUES = 0x20  /**< Halt all current queues */
 };
 
-/*
+/**
  * DRM_IOCTL_LOCK, DRM_IOCTL_UNLOCK and DRM_IOCTL_FINISH ioctl argument type.
  *
  * \sa drmGetLock() and drmUnlock().
@@ -298,7 +299,7 @@ struct drm_lock {
 	enum drm_lock_flags flags;
 };
 
-/*
+/**
  * DMA flags
  *
  * \warning
@@ -327,7 +328,7 @@ enum drm_dma_flags {
 	_DRM_DMA_LARGER_OK = 0x40     /**< Larger-than-requested buffers OK */
 };
 
-/*
+/**
  * DRM_IOCTL_ADD_BUFS and DRM_IOCTL_MARK_BUFS ioctl argument type.
  *
  * \sa drmAddBufs().
@@ -350,7 +351,7 @@ struct drm_buf_desc {
 				  */
 };
 
-/*
+/**
  * DRM_IOCTL_INFO_BUFS ioctl argument type.
  */
 struct drm_buf_info {
@@ -358,7 +359,7 @@ struct drm_buf_info {
 	struct drm_buf_desc __user *list;
 };
 
-/*
+/**
  * DRM_IOCTL_FREE_BUFS ioctl argument type.
  */
 struct drm_buf_free {
@@ -366,7 +367,7 @@ struct drm_buf_free {
 	int __user *list;
 };
 
-/*
+/**
  * Buffer information
  *
  * \sa drm_buf_map.
@@ -378,7 +379,7 @@ struct drm_buf_pub {
 	void __user *address;	       /**< Address of buffer */
 };
 
-/*
+/**
  * DRM_IOCTL_MAP_BUFS ioctl argument type.
  */
 struct drm_buf_map {
@@ -391,7 +392,7 @@ struct drm_buf_map {
 	struct drm_buf_pub __user *list;	/**< Buffer information */
 };
 
-/*
+/**
  * DRM_IOCTL_DMA ioctl argument type.
  *
  * Indices here refer to the offset into the buffer list in drm_buf_get.
@@ -416,7 +417,7 @@ enum drm_ctx_flags {
 	_DRM_CONTEXT_2DONLY = 0x02
 };
 
-/*
+/**
  * DRM_IOCTL_ADD_CTX ioctl argument type.
  *
  * \sa drmCreateContext() and drmDestroyContext().
@@ -426,7 +427,7 @@ struct drm_ctx {
 	enum drm_ctx_flags flags;
 };
 
-/*
+/**
  * DRM_IOCTL_RES_CTX ioctl argument type.
  */
 struct drm_ctx_res {
@@ -434,14 +435,14 @@ struct drm_ctx_res {
 	struct drm_ctx __user *contexts;
 };
 
-/*
+/**
  * DRM_IOCTL_ADD_DRAW and DRM_IOCTL_RM_DRAW ioctl argument type.
  */
 struct drm_draw {
 	drm_drawable_t handle;
 };
 
-/*
+/**
  * DRM_IOCTL_UPDATE_DRAW ioctl argument type.
  */
 typedef enum {
@@ -455,14 +456,14 @@ struct drm_update_draw {
 	unsigned long long data;
 };
 
-/*
+/**
  * DRM_IOCTL_GET_MAGIC and DRM_IOCTL_AUTH_MAGIC ioctl argument type.
  */
 struct drm_auth {
 	drm_magic_t magic;
 };
 
-/*
+/**
  * DRM_IOCTL_IRQ_BUSID ioctl argument type.
  *
  * \sa drmGetInterruptFromBusID().
@@ -504,7 +505,7 @@ struct drm_wait_vblank_reply {
 	long tval_usec;
 };
 
-/*
+/**
  * DRM_IOCTL_WAIT_VBLANK ioctl argument type.
  *
  * \sa drmWaitVBlank().
@@ -517,7 +518,7 @@ union drm_wait_vblank {
 #define _DRM_PRE_MODESET 1
 #define _DRM_POST_MODESET 2
 
-/*
+/**
  * DRM_IOCTL_MODESET_CTL ioctl argument type
  *
  * \sa drmModesetCtl().
@@ -527,7 +528,7 @@ struct drm_modeset_ctl {
 	__u32 cmd;
 };
 
-/*
+/**
  * DRM_IOCTL_AGP_ENABLE ioctl argument type.
  *
  * \sa drmAgpEnable().
@@ -536,7 +537,7 @@ struct drm_agp_mode {
 	unsigned long mode;	/**< AGP mode */
 };
 
-/*
+/**
  * DRM_IOCTL_AGP_ALLOC and DRM_IOCTL_AGP_FREE ioctls argument type.
  *
  * \sa drmAgpAlloc() and drmAgpFree().
@@ -548,7 +549,7 @@ struct drm_agp_buffer {
 	unsigned long physical;	/**< Physical used by i810 */
 };
 
-/*
+/**
  * DRM_IOCTL_AGP_BIND and DRM_IOCTL_AGP_UNBIND ioctls argument type.
  *
  * \sa drmAgpBind() and drmAgpUnbind().
@@ -558,7 +559,7 @@ struct drm_agp_binding {
 	unsigned long offset;	/**< In bytes -- will round to page boundary */
 };
 
-/*
+/**
  * DRM_IOCTL_AGP_INFO ioctl argument type.
  *
  * \sa drmAgpVersionMajor(), drmAgpVersionMinor(), drmAgpGetMode(),
@@ -579,7 +580,7 @@ struct drm_agp_info {
 	unsigned short id_device;
 };
 
-/*
+/**
  * DRM_IOCTL_SG_ALLOC ioctl argument type.
  */
 struct drm_scatter_gather {
@@ -587,7 +588,7 @@ struct drm_scatter_gather {
 	unsigned long handle;	/**< Used for mapping / unmapping */
 };
 
-/*
+/**
  * DRM_IOCTL_SET_VERSION ioctl argument type.
  */
 struct drm_set_version {
@@ -597,14 +598,14 @@ struct drm_set_version {
 	int drm_dd_minor;
 };
 
-/* DRM_IOCTL_GEM_CLOSE ioctl argument type */
+/** DRM_IOCTL_GEM_CLOSE ioctl argument type */
 struct drm_gem_close {
 	/** Handle of the object to be closed. */
 	__u32 handle;
 	__u32 pad;
 };
 
-/* DRM_IOCTL_GEM_FLINK ioctl argument type */
+/** DRM_IOCTL_GEM_FLINK ioctl argument type */
 struct drm_gem_flink {
 	/** Handle for the object being named */
 	__u32 handle;
@@ -613,7 +614,7 @@ struct drm_gem_flink {
 	__u32 name;
 };
 
-/* DRM_IOCTL_GEM_OPEN ioctl argument type */
+/** DRM_IOCTL_GEM_OPEN ioctl argument type */
 struct drm_gem_open {
 	/** Name of object being opened */
 	__u32 name;
@@ -651,7 +652,7 @@ struct drm_gem_open {
 #define DRM_CAP_SYNCOBJ		0x13
 #define DRM_CAP_SYNCOBJ_TIMELINE	0x14
 
-/* DRM_IOCTL_GET_CAP ioctl argument type */
+/** DRM_IOCTL_GET_CAP ioctl argument type */
 struct drm_get_cap {
 	__u64 capability;
 	__u64 value;
@@ -677,9 +678,7 @@ struct drm_get_cap {
 /**
  * DRM_CLIENT_CAP_ATOMIC
  *
- * If set to 1, the DRM core will expose atomic properties to userspace. This
- * implicitly enables &DRM_CLIENT_CAP_UNIVERSAL_PLANES and
- * &DRM_CLIENT_CAP_ASPECT_RATIO.
+ * If set to 1, the DRM core will expose atomic properties to userspace
  */
 #define DRM_CLIENT_CAP_ATOMIC	3
 
@@ -699,7 +698,7 @@ struct drm_get_cap {
  */
 #define DRM_CLIENT_CAP_WRITEBACK_CONNECTORS	5
 
-/* DRM_IOCTL_SET_CLIENT_CAP ioctl argument type */
+/** DRM_IOCTL_SET_CLIENT_CAP ioctl argument type */
 struct drm_set_client_cap {
 	__u64 capability;
 	__u64 value;
@@ -951,7 +950,7 @@ extern "C" {
 
 #define DRM_IOCTL_MODE_GETFB2		DRM_IOWR(0xCE, struct drm_mode_fb_cmd2)
 
-/*
+/**
  * Device specific ioctls should only be in their respective headers
  * The device specific ioctl range is from 0x40 to 0x9f.
  * Generic IOCTLS restart at 0xA0.
@@ -962,7 +961,7 @@ extern "C" {
 #define DRM_COMMAND_BASE                0x40
 #define DRM_COMMAND_END			0xA0
 
-/*
+/**
  * Header for events written back to userspace on the drm fd.  The
  * type defines the type of event, the length specifies the total
  * length of the event (including the header), and user_data is

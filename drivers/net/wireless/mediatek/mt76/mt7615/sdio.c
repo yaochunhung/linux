@@ -17,7 +17,6 @@
 #include "mt7615.h"
 #include "sdio.h"
 #include "mac.h"
-#include "mcu.h"
 
 static const struct sdio_device_id mt7663s_table[] = {
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_MEDIATEK, 0x7603) },
@@ -228,7 +227,11 @@ static void mt7663s_init_work(struct work_struct *work)
 	if (mt7663s_mcu_init(dev))
 		return;
 
-	mt7615_init_work(dev);
+	mt7615_mcu_set_eeprom(dev);
+	mt7615_mac_init(dev);
+	mt7615_phy_init(dev);
+	mt7615_mcu_del_wtbl_all(dev);
+	mt7615_check_offload_capability(dev);
 }
 
 static int mt7663s_hw_init(struct mt7615_dev *dev, struct sdio_func *func)
@@ -414,7 +417,7 @@ static int mt7663s_suspend(struct device *dev)
 	    mt7615_firmware_offload(mdev)) {
 		int err;
 
-		err = mt76_connac_mcu_set_hif_suspend(&mdev->mt76, true);
+		err = mt7615_mcu_set_hif_suspend(mdev, true);
 		if (err < 0)
 			return err;
 	}
@@ -453,7 +456,7 @@ static int mt7663s_resume(struct device *dev)
 
 	if (!test_bit(MT76_STATE_SUSPEND, &mdev->mphy.state) &&
 	    mt7615_firmware_offload(mdev))
-		err = mt76_connac_mcu_set_hif_suspend(&mdev->mt76, false);
+		err = mt7615_mcu_set_hif_suspend(mdev, false);
 
 	return err;
 }

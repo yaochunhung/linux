@@ -18,6 +18,7 @@
 #include <linux/slab.h>
 #include <linux/sysfs.h>
 #include <linux/types.h>
+#include <linux/version.h>
 #include <linux/watchdog.h>
 
 #include <asm/unaligned.h>

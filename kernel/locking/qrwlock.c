@@ -12,6 +12,7 @@
 #include <linux/percpu.h>
 #include <linux/hardirq.h>
 #include <linux/spinlock.h>
+#include <asm/qrwlock.h>
 
 /**
  * queued_read_lock_slowpath - acquire read lock of a queue rwlock

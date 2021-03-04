@@ -74,6 +74,8 @@ MODULE_DEVICE_TABLE(of, intel_eth_plat_match);
 
 static int intel_eth_plat_probe(struct platform_device *pdev)
 {
+	struct net_device *ndev = platform_get_drvdata(pdev);
+	struct stmmac_priv *priv = netdev_priv(ndev);
 	struct plat_stmmacenet_data *plat_dat;
 	struct stmmac_resources stmmac_res;
 	const struct of_device_id *match;
@@ -81,6 +83,7 @@ static int intel_eth_plat_probe(struct platform_device *pdev)
 	unsigned long rate;
 	int ret;
 
+	plat_dat = priv->plat;
 	ret = stmmac_get_platform_resources(pdev, &stmmac_res);
 	if (ret)
 		return ret;

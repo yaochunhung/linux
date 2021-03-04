@@ -11,7 +11,6 @@
 #include "intel_breadcrumbs.h"
 #include "intel_gt.h"
 #include "intel_gt_irq.h"
-#include "intel_lrc_reg.h"
 #include "intel_uncore.h"
 #include "intel_rps.h"
 

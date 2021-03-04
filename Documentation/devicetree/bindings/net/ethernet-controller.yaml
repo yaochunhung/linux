@@ -89,7 +89,6 @@ properties:
       - trgmii
       - 1000base-x
       - 2500base-x
-      - 5gbase-r
       - rxaui
       - xaui
 
@@ -205,11 +204,6 @@ properties:
               description:
                 Indicates that full-duplex is used. When absent, half
                 duplex is assumed.
-
-            pause:
-              $ref: /schemas/types.yaml#definitions/flag
-              description:
-                Indicates that pause should be enabled.
 
             asym-pause:
               $ref: /schemas/types.yaml#/definitions/flag

@@ -19,6 +19,7 @@ select:
       contains:
         enum:
           - arm,pl011
+          - zte,zx296702-uart
   required:
     - compatible
 
@@ -29,6 +30,7 @@ properties:
           - const: arm,pl011
           - const: arm,primecell
       - items:
+          - const: zte,zx296702-uart
           - const: arm,primecell
 
   reg:

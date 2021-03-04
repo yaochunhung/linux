@@ -553,11 +553,12 @@ tl_sched:
 	tasklet_schedule(&pegasus->rx_tl);
 }
 
-static void rx_fixup(struct tasklet_struct *t)
+static void rx_fixup(unsigned long data)
 {
-	pegasus_t *pegasus = from_tasklet(pegasus, t, rx_tl);
+	pegasus_t *pegasus;
 	int status;
 
+	pegasus = (pegasus_t *) data;
 	if (pegasus->flags & PEGASUS_UNPLUG)
 		return;
 
@@ -1128,7 +1129,7 @@ static int pegasus_probe(struct usb_interface *intf,
 		goto out1;
 	}
 
-	tasklet_setup(&pegasus->rx_tl, rx_fixup);
+	tasklet_init(&pegasus->rx_tl, rx_fixup, (unsigned long) pegasus);
 
 	INIT_DELAYED_WORK(&pegasus->carrier_check, check_carrier);
 

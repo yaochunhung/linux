@@ -50,7 +50,6 @@
  * which requires asm/elf.h to define compat_elf_gregset_t et al.
  */
 #define elf_prstatus	compat_elf_prstatus
-#define elf_prstatus_common	compat_elf_prstatus_common
 #define elf_prpsinfo	compat_elf_prpsinfo
 
 #undef ns_to_kernel_old_timeval
@@ -62,6 +61,7 @@
  * differ from the native ones, or omitted when they match.
  */
 
+#undef	ELF_ARCH
 #undef	elf_check_arch
 #define	elf_check_arch	compat_elf_check_arch
 
@@ -88,6 +88,11 @@
 #ifdef	COMPAT_ELF_ET_DYN_BASE
 #undef	ELF_ET_DYN_BASE
 #define	ELF_ET_DYN_BASE		COMPAT_ELF_ET_DYN_BASE
+#endif
+
+#ifdef COMPAT_ELF_EXEC_PAGESIZE
+#undef	ELF_EXEC_PAGESIZE
+#define	ELF_EXEC_PAGESIZE	COMPAT_ELF_EXEC_PAGESIZE
 #endif
 
 #ifdef	COMPAT_ELF_PLAT_INIT

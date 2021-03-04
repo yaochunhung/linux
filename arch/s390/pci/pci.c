@@ -695,68 +695,43 @@ void zpci_remove_device(struct zpci_dev *zdev)
 	}
 }
 
-/**
- * zpci_create_device() - Create a new zpci_dev and add it to the zbus
- * @fid: Function ID of the device to be created
- * @fh: Current Function Handle of the device to be created
- * @state: Initial state after creation either Standby or Configured
- *
- * Creates a new zpci device and adds it to its, possibly newly created, zbus
- * as well as zpci_list.
- *
- * Returns: 0 on success, an error value otherwise
- */
-int zpci_create_device(u32 fid, u32 fh, enum zpci_state state)
+int zpci_create_device(struct zpci_dev *zdev)
 {
-	struct zpci_dev *zdev;
 	int rc;
 
-	zpci_dbg(3, "add fid:%x, fh:%x, c:%d\n", fid, fh, state);
-	zdev = kzalloc(sizeof(*zdev), GFP_KERNEL);
-	if (!zdev)
-		return -ENOMEM;
-
-	/* FID and Function Handle are the static/dynamic identifiers */
-	zdev->fid = fid;
-	zdev->fh = fh;
-
-	/* Query function properties and update zdev */
-	rc = clp_query_pci_fn(zdev);
-	if (rc)
-		goto error;
-	zdev->state =  state;
-
 	kref_init(&zdev->kref);
-	mutex_init(&zdev->lock);
-
-	rc = zpci_init_iommu(zdev);
-	if (rc)
-		goto error;
-
-	if (zdev->state == ZPCI_FN_STATE_CONFIGURED) {
-		rc = zpci_enable_device(zdev);
-		if (rc)
-			goto error_destroy_iommu;
-	}
-
-	rc = zpci_bus_device_register(zdev, &pci_root_ops);
-	if (rc)
-		goto error_disable;
 
 	spin_lock(&zpci_list_lock);
 	list_add_tail(&zdev->entry, &zpci_list);
 	spin_unlock(&zpci_list_lock);
 
+	rc = zpci_init_iommu(zdev);
+	if (rc)
+		goto out;
+
+	mutex_init(&zdev->lock);
+	if (zdev->state == ZPCI_FN_STATE_CONFIGURED) {
+		rc = zpci_enable_device(zdev);
+		if (rc)
+			goto out_destroy_iommu;
+	}
+
+	rc = zpci_bus_device_register(zdev, &pci_root_ops);
+	if (rc)
+		goto out_disable;
+
 	return 0;
 
-error_disable:
+out_disable:
 	if (zdev->state == ZPCI_FN_STATE_ONLINE)
 		zpci_disable_device(zdev);
-error_destroy_iommu:
+
+out_destroy_iommu:
 	zpci_destroy_iommu(zdev);
-error:
-	zpci_dbg(0, "add fid:%x, rc:%d\n", fid, rc);
-	kfree(zdev);
+out:
+	spin_lock(&zpci_list_lock);
+	list_del(&zdev->entry);
+	spin_unlock(&zpci_list_lock);
 	return rc;
 }
 

@@ -249,23 +249,30 @@ static __always_inline bool get_and_clear_inhcall(void) { return false; }
 static __always_inline void restore_inhcall(bool inhcall) { }
 #endif
 
-static void __xen_pv_evtchn_do_upcall(struct pt_regs *regs)
+static void __xen_pv_evtchn_do_upcall(void)
 {
-	struct pt_regs *old_regs = set_irq_regs(regs);
-
+	irq_enter_rcu();
 	inc_irq_stat(irq_hv_callback_count);
 
 	xen_hvm_evtchn_do_upcall();
 
-	set_irq_regs(old_regs);
+	irq_exit_rcu();
 }
 
 __visible noinstr void xen_pv_evtchn_do_upcall(struct pt_regs *regs)
 {
-	irqentry_state_t state = irqentry_enter(regs);
+	struct pt_regs *old_regs;
 	bool inhcall;
+	irqentry_state_t state;
 
-	run_sysvec_on_irqstack_cond(__xen_pv_evtchn_do_upcall, regs);
+	state = irqentry_enter(regs);
+	old_regs = set_irq_regs(regs);
+
+	instrumentation_begin();
+	run_on_irqstack_cond(__xen_pv_evtchn_do_upcall, regs);
+	instrumentation_begin();
+
+	set_irq_regs(old_regs);
 
 	inhcall = get_and_clear_inhcall();
 	if (inhcall && !WARN_ON_ONCE(state.exit_rcu)) {

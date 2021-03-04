@@ -190,16 +190,6 @@ static bool reset_fw_if_needed(struct mlx5_core_dev *dev)
 	return true;
 }
 
-static void enter_error_state(struct mlx5_core_dev *dev, bool force)
-{
-	if (mlx5_health_check_fatal_sensors(dev) || force) { /* protected state setting */
-		dev->state = MLX5_DEVICE_STATE_INTERNAL_ERROR;
-		mlx5_cmd_flush(dev);
-	}
-
-	mlx5_notifier_call_chain(dev->priv.events, MLX5_DEV_EVENT_SYS_ERROR, (void *)1);
-}
-
 void mlx5_enter_error_state(struct mlx5_core_dev *dev, bool force)
 {
 	bool err_detected = false;
@@ -218,7 +208,12 @@ void mlx5_enter_error_state(struct mlx5_core_dev *dev, bool force)
 		goto unlock;
 	}
 
-	enter_error_state(dev, force);
+	if (mlx5_health_check_fatal_sensors(dev) || force) { /* protected state setting */
+		dev->state = MLX5_DEVICE_STATE_INTERNAL_ERROR;
+		mlx5_cmd_flush(dev);
+	}
+
+	mlx5_notifier_call_chain(dev->priv.events, MLX5_DEV_EVENT_SYS_ERROR, (void *)1);
 unlock:
 	mutex_unlock(&dev->intf_state_mutex);
 }
@@ -618,7 +613,7 @@ static void mlx5_fw_fatal_reporter_err_work(struct work_struct *work)
 	priv = container_of(health, struct mlx5_priv, health);
 	dev = container_of(priv, struct mlx5_core_dev, priv);
 
-	enter_error_state(dev, false);
+	mlx5_enter_error_state(dev, false);
 	if (IS_ERR_OR_NULL(health->fw_fatal_reporter)) {
 		if (mlx5_health_try_recover(dev))
 			mlx5_core_err(dev, "health recovery failed\n");
@@ -712,9 +707,8 @@ static void poll_health(struct timer_list *t)
 		mlx5_core_err(dev, "Fatal error %u detected\n", fatal_error);
 		dev->priv.health.fatal_error = fatal_error;
 		print_health_info(dev);
-		dev->state = MLX5_DEVICE_STATE_INTERNAL_ERROR;
 		mlx5_trigger_health_work(dev);
-		return;
+		goto out;
 	}
 
 	count = ioread32be(health->health_counter);

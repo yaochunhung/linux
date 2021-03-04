@@ -169,11 +169,11 @@ static int x25_open(struct net_device *dev)
 
 	result = lapb_register(dev, &cb);
 	if (result != LAPB_OK)
-		return -ENOMEM;
+		return result;
 
 	result = lapb_getparms(dev, &params);
 	if (result != LAPB_OK)
-		return -EINVAL;
+		return result;
 
 	if (state(hdlc)->settings.dce)
 		params.mode = params.mode | LAPB_DCE;
@@ -188,7 +188,7 @@ static int x25_open(struct net_device *dev)
 
 	result = lapb_setparms(dev, &params);
 	if (result != LAPB_OK)
-		return -EINVAL;
+		return result;
 
 	return 0;
 }

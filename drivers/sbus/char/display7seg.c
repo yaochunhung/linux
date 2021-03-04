@@ -186,7 +186,7 @@ static int d7s_probe(struct platform_device *op)
 	p->regs = of_ioremap(&op->resource[0], 0, sizeof(u8), "d7s");
 	if (!p->regs) {
 		printk(KERN_ERR PFX "Cannot map chip registers\n");
-		goto out;
+		goto out_free;
 	}
 
 	err = misc_register(&d7s_miscdev);
@@ -228,6 +228,8 @@ out:
 
 out_iounmap:
 	of_iounmap(&op->resource[0], p->regs, sizeof(u8));
+
+out_free:
 	goto out;
 }
 

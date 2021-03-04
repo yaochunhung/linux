@@ -131,11 +131,12 @@ static notrace void s390_handle_damage(void)
 NOKPROBE_SYMBOL(s390_handle_damage);
 
 /*
- * Main machine check handler function. Will be called with interrupts disabled
- * and machine checks enabled.
+ * Main machine check handler function. Will be called with interrupts enabled
+ * or disabled and machine checks enabled or disabled.
  */
-void __s390_handle_mcck(void)
+void s390_handle_mcck(void)
 {
+	unsigned long flags;
 	struct mcck_struct mcck;
 
 	/*
@@ -143,10 +144,12 @@ void __s390_handle_mcck(void)
 	 * machine checks. Afterwards delete the old state and enable machine
 	 * checks again.
 	 */
+	local_irq_save(flags);
 	local_mcck_disable();
 	mcck = *this_cpu_ptr(&cpu_mcck);
 	memset(this_cpu_ptr(&cpu_mcck), 0, sizeof(mcck));
 	local_mcck_enable();
+	local_irq_restore(flags);
 
 	if (mcck.channel_report)
 		crw_handle_channel_report();
@@ -178,13 +181,8 @@ void __s390_handle_mcck(void)
 		do_exit(SIGSEGV);
 	}
 }
+EXPORT_SYMBOL_GPL(s390_handle_mcck);
 
-void noinstr s390_handle_mcck(void)
-{
-	trace_hardirqs_off();
-	__s390_handle_mcck();
-	trace_hardirqs_on();
-}
 /*
  * returns 0 if all required registers are available
  * returns 1 otherwise
@@ -346,9 +344,6 @@ int notrace s390_do_machine_check(struct pt_regs *regs)
 	int mcck_pending = 0;
 
 	nmi_enter();
-
-	if (user_mode(regs))
-		update_timer_mcck();
 	inc_irq_stat(NMI_NMI);
 	mci.val = S390_lowcore.mcck_interruption_code;
 	mcck = this_cpu_ptr(&cpu_mcck);

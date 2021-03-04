@@ -768,12 +768,10 @@ static bool renesas_sdhi_auto_correction(struct tmio_mmc_host *host)
 	return false;
 }
 
-static bool renesas_sdhi_check_scc_error(struct tmio_mmc_host *host,
-					 struct mmc_request *mrq)
+static bool renesas_sdhi_check_scc_error(struct tmio_mmc_host *host)
 {
 	struct renesas_sdhi *priv = host_to_priv(host);
 	bool use_4tap = priv->quirks && priv->quirks->hs400_4taps;
-	bool ret = false;
 
 	/*
 	 * Skip checking SCC errors when running on 4 taps in HS400 mode as
@@ -787,19 +785,11 @@ static bool renesas_sdhi_check_scc_error(struct tmio_mmc_host *host,
 	if (mmc_doing_tune(host->mmc))
 		return false;
 
-	if (((mrq->cmd->error == -ETIMEDOUT) ||
-	     (mrq->data && mrq->data->error == -ETIMEDOUT)) &&
-	    ((host->mmc->caps & MMC_CAP_NONREMOVABLE) ||
-	     (host->ops.get_cd && host->ops.get_cd(host->mmc))))
-		ret |= true;
-
 	if (sd_scc_read32(host, priv, SH_MOBILE_SDHI_SCC_RVSCNTL) &
 	    SH_MOBILE_SDHI_SCC_RVSCNTL_RVSEN)
-		ret |= renesas_sdhi_auto_correction(host);
-	else
-		ret |= renesas_sdhi_manual_correction(host, use_4tap);
+		return renesas_sdhi_auto_correction(host);
 
-	return ret;
+	return renesas_sdhi_manual_correction(host, use_4tap);
 }
 
 static int renesas_sdhi_wait_idle(struct tmio_mmc_host *host, u32 bit)

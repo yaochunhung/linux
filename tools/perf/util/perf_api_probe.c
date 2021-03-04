@@ -98,11 +98,6 @@ static void perf_probe_text_poke(struct evsel *evsel)
 	evsel->core.attr.text_poke = 1;
 }
 
-static void perf_probe_build_id(struct evsel *evsel)
-{
-	evsel->core.attr.build_id = 1;
-}
-
 bool perf_can_sample_identifier(void)
 {
 	return perf_probe_api(perf_probe_sample_identifier);
@@ -176,9 +171,4 @@ bool perf_can_aux_sample(void)
 		close(fd);
 
 	return true;
-}
-
-bool perf_can_record_build_id(void)
-{
-	return perf_probe_api(perf_probe_build_id);
 }

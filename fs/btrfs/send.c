@@ -1191,6 +1191,9 @@ struct backref_ctx {
 	/* may be truncated in case it's the last extent in a file */
 	u64 extent_len;
 
+	/* data offset in the file extent item */
+	u64 data_offset;
+
 	/* Just to check for bugs in backref resolving */
 	int found_itself;
 };
@@ -1398,6 +1401,19 @@ static int find_extent_clone(struct send_ctx *sctx,
 	backref_ctx->cur_offset = data_offset;
 	backref_ctx->found_itself = 0;
 	backref_ctx->extent_len = num_bytes;
+	/*
+	 * For non-compressed extents iterate_extent_inodes() gives us extent
+	 * offsets that already take into account the data offset, but not for
+	 * compressed extents, since the offset is logical and not relative to
+	 * the physical extent locations. We must take this into account to
+	 * avoid sending clone offsets that go beyond the source file's size,
+	 * which would result in the clone ioctl failing with -EINVAL on the
+	 * receiving end.
+	 */
+	if (compressed == BTRFS_COMPRESS_NONE)
+		backref_ctx->data_offset = 0;
+	else
+		backref_ctx->data_offset = btrfs_file_extent_offset(eb, fi);
 
 	/*
 	 * The last extent of a file may be too large due to page alignment.
@@ -6591,9 +6607,10 @@ static int changed_cb(struct btrfs_path *left_path,
 		      struct btrfs_path *right_path,
 		      struct btrfs_key *key,
 		      enum btrfs_compare_tree_result result,
-		      struct send_ctx *sctx)
+		      void *ctx)
 {
 	int ret = 0;
+	struct send_ctx *sctx = ctx;
 
 	if (result == BTRFS_COMPARE_TREE_SAME) {
 		if (key->type == BTRFS_INODE_REF_KEY ||
@@ -6798,7 +6815,7 @@ static int tree_compare_item(struct btrfs_path *left_path,
  * If it detects a change, it aborts immediately.
  */
 static int btrfs_compare_trees(struct btrfs_root *left_root,
-			struct btrfs_root *right_root, struct send_ctx *sctx)
+			struct btrfs_root *right_root, void *ctx)
 {
 	struct btrfs_fs_info *fs_info = left_root->fs_info;
 	int ret;
@@ -6950,7 +6967,7 @@ static int btrfs_compare_trees(struct btrfs_root *left_root,
 				ret = changed_cb(left_path, right_path,
 						&right_key,
 						BTRFS_COMPARE_TREE_DELETED,
-						sctx);
+						ctx);
 				if (ret < 0)
 					goto out;
 			}
@@ -6961,7 +6978,7 @@ static int btrfs_compare_trees(struct btrfs_root *left_root,
 				ret = changed_cb(left_path, right_path,
 						&left_key,
 						BTRFS_COMPARE_TREE_NEW,
-						sctx);
+						ctx);
 				if (ret < 0)
 					goto out;
 			}
@@ -6975,7 +6992,7 @@ static int btrfs_compare_trees(struct btrfs_root *left_root,
 				ret = changed_cb(left_path, right_path,
 						&left_key,
 						BTRFS_COMPARE_TREE_NEW,
-						sctx);
+						ctx);
 				if (ret < 0)
 					goto out;
 				advance_left = ADVANCE;
@@ -6983,7 +7000,7 @@ static int btrfs_compare_trees(struct btrfs_root *left_root,
 				ret = changed_cb(left_path, right_path,
 						&right_key,
 						BTRFS_COMPARE_TREE_DELETED,
-						sctx);
+						ctx);
 				if (ret < 0)
 					goto out;
 				advance_right = ADVANCE;
@@ -6998,7 +7015,7 @@ static int btrfs_compare_trees(struct btrfs_root *left_root,
 				else
 					result = BTRFS_COMPARE_TREE_SAME;
 				ret = changed_cb(left_path, right_path,
-						 &left_key, result, sctx);
+						 &left_key, result, ctx);
 				if (ret < 0)
 					goto out;
 				advance_left = ADVANCE;

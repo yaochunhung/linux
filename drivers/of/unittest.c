@@ -1286,7 +1286,7 @@ static void __init of_unittest_platform_populate(void)
 			unittest(pdev,
 				 "Could not create device for node '%pOFn'\n",
 				 grandchild);
-			platform_device_put(pdev);
+			of_dev_put(pdev);
 		}
 	}
 

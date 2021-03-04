@@ -20,7 +20,6 @@
 
 #include <asm/cputable.h>
 #include <linux/uaccess.h>
-#include <asm/interrupt.h>
 #include <asm/kvm_ppc.h>
 #include <asm/cacheflush.h>
 #include <asm/dbell.h>
@@ -699,7 +698,7 @@ int kvmppc_core_prepare_to_enter(struct kvm_vcpu *vcpu)
 
 		kvmppc_set_exit_type(vcpu, EMULATED_MTMSRWE_EXITS);
 		r = 1;
-	}
+	};
 
 	return r;
 }

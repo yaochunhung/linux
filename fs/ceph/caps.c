@@ -3027,12 +3027,6 @@ static int ceph_try_drop_cap_snap(struct ceph_inode_info *ci,
 	return 0;
 }
 
-enum put_cap_refs_mode {
-	PUT_CAP_REFS_SYNC = 0,
-	PUT_CAP_REFS_NO_CHECK,
-	PUT_CAP_REFS_ASYNC,
-};
-
 /*
  * Release cap refs.
  *
@@ -3043,11 +3037,10 @@ enum put_cap_refs_mode {
  * cap_snap, and wake up any waiters.
  */
 static void __ceph_put_cap_refs(struct ceph_inode_info *ci, int had,
-				enum put_cap_refs_mode mode)
+				bool skip_checking_caps)
 {
 	struct inode *inode = &ci->vfs_inode;
 	int last = 0, put = 0, flushsnaps = 0, wake = 0;
-	bool check_flushsnaps = false;
 
 	spin_lock(&ci->i_ceph_lock);
 	if (had & CEPH_CAP_PIN)
@@ -3064,17 +3057,26 @@ static void __ceph_put_cap_refs(struct ceph_inode_info *ci, int had,
 	if (had & CEPH_CAP_FILE_BUFFER) {
 		if (--ci->i_wb_ref == 0) {
 			last++;
-			/* put the ref held by ceph_take_cap_refs() */
 			put++;
-			check_flushsnaps = true;
 		}
 		dout("put_cap_refs %p wb %d -> %d (?)\n",
 		     inode, ci->i_wb_ref+1, ci->i_wb_ref);
 	}
-	if (had & CEPH_CAP_FILE_WR) {
+	if (had & CEPH_CAP_FILE_WR)
 		if (--ci->i_wr_ref == 0) {
 			last++;
-			check_flushsnaps = true;
+			if (__ceph_have_pending_cap_snap(ci)) {
+				struct ceph_cap_snap *capsnap =
+					list_last_entry(&ci->i_cap_snaps,
+							struct ceph_cap_snap,
+							ci_item);
+				capsnap->writing = 0;
+				if (ceph_try_drop_cap_snap(ci, capsnap))
+					put++;
+				else if (__ceph_finish_cap_snap(ci, capsnap))
+					flushsnaps = 1;
+				wake = 1;
+			}
 			if (ci->i_wrbuffer_ref_head == 0 &&
 			    ci->i_dirty_caps == 0 &&
 			    ci->i_flushing_caps == 0) {
@@ -3086,42 +3088,15 @@ static void __ceph_put_cap_refs(struct ceph_inode_info *ci, int had,
 			if (!__ceph_is_any_real_caps(ci) && ci->i_snap_realm)
 				drop_inode_snap_realm(ci);
 		}
-	}
-	if (check_flushsnaps && __ceph_have_pending_cap_snap(ci)) {
-		struct ceph_cap_snap *capsnap =
-			list_last_entry(&ci->i_cap_snaps,
-					struct ceph_cap_snap,
-					ci_item);
-
-		capsnap->writing = 0;
-		if (ceph_try_drop_cap_snap(ci, capsnap))
-			/* put the ref held by ceph_queue_cap_snap() */
-			put++;
-		else if (__ceph_finish_cap_snap(ci, capsnap))
-			flushsnaps = 1;
-		wake = 1;
-	}
 	spin_unlock(&ci->i_ceph_lock);
 
 	dout("put_cap_refs %p had %s%s%s\n", inode, ceph_cap_string(had),
 	     last ? " last" : "", put ? " put" : "");
 
-	switch (mode) {
-	case PUT_CAP_REFS_SYNC:
-		if (last)
-			ceph_check_caps(ci, 0, NULL);
-		else if (flushsnaps)
-			ceph_flush_snaps(ci, NULL);
-		break;
-	case PUT_CAP_REFS_ASYNC:
-		if (last)
-			ceph_queue_check_caps(inode);
-		else if (flushsnaps)
-			ceph_queue_flush_snaps(inode);
-		break;
-	default:
-		break;
-	}
+	if (last && !skip_checking_caps)
+		ceph_check_caps(ci, 0, NULL);
+	else if (flushsnaps)
+		ceph_flush_snaps(ci, NULL);
 	if (wake)
 		wake_up_all(&ci->i_cap_wq);
 	while (put-- > 0)
@@ -3130,17 +3105,12 @@ static void __ceph_put_cap_refs(struct ceph_inode_info *ci, int had,
 
 void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 {
-	__ceph_put_cap_refs(ci, had, PUT_CAP_REFS_SYNC);
-}
-
-void ceph_put_cap_refs_async(struct ceph_inode_info *ci, int had)
-{
-	__ceph_put_cap_refs(ci, had, PUT_CAP_REFS_ASYNC);
+	__ceph_put_cap_refs(ci, had, false);
 }
 
 void ceph_put_cap_refs_no_check_caps(struct ceph_inode_info *ci, int had)
 {
-	__ceph_put_cap_refs(ci, had, PUT_CAP_REFS_NO_CHECK);
+	__ceph_put_cap_refs(ci, had, true);
 }
 
 /*

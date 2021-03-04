@@ -55,7 +55,6 @@ patternProperties:
         maxItems: 1
 
       reg:
-        maxItems: 1
         description: dai link address.
 
       cpu:

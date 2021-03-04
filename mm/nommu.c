@@ -1668,11 +1668,10 @@ vm_fault_t filemap_fault(struct vm_fault *vmf)
 }
 EXPORT_SYMBOL(filemap_fault);
 
-vm_fault_t filemap_map_pages(struct vm_fault *vmf,
+void filemap_map_pages(struct vm_fault *vmf,
 		pgoff_t start_pgoff, pgoff_t end_pgoff)
 {
 	BUG();
-	return 0;
 }
 EXPORT_SYMBOL(filemap_map_pages);
 

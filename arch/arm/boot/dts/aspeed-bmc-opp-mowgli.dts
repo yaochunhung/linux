@@ -582,11 +582,6 @@
 	/* TMP275A */
 	/* TMP275A */
 
-	rtc@32 {
-		compatible = "epson,rx8900";
-		reg = <0x32>;
-	};
-
 	tmp275@48 {
 		compatible = "ti,tmp275";
 		reg = <0x48>;

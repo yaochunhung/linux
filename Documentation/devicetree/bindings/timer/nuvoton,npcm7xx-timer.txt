@@ -6,7 +6,8 @@ timer counters.
 Required properties:
 - compatible      : "nuvoton,npcm750-timer" for Poleg NPCM750.
 - reg             : Offset and length of the register set for the device.
-- interrupts      : Contain the timer interrupt of timer 0.
+- interrupts      : Contain the timer interrupt with flags for
+                    falling edge.
 - clocks          : phandle of timer reference clock (usually a 25 MHz clock).
 
 Example:

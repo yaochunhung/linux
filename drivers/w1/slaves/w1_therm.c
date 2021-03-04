@@ -667,23 +667,27 @@ static inline int w1_DS18B20_get_resolution(struct w1_slave *sl)
  */
 static inline int w1_DS18B20_convert_temp(u8 rom[9])
 {
-	u16 bv;
-	s16 t;
-
-	/* Signed 16-bit value to unsigned, cpu order */
-	bv = le16_to_cpup((__le16 *)rom);
+	int t;
+	u32 bv;
 
 	/* Config register bit R2 = 1 - GX20MH01 in 13 or 14 bit resolution mode */
 	if (rom[4] & 0x80) {
+		/* Signed 16-bit value to unsigned, cpu order */
+		bv = le16_to_cpup((__le16 *)rom);
+
 		/* Insert two temperature bits from config register */
 		/* Avoid arithmetic shift of signed value */
 		bv = (bv << 2) | (rom[4] & 3);
-		t = (s16) bv;	/* Degrees, lowest bit is 2^-6 */
-		return (int)t * 1000 / 64;	/* Sign-extend to int; millidegrees */
+
+		t = (int) sign_extend32(bv, 17); /* Degrees, lowest bit is 2^-6 */
+		return (t*1000)/64;  /* Millidegrees */
 	}
-	t = (s16)bv;	/* Degrees, lowest bit is 2^-4 */
-	return (int)t * 1000 / 16;	/* Sign-extend to int; millidegrees */
+
+	t = (int)le16_to_cpup((__le16 *)rom);
+	return t*1000/16;
 }
+
+
 
 /**
  * w1_DS18S20_convert_temp() - temperature computation for DS18S20

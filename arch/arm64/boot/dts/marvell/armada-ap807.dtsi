@@ -27,8 +27,3 @@
 		#clock-cells = <1>;
 	};
 };
-
-&ap_sdhci0 {
-	compatible = "marvell,armada-ap807-sdhci";
-};
-

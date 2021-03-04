@@ -116,6 +116,8 @@ kernel-y			:= mm/ kernel/ math-emu/
 core-y	+= $(addprefix arch/parisc/, $(kernel-y))
 libs-y	+= arch/parisc/lib/ $(LIBGCC)
 
+drivers-$(CONFIG_OPROFILE)		+= arch/parisc/oprofile/
+
 boot	:= arch/parisc/boot
 
 PALO := $(shell if (which palo 2>&1); then : ; \
