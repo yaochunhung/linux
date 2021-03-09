@@ -2,7 +2,7 @@
 //
 // rt711-sdca.c -- rt711 SDCA ALSA SoC audio driver
 //
-// Copyright(c) 2020 Realtek Semiconductor Corp.
+// Copyright(c) 2021 Realtek Semiconductor Corp.
 //
 //
 
