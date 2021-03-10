@@ -2,7 +2,7 @@
 //
 // rt1316-sdw.c -- rt1316 SDCA ALSA SoC amplifier audio driver
 //
-// Copyright(c) 2020 Realtek Semiconductor Corp.
+// Copyright(c) 2021 Realtek Semiconductor Corp.
 //
 //
 #include <linux/delay.h>
@@ -66,6 +66,79 @@ static const struct reg_default rt1316_reg_defaults[] = {
 	{ SDW_SDCA_CTL(FUNC_NUM_SMART_AMP, RT1316_SDCA_ENT_PDE23, RT1316_SDCA_CTL_REQ_POWER_STATE, 0), 0x03 },
 	{ SDW_SDCA_CTL(FUNC_NUM_SMART_AMP, RT1316_SDCA_ENT_PDE22, RT1316_SDCA_CTL_REQ_POWER_STATE, 0), 0x03 },
 	{ SDW_SDCA_CTL(FUNC_NUM_SMART_AMP, RT1316_SDCA_ENT_PDE24, RT1316_SDCA_CTL_REQ_POWER_STATE, 0), 0x03 },
+};
+
+static const struct reg_sequence rt1316_blind_write[] = {
+	{ 0xc710, 0x17 },
+	{ 0xc711, 0x80 },
+	{ 0xc712, 0x26 },
+	{ 0xc713, 0x06 },
+	{ 0xc714, 0x80 },
+	{ 0xc715, 0x06 },
+	{ 0xc702, 0x0a },
+	{ 0xc703, 0x0a },
+	{ 0xc001, 0x45 },
+	{ 0xc003, 0x00 },
+	{ 0xc004, 0x11 },
+	{ 0xc005, 0x00 },
+	{ 0xc006, 0x00 },
+	{ 0xc106, 0x00 },
+	{ 0xc007, 0x11 },
+	{ 0xc008, 0x11 },
+	{ 0xc009, 0x00 },
+
+	{ 0x2f0a, 0x00 },
+	{ 0xd101, 0xf0 },
+	{ 0xd103, 0x9b },
+	{ 0x2f36, 0x8e },
+	{ 0x3206, 0x80 },
+	{ 0x3211, 0x0b },
+	{ 0x3216, 0x06 },
+	{ 0xc614, 0x20 },
+	{ 0xc615, 0x0a },
+	{ 0xc616, 0x02 },
+	{ 0xc617, 0x00 },
+	{ 0xc60b, 0x10 },
+	{ 0xc60e, 0x05 },
+	{ 0xc102, 0x00 },
+	{ 0xc090, 0xb0 },
+	{ 0xc00f, 0x01 },
+	{ 0xc09c, 0x7b },
+
+	{ 0xc602, 0x07 },
+	{ 0xc603, 0x07 },
+	{ 0xc0a3, 0x71 },
+	{ 0xc00b, 0x30 },
+	{ 0xc093, 0x80 },
+	{ 0xc09d, 0x80 },
+	{ 0xc0b0, 0x77 },
+	{ 0xc010, 0xa5 },
+	{ 0xc050, 0x83 },
+	{ 0x2f55, 0x03 },
+	{ 0x3217, 0xb5 },
+	{ 0x3202, 0x02 },
+
+	{ SDW_SDCA_CTL(FUNC_NUM_SMART_AMP, RT1316_SDCA_ENT_XU24, RT1316_SDCA_CTL_BYPASS, 0), 0x00 },
+
+	/* for IV sense */
+	{ 0x2232, 0x80 },
+	{ 0xc0b0, 0x77 },
+	{ 0xc011, 0x00 },
+	{ 0xc020, 0x00 },
+	{ 0xc023, 0x00 },
+	{ 0x3101, 0x00 },
+	{ 0x3004, 0xa0 },
+	{ 0x3005, 0xb1 },
+	{ 0xc007, 0x11 },
+	{ 0xc008, 0x11 },
+	{ 0xc009, 0x00 },
+	{ 0xc022, 0xd6 },
+	{ 0xc025, 0xd6 },
+
+	{ 0xd001, 0x03 },
+	{ 0xd002, 0xbf },
+	{ 0xd003, 0x03 },
+	{ 0xd004, 0xbf },
 };
 
 static bool rt1316_readable_register(struct device *dev, unsigned int reg)
@@ -215,77 +288,8 @@ static int rt1316_io_init(struct device *dev, struct sdw_slave *slave)
 	regmap_write(rt1316->regmap, 0xc000, 0x02);
 
 	/* initial settings - blind write */
-	regmap_write(rt1316->regmap, 0xc710, 0x17);
-	regmap_write(rt1316->regmap, 0xc711, 0x80);
-	regmap_write(rt1316->regmap, 0xc712, 0x26);
-	regmap_write(rt1316->regmap, 0xc713, 0x06);
-	regmap_write(rt1316->regmap, 0xc714, 0x80);
-	regmap_write(rt1316->regmap, 0xc715, 0x06);
-	regmap_write(rt1316->regmap, 0xc702, 0x0a);
-	regmap_write(rt1316->regmap, 0xc703, 0x0a);
-	regmap_write(rt1316->regmap, 0xc001, 0x45);
-	regmap_write(rt1316->regmap, 0xc003, 0x00);
-	regmap_write(rt1316->regmap, 0xc004, 0x11);
-	regmap_write(rt1316->regmap, 0xc005, 0x00);
-	regmap_write(rt1316->regmap, 0xc006, 0x00);
-	regmap_write(rt1316->regmap, 0xc106, 0x00);
-	regmap_write(rt1316->regmap, 0xc007, 0x11);
-	regmap_write(rt1316->regmap, 0xc008, 0x11);
-	regmap_write(rt1316->regmap, 0xc009, 0x00);
-
-	regmap_write(rt1316->regmap, 0x2f0a, 0x00);
-	regmap_write(rt1316->regmap, 0xd101, 0xf0);
-	regmap_write(rt1316->regmap, 0xd103, 0x9b);
-	regmap_write(rt1316->regmap, 0x2f36, 0x8e);
-	regmap_write(rt1316->regmap, 0x3206, 0x80);
-	regmap_write(rt1316->regmap, 0x3211, 0x0b);
-	regmap_write(rt1316->regmap, 0x3216, 0x06);
-	regmap_write(rt1316->regmap, 0xc614, 0x20);
-	regmap_write(rt1316->regmap, 0xc615, 0x0a);
-	regmap_write(rt1316->regmap, 0xc616, 0x02);
-	regmap_write(rt1316->regmap, 0xc617, 0x00);
-	regmap_write(rt1316->regmap, 0xc60b, 0x10);
-	regmap_write(rt1316->regmap, 0xc60e, 0x05);
-	regmap_write(rt1316->regmap, 0xc102, 0x00);
-	regmap_write(rt1316->regmap, 0xc090, 0xb0);
-	regmap_write(rt1316->regmap, 0xc00f, 0x01);
-	regmap_write(rt1316->regmap, 0xc09c, 0x7b);
-
-	regmap_write(rt1316->regmap, 0xc602, 0x07);
-	regmap_write(rt1316->regmap, 0xc603, 0x07);
-	regmap_write(rt1316->regmap, 0xc0a3, 0x71);
-	regmap_write(rt1316->regmap, 0xc00b, 0x30);
-	regmap_write(rt1316->regmap, 0xc093, 0x80);
-	regmap_write(rt1316->regmap, 0xc09d, 0x80);
-	regmap_write(rt1316->regmap, 0xc0b0, 0x77);
-	regmap_write(rt1316->regmap, 0xc010, 0xa5);
-	regmap_write(rt1316->regmap, 0xc050, 0x83);
-	regmap_write(rt1316->regmap, 0x2f55, 0x03);
-	regmap_write(rt1316->regmap, 0x3217, 0xb5);
-	regmap_write(rt1316->regmap, 0x3202, 0x02);
-
-	regmap_write(rt1316->regmap,
-		SDW_SDCA_CTL(FUNC_NUM_SMART_AMP, RT1316_SDCA_ENT_XU24, RT1316_SDCA_CTL_BYPASS, 0), 0x00);
-
-	/* for IV sense */
-	regmap_write(rt1316->regmap, 0x2232, 0x80);
-	regmap_write(rt1316->regmap, 0xc0b0, 0x77);
-	regmap_write(rt1316->regmap, 0xc011, 0x00);
-	regmap_write(rt1316->regmap, 0xc020, 0x00);
-	regmap_write(rt1316->regmap, 0xc023, 0x00);
-	regmap_write(rt1316->regmap, 0x3101, 0x00);
-	regmap_write(rt1316->regmap, 0x3004, 0xa0);
-	regmap_write(rt1316->regmap, 0x3005, 0xb1);
-	regmap_write(rt1316->regmap, 0xc007, 0x11);
-	regmap_write(rt1316->regmap, 0xc008, 0x11);
-	regmap_write(rt1316->regmap, 0xc009, 0x00);
-	regmap_write(rt1316->regmap, 0xc022, 0xd6);
-	regmap_write(rt1316->regmap, 0xc025, 0xd6);
-
-	regmap_write(rt1316->regmap, 0xd001, 0x03);
-	regmap_write(rt1316->regmap, 0xd002, 0xbf);
-	regmap_write(rt1316->regmap, 0xd003, 0x03);
-	regmap_write(rt1316->regmap, 0xd004, 0xbf);
+	regmap_multi_reg_write(rt1316->regmap, rt1316_blind_write,
+		ARRAY_SIZE(rt1316_blind_write));
 
 	if (rt1316->first_hw_init) {
 		regcache_cache_bypass(rt1316->regmap, false);
@@ -313,9 +317,6 @@ static int rt1316_update_status(struct sdw_slave *slave,
 
 	if (status == SDW_SLAVE_UNATTACHED)
 		rt1316->hw_init = false;
-
-	if (status == SDW_SLAVE_ATTACHED)
-		regcache_mark_dirty(rt1316->regmap);
 
 	/*
 	 * Perform initialization only if slave status is present and
@@ -415,61 +416,29 @@ static SOC_ENUM_SINGLE_DECL(rt1316_rx_data_ch_enum,
 	SDW_SDCA_CTL(FUNC_NUM_SMART_AMP, RT1316_SDCA_ENT_UDMPU21, RT1316_SDCA_CTL_UDMPU_CLUSTER, 0), 0,
 	rt1316_rx_data_ch_select);
 
-static const char * const rt1316_xu24_bypass_ctl[] = {
-	"Not Bypass",
-	"Bypass",
-};
-
-static SOC_ENUM_SINGLE_DECL(rt1316_xu24_bypass_enum,
-	SDW_SDCA_CTL(FUNC_NUM_SMART_AMP, RT1316_SDCA_ENT_XU24, RT1316_SDCA_CTL_BYPASS, 0), 0,
-	rt1316_xu24_bypass_ctl);
-
-static const char * const rt1316_lr_iv_sel[] = {
-	"0",
-	"1",
-	"2",
-	"3",
-	"4",
-	"5",
-	"6",
-	"7",
-};
-
-static SOC_ENUM_SINGLE_DECL(rt1316_l_v_tag_enum,
-	0x3004, 0, rt1316_lr_iv_sel);
-static SOC_ENUM_SINGLE_DECL(rt1316_l_i_tag_enum,
-	0x3004, 4, rt1316_lr_iv_sel);
-static SOC_ENUM_SINGLE_DECL(rt1316_r_v_tag_enum,
-	0x3005, 0, rt1316_lr_iv_sel);
-static SOC_ENUM_SINGLE_DECL(rt1316_r_i_tag_enum,
-	0x3005, 4, rt1316_lr_iv_sel);
-
 static const struct snd_kcontrol_new rt1316_snd_controls[] = {
 
 	/* I2S Data Channel Selection */
 	SOC_ENUM("RX Channel Select", rt1316_rx_data_ch_enum),
 
 	/* XU24 Bypass Control */
-	SOC_ENUM("XU24 Bypass Switch", rt1316_xu24_bypass_enum),
+	SOC_SINGLE("XU24 Bypass Switch",
+		SDW_SDCA_CTL(FUNC_NUM_SMART_AMP, RT1316_SDCA_ENT_XU24, RT1316_SDCA_CTL_BYPASS, 0), 0, 1, 0),
 
 	/* Left/Right IV tag */
-	SOC_ENUM("Left V Tag Select", rt1316_l_v_tag_enum),
-	SOC_ENUM("Left I Tag Select", rt1316_l_i_tag_enum),
-	SOC_ENUM("Right V Tag Select", rt1316_r_v_tag_enum),
-	SOC_ENUM("Right I Tag Select", rt1316_r_i_tag_enum),
+	SOC_SINGLE("Left V Tag Select", 0x3004, 0, 7, 0),
+	SOC_SINGLE("Left I Tag Select", 0x3004, 4, 7, 0),
+	SOC_SINGLE("Right V Tag Select", 0x3005, 0, 7, 0),
+	SOC_SINGLE("Right I Tag Select", 0x3005, 4, 7, 0),
 
 	/* IV mixer Control */
 	SOC_DOUBLE("Isense Mixer Switch", 0xc605, 2, 0, 1, 1),
 	SOC_DOUBLE("Vsense Mixer Switch", 0xc605, 3, 1, 1, 1),
 };
 
-static const struct snd_kcontrol_new rt1316_sto_dac_l =
-	SOC_DAPM_SINGLE_AUTODISABLE("Switch",
+static const struct snd_kcontrol_new rt1316_sto_dac =
+	SOC_DAPM_DOUBLE_R("Switch",
 		SDW_SDCA_CTL(FUNC_NUM_SMART_AMP, RT1316_SDCA_ENT_FU21, RT1316_SDCA_CTL_FU_MUTE, CH_L),
-		0, 1, 1);
-
-static const struct snd_kcontrol_new rt1316_sto_dac_r =
-	SOC_DAPM_SINGLE_AUTODISABLE("Switch",
 		SDW_SDCA_CTL(FUNC_NUM_SMART_AMP, RT1316_SDCA_ENT_FU21, RT1316_SDCA_CTL_FU_MUTE, CH_R),
 		0, 1, 1);
 
@@ -479,9 +448,7 @@ static const struct snd_soc_dapm_widget rt1316_dapm_widgets[] = {
 	SND_SOC_DAPM_AIF_OUT("DP2TX", "DP2 Capture", 0, SND_SOC_NOPM, 0, 0),
 
 	/* Digital Interface */
-	SND_SOC_DAPM_DAC("DAC", NULL, SND_SOC_NOPM, 0, 0),
-	SND_SOC_DAPM_SWITCH("DAC L", SND_SOC_NOPM, 0, 0, &rt1316_sto_dac_l),
-	SND_SOC_DAPM_SWITCH("DAC R", SND_SOC_NOPM, 0, 0, &rt1316_sto_dac_r),
+	SND_SOC_DAPM_SWITCH("DAC", SND_SOC_NOPM, 0, 0, &rt1316_sto_dac),
 
 	/* Output Lines */
 	SND_SOC_DAPM_PGA_E("CLASS D", SND_SOC_NOPM, 0, 0, NULL, 0,
@@ -500,11 +467,8 @@ static const struct snd_soc_dapm_widget rt1316_dapm_widgets[] = {
 };
 
 static const struct snd_soc_dapm_route rt1316_dapm_routes[] = {
-	{ "DAC", NULL, "DP1RX" },
-	{ "DAC L", "Switch", "DAC" },
-	{ "DAC R", "Switch", "DAC" },
-	{ "CLASS D", NULL, "DAC L" },
-	{ "CLASS D", NULL, "DAC R" },
+	{ "DAC", "Switch", "DP1RX" },
+	{ "CLASS D", NULL, "DAC" },
 	{ "SPOL", NULL, "CLASS D" },
 	{ "SPOR", NULL, "CLASS D" },
 
@@ -549,28 +513,6 @@ static void rt1316_sdw_shutdown(struct snd_pcm_substream *substream,
 	kfree(stream);
 }
 
-static int rt1316_sdw_set_tdm_slot(struct snd_soc_dai *dai,
-				   unsigned int tx_mask,
-				   unsigned int rx_mask,
-				   int slots, int slot_width)
-{
-	struct snd_soc_component *component = dai->component;
-	struct rt1316_sdw_priv *rt1316 =
-		snd_soc_component_get_drvdata(component);
-
-	if (tx_mask)
-		return -EINVAL;
-
-	if (slots > 2)
-		return -EINVAL;
-
-	rt1316->rx_mask = rx_mask;
-	rt1316->slots = slots;
-	/* slot_width is not used since it's irrelevant for SoundWire */
-
-	return 0;
-}
-
 static int rt1316_sdw_hw_params(struct snd_pcm_substream *substream,
 	struct snd_pcm_hw_params *params, struct snd_soc_dai *dai)
 {
@@ -602,13 +544,8 @@ static int rt1316_sdw_hw_params(struct snd_pcm_substream *substream,
 		port = 2;
 	}
 
-	if (rt1316->slots) {
-		num_channels = rt1316->slots;
-		ch_mask = rt1316->rx_mask;
-	} else {
-		num_channels = params_channels(params);
-		ch_mask = (1 << num_channels) - 1;
-	}
+	num_channels = params_channels(params);
+	ch_mask = (1 << num_channels) - 1;
 
 	stream_config.frame_rate = params_rate(params);
 	stream_config.ch_count = num_channels;
@@ -667,7 +604,6 @@ static const struct snd_soc_dai_ops rt1316_aif_dai_ops = {
 	.hw_free	= rt1316_sdw_pcm_hw_free,
 	.set_sdw_stream	= rt1316_set_sdw_stream,
 	.shutdown	= rt1316_sdw_shutdown,
-	.set_tdm_slot	= rt1316_sdw_set_tdm_slot,
 };
 
 #define RT1316_STEREO_RATES SNDRV_PCM_RATE_48000
@@ -733,8 +669,8 @@ static int rt1316_sdw_probe(struct sdw_slave *slave,
 
 	/* Regmap Initialization */
 	regmap = devm_regmap_init_sdw(slave, &rt1316_sdw_regmap);
-	if (!regmap)
-		return -EINVAL;
+	if (IS_ERR(regmap))
+		return PTR_ERR(regmap);
 
 	return rt1316_sdw_init(&slave->dev, regmap, slave);
 }

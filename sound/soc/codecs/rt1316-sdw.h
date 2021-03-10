@@ -2,7 +2,7 @@
 /*
  * rt1316-sdw.h -- RT1316 SDCA ALSA SoC audio driver header
  *
- * Copyright(c) 2020 Realtek Semiconductor Corp.
+ * Copyright(c) 2021 Realtek Semiconductor Corp.
  */
 
 #ifndef __RT1316_SDW_H__
@@ -46,8 +46,6 @@ struct rt1316_sdw_priv {
 	struct sdw_bus_params params;
 	bool hw_init;
 	bool first_hw_init;
-	int rx_mask;
-	int slots;
 };
 
 struct sdw_stream_data {
