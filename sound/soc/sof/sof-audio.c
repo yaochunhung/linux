@@ -662,7 +662,7 @@ int sof_set_up_pipelines(struct device *dev, bool verify)
 		}
 	}
 
-	return ret;
+	return 0;
 }
 
 /*
