@@ -1169,7 +1169,7 @@ static int soc_probe_component(struct snd_soc_card *card,
 	int probed = 0;
 	int ret;
 
-	if (!strcmp(component->name, "snd-soc-dummy"))
+	if (snd_soc_component_is_dummy(component))
 		return 0;
 
 	if (component->card) {
@@ -1658,7 +1658,11 @@ match:
 				dev_err(card->dev, "init platform error");
 				continue;
 			}
-			dai_link->platforms->name = component->name;
+
+			if (component->dev->of_node)
+				dai_link->platforms->of_node = component->dev->of_node;
+			else
+				dai_link->platforms->name = component->name;
 
 			/* convert non BE into BE */
 			if (!dai_link->no_pcm) {
