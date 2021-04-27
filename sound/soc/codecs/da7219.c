@@ -2181,7 +2181,10 @@ static int da7219_register_dai_clks(struct snd_soc_component *component)
 				 ret);
 			goto err;
 		}
-		da7219->dai_clks[i] = dai_clk_hw->clk;
+
+		da7219->dai_clks[i] = clk_hw_get_clk(dai_clk_hw, NULL);
+		if (IS_ERR(da7219->dai_clks[i]))
+			return PTR_ERR(da7219->dai_clks[i]);
 
 		/* For DT setup onecell data, otherwise create lookup */
 		if (np) {
@@ -2215,6 +2218,8 @@ err:
 		if (da7219->dai_clks_lookup[i])
 			clkdev_drop(da7219->dai_clks_lookup[i]);
 
+		clk_put(da7219->dai_clks[i]);
+
 		clk_hw_unregister(&da7219->dai_clks_hw[i]);
 	} while (i-- > 0);
 
@@ -2236,6 +2241,8 @@ static void da7219_free_dai_clks(struct snd_soc_component *component)
 	for (i = DA7219_DAI_NUM_CLKS - 1; i >= 0; --i) {
 		if (da7219->dai_clks_lookup[i])
 			clkdev_drop(da7219->dai_clks_lookup[i]);
+
+		clk_put(da7219->dai_clks[i]);
 
 		clk_hw_unregister(&da7219->dai_clks_hw[i]);
 	}
