@@ -8,7 +8,7 @@
 
 #include "dice.h"
 
-#define	CALLBACK_TIMEOUT	200
+#define	READY_TIMEOUT_MS	200
 #define NOTIFICATION_TIMEOUT_MS	(2 * MSEC_PER_SEC)
 
 struct reg_params {
@@ -181,7 +181,7 @@ static int keep_resources(struct snd_dice *dice, struct amdtp_stream *stream,
 	// as 'Dual Wire'.
 	// For this quirk, blocking mode is required and PCM buffer size should
 	// be aligned to SYT_INTERVAL.
-	double_pcm_frames = rate > 96000;
+	double_pcm_frames = (rate > 96000 && !dice->disable_double_pcm_frames);
 	if (double_pcm_frames) {
 		rate /= 2;
 		pcm_chs *= 2;
@@ -463,16 +463,9 @@ int snd_dice_stream_start_duplex(struct snd_dice *dice)
 		if (err < 0)
 			goto error;
 
-		for (i = 0; i < MAX_STREAMS; i++) {
-			if ((i < tx_params.count &&
-			    !amdtp_stream_wait_callback(&dice->tx_stream[i],
-							CALLBACK_TIMEOUT)) ||
-			    (i < rx_params.count &&
-			     !amdtp_stream_wait_callback(&dice->rx_stream[i],
-							 CALLBACK_TIMEOUT))) {
-				err = -ETIMEDOUT;
-				goto error;
-			}
+		if (!amdtp_domain_wait_ready(&dice->domain, READY_TIMEOUT_MS)) {
+			err = -ETIMEDOUT;
+			goto error;
 		}
 	}
 
