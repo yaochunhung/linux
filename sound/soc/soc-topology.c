@@ -1577,7 +1577,6 @@ ready_err:
 	snd_soc_dapm_free_widget(widget);
 hdr_err:
 	kfree(template.sname);
-	kfree(kc);
 err:
 	kfree(template.name);
 	return ret;
