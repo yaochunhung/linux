@@ -1424,7 +1424,7 @@ static int soc_tplg_dapm_widget_create(struct soc_tplg *tplg,
 	struct snd_soc_dapm_widget template, *widget;
 	struct snd_soc_tplg_ctl_hdr *control_hdr;
 	struct snd_soc_card *card = tplg->comp->card;
-	unsigned int *kcontrol_type;
+	unsigned int *kcontrol_type = NULL;
 	struct snd_kcontrol_new *kc;
 	int mixer_count = 0;
 	int bytes_count = 0;
@@ -1482,11 +1482,12 @@ static int soc_tplg_dapm_widget_create(struct soc_tplg *tplg,
 		w->name, w->num_kcontrols, control_hdr->type);
 
 	template.num_kcontrols = le32_to_cpu(w->num_kcontrols);
-	kc = devm_kcalloc(tplg->dev, w->num_kcontrols, sizeof(*kc), GFP_KERNEL);
+	kc = devm_kcalloc(tplg->dev, le32_to_cpu(w->num_kcontrols), sizeof(*kc), GFP_KERNEL);
 	if (!kc)
 		goto err;
 
-	kcontrol_type = devm_kcalloc(tplg->dev, w->num_kcontrols, sizeof(unsigned int), GFP_KERNEL);
+	kcontrol_type = devm_kcalloc(tplg->dev, le32_to_cpu(w->num_kcontrols), sizeof(unsigned int),
+				     GFP_KERNEL);
 	if (!kcontrol_type)
 		goto err;
 
@@ -1576,7 +1577,6 @@ ready_err:
 	snd_soc_dapm_free_widget(widget);
 hdr_err:
 	kfree(template.sname);
-	kfree(kc);
 err:
 	kfree(template.name);
 	return ret;
