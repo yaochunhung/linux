@@ -969,7 +969,7 @@ static int acp_dma_hw_params(struct snd_soc_component *component,
 
 	acp_set_sram_bank_state(rtd->acp_mmio, 0, true);
 	/* Save for runtime private data */
-	rtd->dma_addr = substream->dma_buffer.addr;
+	rtd->dma_addr = runtime->dma_addr;
 	rtd->order = get_order(size);
 
 	/* Fill the page table entries in ACP SRAM */
@@ -1033,13 +1033,6 @@ static snd_pcm_uframes_t acp_dma_pointer(struct snd_soc_component *component,
 		pos = do_div(bytescount, buffersize);
 	}
 	return bytes_to_frames(runtime, pos);
-}
-
-static int acp_dma_mmap(struct snd_soc_component *component,
-			struct snd_pcm_substream *substream,
-			struct vm_area_struct *vma)
-{
-	return snd_pcm_lib_default_mmap(substream, vma);
 }
 
 static int acp_dma_prepare(struct snd_soc_component *component,
@@ -1205,7 +1198,6 @@ static const struct snd_soc_component_driver acp_asoc_platform = {
 	.hw_params	= acp_dma_hw_params,
 	.trigger	= acp_dma_trigger,
 	.pointer	= acp_dma_pointer,
-	.mmap		= acp_dma_mmap,
 	.prepare	= acp_dma_prepare,
 	.pcm_construct	= acp_dma_new,
 };
