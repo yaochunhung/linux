@@ -243,20 +243,28 @@ int snd_pcm_info_user(struct snd_pcm_substream *substream,
 
 static bool hw_support_mmap(struct snd_pcm_substream *substream)
 {
+	struct snd_dma_buffer *dmabuf;
+
 	if (!(substream->runtime->hw.info & SNDRV_PCM_INFO_MMAP))
 		return false;
 
 	if (substream->ops->mmap || substream->ops->page)
 		return true;
 
-	switch (substream->dma_buffer.dev.type) {
+	dmabuf = snd_pcm_get_dma_buf(substream);
+	if (!dmabuf)
+		dmabuf = &substream->dma_buffer;
+	switch (dmabuf->dev.type) {
 	case SNDRV_DMA_TYPE_UNKNOWN:
-		return false;
+		/* we can't know the device, so just assume that the driver does
+		 * everything right
+		 */
+		return true;
 	case SNDRV_DMA_TYPE_CONTINUOUS:
 	case SNDRV_DMA_TYPE_VMALLOC:
 		return true;
 	default:
-		return dma_can_mmap(substream->dma_buffer.dev.dev);
+		return dma_can_mmap(dmabuf->dev.dev);
 	}
 }
 
