@@ -1293,6 +1293,9 @@ int snd_usb_endpoint_configure(struct snd_usb_audio *chip,
 	 * to be set up before parameter setups
 	 */
 	iface_first = ep->cur_audiofmt->protocol == UAC_VERSION_1;
+	/* Workaround for devices that require the interface setup at first like UAC1 */
+	if (chip->quirk_flags & QUIRK_FLAG_SET_IFACE_FIRST)
+		iface_first = true;
 	if (iface_first) {
 		err = endpoint_set_interface(chip, ep, true);
 		if (err < 0)

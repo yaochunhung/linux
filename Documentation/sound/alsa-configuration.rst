@@ -1059,6 +1059,12 @@ The model name ``generic`` is treated as a special case.  When this
 model is given, the driver uses the generic codec parser without
 "codec-patch".  It's sometimes good for testing and debugging.
 
+The model option can be used also for aliasing to another PCI or codec
+SSID.  When it's passed in the form of ``model=XXXX:YYYY`` where XXXX
+and YYYY are the sub-vendor and sub-device IDs in hex numbers,
+respectively, the driver will refer to that SSID as a reference to the
+quirk table.
+
 If the default configuration doesn't work and one of the above
 matches with your device, report it together with alsa-info.sh
 output (with ``--no-upload`` option) to kernel bugzilla or alsa-devel
@@ -2255,6 +2261,7 @@ delayed_register
 quirk_flags
     Contains the bit flags for various device specific workarounds.
     Applied to the corresponding card index.
+
         * bit 0: Skip reading sample rate for devices
         * bit 1: Create Media Controller API entries
         * bit 2: Allow alignment on audio sub-slot at transfer
@@ -2271,6 +2278,7 @@ quirk_flags
         * bit 13: Disable runtime PM autosuspend
         * bit 14: Ignore errors for mixer access
         * bit 15: Support generic DSD raw U32_BE format
+        * bit 16: Set up the interface at first like UAC1
 
 This module supports multiple devices, autoprobe and hotplugging.
 
