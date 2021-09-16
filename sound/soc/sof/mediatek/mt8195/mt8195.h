@@ -152,4 +152,7 @@ void __iomem *get_mbox_reg_base(u32 id);
 #define DRAM_REMAP_SHIFT	12
 #define DRAM_REMAP_MASK		(BIT(DRAM_REMAP_SHIFT) - 1)
 
+void hifixdsp_boot_sequence(void *pdev, u32 boot_addr);
+void hifixdsp_shutdown(void *pdev);
+
 #endif
