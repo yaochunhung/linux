@@ -7,6 +7,7 @@
 #ifndef __MTK_ADSP_HELPER_H__
 #define __MTK_ADSP_HELPER_H__
 
+#include "adsp_pcm.h"
 /*
  * Global important adsp data structure.
  */
@@ -40,8 +41,10 @@ struct adsp_priv {
 
 	struct mtk_adsp_chip_info *adsp;
 
-	u32 (*ap2adsp_addr)(u32 addr, void *data);
-	u32 (*adsp2ap_addr)(u32 addr, void *data);
+	u32 (*ap2adsp_addr)(u32 addr, struct mtk_adsp_chip_info *data);
+	u32 (*adsp2ap_addr)(u32 addr, struct mtk_adsp_chip_info *data);
+
+	struct adsp_mem_pool mem_pool;
 
 	void *private_data;
 };

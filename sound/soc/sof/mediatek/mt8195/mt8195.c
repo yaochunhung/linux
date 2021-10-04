@@ -209,10 +209,21 @@ static int mt8195_run(struct snd_sof_dev *sdev)
 	return 0;
 }
 
+static u32 dram_remap_to_dsp(u32 dram_addr, struct mtk_adsp_chip_info *adsp)
+{
+	return dram_addr - adsp->dram_offset;
+}
+
+static u32 dram_remap_to_ap(u32 dram_addr, struct mtk_adsp_chip_info *adsp)
+{
+	return dram_addr + adsp->dram_offset;
+}
+
 static int mt8195_dsp_probe(struct snd_sof_dev *sdev)
 {
 	struct platform_device *pdev = container_of(sdev->dev, struct platform_device, dev);
 	struct adsp_priv *priv;
+	struct adsp_mem share_dram;
 	int ret;
 
 	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
@@ -278,6 +289,19 @@ static int mt8195_dsp_probe(struct snd_sof_dev *sdev)
 	sdev->mmio_bar = SOF_FW_BLK_TYPE_SRAM;
 	sdev->mailbox_bar = SOF_FW_BLK_TYPE_SRAM;
 
+	priv->adsp2ap_addr = dram_remap_to_ap;
+	priv->ap2adsp_addr = dram_remap_to_dsp;
+	share_dram.phy_addr = priv->adsp->pa_shared_dram;
+	share_dram.va_addr = (unsigned long long)priv->adsp->shared_dram;
+	share_dram.vir_addr = (unsigned char *)priv->adsp->shared_dram;
+	share_dram.size = SIZE_SHARED_DRAM_UL + SIZE_SHARED_DRAM_DL;
+	ret = adsp_genpool_create(&priv->mem_pool, &share_dram);
+	if (ret) {
+		dev_err(sdev->dev, "adsp_genpool_create fail!\n");
+		ret = -ENOMEM;
+		goto err_adsp_sram_power_off;
+	}
+
 err_adsp_sram_power_off:
 	adsp_sram_power_on(&pdev->dev, false);
 
@@ -287,8 +311,12 @@ err_adsp_sram_power_off:
 static int mt8195_dsp_remove(struct snd_sof_dev *sdev)
 {
 	struct platform_device *pdev = container_of(sdev->dev, struct platform_device, dev);
+	struct adsp_priv *priv = sdev->pdata->hw_pdata;
 
-	return adsp_sram_power_on(&pdev->dev, false);
+	adsp_sram_power_on(&pdev->dev, false);
+	adsp_genpool_destroy(&priv->mem_pool);
+
+	return 0;
 }
 
 /* on mt8195 there is 1 to 1 match between type and BAR idx */
@@ -355,6 +383,10 @@ const struct snd_sof_dsp_ops sof_mt8195_ops = {
 	/* firmware loading */
 	.load_firmware	= snd_sof_load_firmware_memcpy,
 
+	/* stream callbacks */
+	.pcm_hw_params	= mtk_adsp_pcm_hw_params,
+	.pcm_hw_free	= mtk_adsp_pcm_hw_free,
+
 	/* Firmware ops */
 	.dsp_arch_ops = &sof_xtensa_arch_ops,
 
@@ -371,5 +403,6 @@ const struct snd_sof_dsp_ops sof_mt8195_ops = {
 };
 EXPORT_SYMBOL(sof_mt8195_ops);
 
+MODULE_IMPORT_NS(SND_SOC_SOF_MTK_COMMON);
 MODULE_IMPORT_NS(SND_SOC_SOF_XTENSA);
 MODULE_LICENSE("Dual BSD/GPL");
