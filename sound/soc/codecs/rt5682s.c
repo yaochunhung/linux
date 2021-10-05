@@ -72,7 +72,6 @@ static void rt5682s_apply_patch_list(struct rt5682s_priv *rt5682s,
 }
 
 const struct reg_default rt5682s_reg[] = {
-	{0x0000, 0x0001},
 	{0x0002, 0x8080},
 	{0x0003, 0x0001},
 	{0x0005, 0x0000},
@@ -769,7 +768,7 @@ static int rt5682s_headset_detect(struct snd_soc_component *component, int jack_
 			count++;
 		} while (val == 0 && count < 50);
 
-		pr_debug("%s, val=%d, count=%d\n", __func__, val, count);
+		dev_dbg(component->dev, "%s, val=%d, count=%d\n", __func__, val, count);
 
 		switch (val) {
 		case 0x1:
@@ -780,7 +779,8 @@ static int rt5682s_headset_detect(struct snd_soc_component *component, int jack_
 				RT5682S_FAST_OFF_MASK, RT5682S_FAST_OFF_EN);
 			snd_soc_component_update_bits(component, RT5682S_SAR_IL_CMD_1,
 				RT5682S_SAR_SEL_MB1_2_MASK, val << RT5682S_SAR_SEL_MB1_2_SFT);
-			rt5682s_sar_power_mode(component, SAR_PWR_SAVING, 1);
+			if (!snd_soc_dapm_get_pin_status(&component->dapm, "SAR"))
+				rt5682s_sar_power_mode(component, SAR_PWR_SAVING, 1);
 			rt5682s_enable_push_button_irq(component);
 			break;
 		default:
@@ -1062,6 +1062,9 @@ int rt5682s_sel_asrc_clk_src(struct snd_soc_component *component,
 			RT5682S_FILTER_CLK_SEL_MASK, clk_src << RT5682S_FILTER_CLK_SEL_SFT);
 	}
 
+	snd_soc_component_update_bits(component, RT5682S_PLL_TRACK_11,
+		RT5682S_ASRCIN_AUTO_CLKOUT_MASK, RT5682S_ASRCIN_AUTO_CLKOUT_EN);
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(rt5682s_sel_asrc_clk_src);
@@ -1311,18 +1314,6 @@ static int is_using_asrc(struct snd_soc_dapm_widget *w,
 	}
 }
 
-static int is_headset_type(struct snd_soc_dapm_widget *w,
-		struct snd_soc_dapm_widget *sink)
-{
-	struct snd_soc_component *component = snd_soc_dapm_to_component(w->dapm);
-	struct rt5682s_priv *rt5682s = snd_soc_component_get_drvdata(component);
-
-	if ((rt5682s->jack_type & SND_JACK_HEADSET) == SND_JACK_HEADSET)
-		return 1;
-
-	return 0;
-}
-
 static int rt5682s_hp_amp_event(struct snd_soc_dapm_widget *w,
 		struct snd_kcontrol *kcontrol, int event)
 {
@@ -1370,6 +1361,10 @@ static int sar_power_event(struct snd_soc_dapm_widget *w,
 		struct snd_kcontrol *kcontrol, int event)
 {
 	struct snd_soc_component *component = snd_soc_dapm_to_component(w->dapm);
+	struct rt5682s_priv *rt5682s = snd_soc_component_get_drvdata(component);
+
+	if ((rt5682s->jack_type & SND_JACK_HEADSET) != SND_JACK_HEADSET)
+		return 0;
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
@@ -1782,7 +1777,7 @@ static const struct snd_soc_dapm_route rt5682s_dapm_routes[] = {
 	{"CLKDET SYS", NULL, "MCLK0 DET PWR"},
 
 	{"BST1 CBJ", NULL, "IN1P"},
-	{"BST1 CBJ", NULL, "SAR", is_headset_type},
+	{"BST1 CBJ", NULL, "SAR"},
 
 	{"RECMIX1L", "CBJ Switch", "BST1 CBJ"},
 	{"RECMIX1L", NULL, "RECMIX1L Power"},
@@ -1888,7 +1883,7 @@ static const struct snd_soc_dapm_route rt5682s_dapm_routes[] = {
 	{"HP Amp", NULL, "DAC L1"},
 	{"HP Amp", NULL, "DAC R1"},
 	{"HP Amp", NULL, "CLKDET SYS"},
-	{"HP Amp", NULL, "SAR", is_headset_type},
+	{"HP Amp", NULL, "SAR"},
 
 	{"HPOL", NULL, "HP Amp"},
 	{"HPOR", NULL, "HP Amp"},
@@ -2821,8 +2816,9 @@ static int rt5682s_resume(struct snd_soc_component *component)
 
 	if (rt5682s->hs_jack) {
 		rt5682s->jack_type = 0;
+		rt5682s_sar_power_mode(component, SAR_PWR_NORMAL, 0);
 		mod_delayed_work(system_power_efficient_wq,
-			&rt5682s->jack_detect_work, msecs_to_jiffies(250));
+			&rt5682s->jack_detect_work, msecs_to_jiffies(0));
 	}
 
 	return 0;
