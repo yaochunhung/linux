@@ -68,6 +68,9 @@ struct sof_dev_desc {
 
 	bool use_acpi_target_states;
 
+	/*set to 1 to not use ignore_machine and still keep the normal platform driver*/
+	bool sof_keep_normal_fes;
+
 	/* Platform resource indexes in BAR / ACPI resources. */
 	/* Must set to -1 if not used - add new items to end */
 	int resindex_lpe_base;
