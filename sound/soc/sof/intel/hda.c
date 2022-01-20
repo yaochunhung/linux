@@ -1176,7 +1176,7 @@ static void hda_generic_machine_select(struct snd_sof_dev *sdev,
 
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_INTEL_SOUNDWIRE)
 
-#define SDW_CODEC_ADR_MASK(_adr) (_adr & (SDW_DISCO_LINK_ID_MASK | SDW_VERSION_MASK | \
+#define SDW_CODEC_ADR_MASK(_adr) ((_adr) & (SDW_DISCO_LINK_ID_MASK | SDW_VERSION_MASK | \
 				  SDW_MFG_ID_MASK | SDW_PART_ID_MASK))
 
 /* Check if all Slaves defined on the link can be found */
