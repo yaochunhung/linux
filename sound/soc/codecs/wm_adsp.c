@@ -97,13 +97,13 @@ struct wm_adsp_system_config_xm_hdr {
 	__be32 wdma[8];
 	__be32 build_job_name[3];
 	__be32 build_job_number;
-};
+} __packed;
 
 struct wm_halo_system_config_xm_hdr {
 	__be32 halo_heartbeat;
 	__be32 build_job_name[3];
 	__be32 build_job_number;
-};
+} __packed;
 
 struct wm_adsp_alg_xm_struct {
 	__be32 magic;
@@ -114,13 +114,13 @@ struct wm_adsp_alg_xm_struct {
 	__be32 high_water_mark;
 	__be32 low_water_mark;
 	__be64 smoothed_power;
-};
+} __packed;
 
 struct wm_adsp_host_buf_coeff_v1 {
 	__be32 host_buf_ptr;		/* Host buffer pointer */
 	__be32 versions;		/* Version numbers */
 	__be32 name[4];			/* The buffer name */
-};
+} __packed;
 
 struct wm_adsp_buffer {
 	__be32 buf1_base;		/* Base addr of first buffer area */
@@ -141,7 +141,7 @@ struct wm_adsp_buffer {
 	__be32 min_free;		/* min free space since stream start */
 	__be32 blocks_written[2];	/* total blocks written (64 bit) */
 	__be32 words_written[2];	/* total words written (64 bit) */
-};
+} __packed;
 
 struct wm_adsp_compr;
 
@@ -749,21 +749,48 @@ static void wm_adsp_release_firmware_files(struct wm_adsp *dsp,
 }
 
 static int wm_adsp_request_firmware_file(struct wm_adsp *dsp,
-					 const struct firmware **firmware,
-					 char **filename,
-					 char *suffix)
+					 const struct firmware **firmware, char **filename,
+					 const char *dir, const char *system_name,
+					 const char *asoc_component_prefix,
+					 const char *filetype)
 {
 	struct cs_dsp *cs_dsp = &dsp->cs_dsp;
+	char *s, c;
 	int ret = 0;
 
-	*filename = kasprintf(GFP_KERNEL, "%s-%s-%s.%s", dsp->part, dsp->fwf_name,
-			      wm_adsp_fw[dsp->fw].file, suffix);
+	if (system_name && asoc_component_prefix)
+		*filename = kasprintf(GFP_KERNEL, "%s%s-%s-%s-%s-%s.%s", dir, dsp->part,
+				      dsp->fwf_name, wm_adsp_fw[dsp->fw].file, system_name,
+				      asoc_component_prefix, filetype);
+	else if (system_name)
+		*filename = kasprintf(GFP_KERNEL, "%s%s-%s-%s-%s.%s", dir, dsp->part,
+				      dsp->fwf_name, wm_adsp_fw[dsp->fw].file, system_name,
+				      filetype);
+	else
+		*filename = kasprintf(GFP_KERNEL, "%s%s-%s-%s.%s", dir, dsp->part, dsp->fwf_name,
+				      wm_adsp_fw[dsp->fw].file, filetype);
+
 	if (*filename == NULL)
 		return -ENOMEM;
 
-	ret = request_firmware(firmware, *filename, cs_dsp->dev);
+	/*
+	 * Make sure that filename is lower-case and any non alpha-numeric
+	 * characters except full stop and forward slash are replaced with
+	 * hyphens.
+	 */
+	s = *filename;
+	while (*s) {
+		c = *s;
+		if (isalnum(c))
+			*s = tolower(c);
+		else if ((c != '.') && (c != '/'))
+			*s = '-';
+		s++;
+	}
+
+	ret = firmware_request_nowarn(firmware, *filename, cs_dsp->dev);
 	if (ret != 0) {
-		adsp_err(dsp, "Failed to request '%s'\n", *filename);
+		adsp_dbg(dsp, "Failed to request '%s'\n", *filename);
 		kfree(*filename);
 		*filename = NULL;
 	}
@@ -771,21 +798,69 @@ static int wm_adsp_request_firmware_file(struct wm_adsp *dsp,
 	return ret;
 }
 
+static const char *cirrus_dir = "cirrus/";
 static int wm_adsp_request_firmware_files(struct wm_adsp *dsp,
 					  const struct firmware **wmfw_firmware,
 					  char **wmfw_filename,
 					  const struct firmware **coeff_firmware,
 					  char **coeff_filename)
 {
+	const char *system_name = dsp->system_name;
+	const char *asoc_component_prefix = dsp->component->name_prefix;
 	int ret = 0;
 
-	ret = wm_adsp_request_firmware_file(dsp, wmfw_firmware, wmfw_filename, "wmfw");
-	if (ret != 0)
-		return ret;
+	if (system_name && asoc_component_prefix) {
+		if (!wm_adsp_request_firmware_file(dsp, wmfw_firmware, wmfw_filename,
+						   cirrus_dir, system_name,
+						   asoc_component_prefix, "wmfw")) {
+			adsp_dbg(dsp, "Found '%s'\n", *wmfw_filename);
+			wm_adsp_request_firmware_file(dsp, coeff_firmware, coeff_filename,
+						      cirrus_dir, system_name,
+						      asoc_component_prefix, "bin");
+			return 0;
+		}
+	}
 
-	wm_adsp_request_firmware_file(dsp, coeff_firmware, coeff_filename, "bin");
+	if (system_name) {
+		if (!wm_adsp_request_firmware_file(dsp, wmfw_firmware, wmfw_filename,
+						   cirrus_dir, system_name,
+						   NULL, "wmfw")) {
+			adsp_dbg(dsp, "Found '%s'\n", *wmfw_filename);
+			if (asoc_component_prefix)
+				wm_adsp_request_firmware_file(dsp, coeff_firmware, coeff_filename,
+							      cirrus_dir, system_name,
+							      asoc_component_prefix, "bin");
 
-	return 0;
+			if (!*coeff_firmware)
+				wm_adsp_request_firmware_file(dsp, coeff_firmware, coeff_filename,
+							      cirrus_dir, system_name,
+							      NULL, "bin");
+			return 0;
+		}
+	}
+
+	if (!wm_adsp_request_firmware_file(dsp, wmfw_firmware, wmfw_filename,
+					   "", NULL, NULL, "wmfw")) {
+		adsp_dbg(dsp, "Found '%s'\n", *wmfw_filename);
+		wm_adsp_request_firmware_file(dsp, coeff_firmware, coeff_filename,
+					      "", NULL, NULL, "bin");
+		return 0;
+	}
+
+	ret = wm_adsp_request_firmware_file(dsp, wmfw_firmware, wmfw_filename,
+					    cirrus_dir, NULL, NULL, "wmfw");
+	if (!ret) {
+		adsp_dbg(dsp, "Found '%s'\n", *wmfw_filename);
+		wm_adsp_request_firmware_file(dsp, coeff_firmware, coeff_filename,
+					      cirrus_dir, NULL, NULL, "bin");
+		return 0;
+	}
+
+	adsp_err(dsp, "Failed to request firmware <%s>%s-%s-%s<-%s<%s>>.wmfw\n",
+		 cirrus_dir, dsp->part, dsp->fwf_name, wm_adsp_fw[dsp->fw].file,
+		 system_name, asoc_component_prefix);
+
+	return -ENOENT;
 }
 
 static int wm_adsp_common_init(struct wm_adsp *dsp)
