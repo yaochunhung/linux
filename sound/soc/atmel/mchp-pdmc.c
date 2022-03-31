@@ -183,7 +183,7 @@ static int mchp_pdmc_af_put(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
 	struct mchp_pdmc *dd = snd_soc_component_get_drvdata(component);
-	bool af = uvalue->value.integer.value ? true : false;
+	bool af = uvalue->value.integer.value[0] ? true : false;
 
 	if (dd->audio_filter_en == af)
 		return 0;
@@ -879,13 +879,13 @@ static int mchp_pdmc_dt_init(struct mchp_pdmc *dd)
 
 	dd->mic_no = of_property_count_u32_elems(np, "microchip,mic-pos");
 	if (dd->mic_no < 0) {
-		dev_err(dd->dev, "failed to get mchp,mic-pos: %d",
+		dev_err(dd->dev, "failed to get microchip,mic-pos: %d",
 			dd->mic_no);
 		return dd->mic_no;
 	}
 	if (!dd->mic_no || dd->mic_no % 2 ||
 	    dd->mic_no / 2 > MCHP_PDMC_MAX_CHANNELS) {
-		dev_err(dd->dev, "invalid array length for mchp,mic-pos: %d",
+		dev_err(dd->dev, "invalid array length for microchip,mic-pos: %d",
 			dd->mic_no);
 		return -EINVAL;
 	}
@@ -894,9 +894,10 @@ static int mchp_pdmc_dt_init(struct mchp_pdmc *dd)
 
 	dev_info(dd->dev, "%d PDM microphones declared\n", dd->mic_no);
 
-	/* by default, we consider the order of microphones in mchp,mic-pos to
-	 * be the same with the channel mapping; 1st microphone channel 0, 2nd
-	 * microphone channel 1, etc.
+	/*
+	 * by default, we consider the order of microphones in
+	 * microchip,mic-pos to be the same with the channel mapping;
+	 * 1st microphone channel 0, 2nd microphone channel 1, etc.
 	 */
 	for (i = 0; i < dd->mic_no; i++) {
 		int ds;
