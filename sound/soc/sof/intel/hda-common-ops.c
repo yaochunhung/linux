@@ -104,4 +104,3 @@ struct snd_sof_dsp_ops sof_hda_common_ops = {
 
 	.dsp_arch_ops = &sof_xtensa_arch_ops,
 };
-
