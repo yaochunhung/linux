@@ -1,9 +1,9 @@
-// SPDX-License-Identifier: GPL-2.0-only
-//
-// Copyright(c) 2022 Intel Corporation. All rights reserved.
-//
-// Author: Noah Klayman <noah.klayman@intel.com>
-//
+/* SPDX-License-Identifier: GPL-2.0-only */
+/*
+ * Copyright(c) 2022 Intel Corporation. All rights reserved.
+ *
+ * Author: Noah Klayman <noah.klayman@intel.com>
+ */
 
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM sof_intel
