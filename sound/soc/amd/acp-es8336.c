@@ -20,10 +20,8 @@
 #include <linux/input.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
-#include <linux/module.h>
 #include <linux/acpi.h>
 
-#include "../codecs/es8316.h"
 #include "acp.h"
 
 #define DUAL_CHANNEL	2
@@ -207,13 +205,15 @@ static int st_es8336_late_probe(struct snd_soc_card *card)
 		dev_err(card->dev, "can not find codec dev\n");
 
 	ret = devm_acpi_dev_add_driver_gpios(codec_dev, acpi_es8336_gpios);
+	if (ret)
+		dev_warn(card->dev, "Failed to add driver gpios\n");
 
 	gpio_pa = gpiod_get_optional(codec_dev, "pa-enable", GPIOD_OUT_LOW);
 	if (IS_ERR(gpio_pa)) {
 		ret = dev_err_probe(card->dev, PTR_ERR(gpio_pa),
 				    "could not get pa-enable GPIO\n");
-		gpiod_put(gpio_pa);
 		put_device(codec_dev);
+		return ret;
 	}
 	return 0;
 }
@@ -294,11 +294,6 @@ static int st_es8336_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int st_es8336_remove(struct platform_device *pdev)
-{
-	return 0;
-}
-
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id st_audio_acpi_match[] = {
 	{"AMDI8336", 0},
@@ -314,7 +309,6 @@ static struct platform_driver st_mach_driver = {
 		.pm = &snd_soc_pm_ops,
 	},
 	.probe = st_es8336_probe,
-	.remove = st_es8336_remove,
 };
 
 module_platform_driver(st_mach_driver);
