@@ -24,9 +24,12 @@
 #include "../../sof-of-dev.h"
 #include "../../sof-audio.h"
 #include "../adsp_helper.h"
+#include "../adsp-pcm.h"
 #include "../mtk-adsp-common.h"
 #include "mt8195.h"
 #include "mt8195-clk.h"
+
+#define CONTINUOUS_UPDATE_POSITION 1
 
 static int mt8195_get_mailbox_offset(struct snd_sof_dev *sdev)
 {
@@ -496,11 +499,40 @@ static int mt8195_get_bar_index(struct snd_sof_dev *sdev, u32 type)
 	return type;
 }
 
+static int mt8195_dsp_pcm_hw_params(struct snd_sof_dev *sdev,
+				    struct snd_pcm_substream *substream,
+				    struct snd_pcm_hw_params *params,
+				    struct snd_sof_platform_stream_params *platform_params)
+{
+	//ipc_params->cont_update_posn = CONTINUOUS_UPDATE_POSITION;
+
+	return 0;
+}
+
 static int mt8195_ipc_msg_data(struct snd_sof_dev *sdev,
 			       struct snd_pcm_substream *substream,
 			       void *p, size_t sz)
 {
 	sof_mailbox_read(sdev, sdev->dsp_box.offset, p, sz);
+	if (!substream || !sdev->stream_box.size) {
+		sof_mailbox_read(sdev, sdev->dsp_box.offset, p, sz);
+	} else {
+		struct sof_mtk_adsp_stream *mstream = NULL;
+
+		/* The substream runtime might already be closed */
+		if (!substream->runtime) {
+			dev_err(sdev->dev, "substream runtime is NULL!\n");
+			return -ESTRPIPE;
+		}
+
+		mstream = substream->runtime->private_data;
+		/* The stream might already be closed */
+		if (!mstream)
+			return -ESTRPIPE;
+
+		sof_mailbox_read(sdev, mstream->stream.posn_offset, p, sz);
+	}
+
 	return 0;
 }
 
@@ -589,6 +621,12 @@ static struct snd_sof_dsp_ops sof_mt8195_ops = {
 
 	/* misc */
 	.get_bar_index	= mt8195_get_bar_index,
+
+	/* stream callbacks */
+	.pcm_open = mtk_adsp_pcm_open,
+	.pcm_hw_params = mt8195_dsp_pcm_hw_params,
+	.pcm_close = mtk_adsp_pcm_close,
+	.pcm_pointer = mtk_adsp_pcm_pointer,
 
 	/* firmware loading */
 	.load_firmware	= snd_sof_load_firmware_memcpy,
